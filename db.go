@@ -35,6 +35,7 @@ type scanResultRow struct {
 	ScanID       int64    `json:"scan_id"`
 	Repo         string   `json:"repo"`
 	Stars        int      `json:"stars"`
+	OpenIssues   int      `json:"open_issues"`
 	Score        float64  `json:"score"`
 	Language     string   `json:"language"`
 	Description  string   `json:"description"`
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS scan_results (
     scan_id       INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
     repo          TEXT NOT NULL,
     stars         INTEGER NOT NULL,
+    open_issues   INTEGER NOT NULL DEFAULT 0,
     score         REAL NOT NULL,
     language      TEXT NOT NULL DEFAULT '',
     description   TEXT NOT NULL DEFAULT '',
@@ -94,6 +96,7 @@ func openDB(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	// Migrate: add columns for existing databases
+	_, _ = db.Exec(`ALTER TABLE scan_results ADD COLUMN open_issues INTEGER NOT NULL DEFAULT 0`)
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN cli_fallback INTEGER NOT NULL DEFAULT 0`)
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN pushed_after TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN min_maintained INTEGER NOT NULL DEFAULT 0`)
@@ -139,8 +142,8 @@ func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
 		return err
 	}
 	stmt, err := tx.Prepare(
-		`INSERT INTO scan_results (scan_id, repo, stars, score, language, description, weak_checks, scorecard_url, repo_url)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO scan_results (scan_id, repo, stars, open_issues, score, language, description, weak_checks, scorecard_url, repo_url)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
 		tx.Rollback()
@@ -151,7 +154,7 @@ func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
 	for _, r := range results {
 		wc, _ := json.Marshal(r.WeakChecks)
 		_, err := stmt.Exec(
-			scanID, r.Repo.FullName, r.Repo.Stars, r.Score,
+			scanID, r.Repo.FullName, r.Repo.Stars, r.Repo.OpenIssuesCount, r.Score,
 			r.Repo.Language, r.Repo.Description, string(wc),
 			r.ScorecardURL, r.Repo.HTMLURL,
 		)
@@ -197,7 +200,7 @@ func dbGetScan(db *sql.DB, id int64) (*scanRow, error) {
 
 func dbGetResults(db *sql.DB, scanID int64) ([]scanResultRow, error) {
 	rows, err := db.Query(
-		`SELECT id, scan_id, repo, stars, score, language, description,
+		`SELECT id, scan_id, repo, stars, open_issues, score, language, description,
 		        weak_checks, scorecard_url, repo_url
 		 FROM scan_results WHERE scan_id=? ORDER BY score ASC`,
 		scanID,
@@ -211,7 +214,7 @@ func dbGetResults(db *sql.DB, scanID int64) ([]scanResultRow, error) {
 	for rows.Next() {
 		var r scanResultRow
 		var wcJSON string
-		err := rows.Scan(&r.ID, &r.ScanID, &r.Repo, &r.Stars, &r.Score,
+		err := rows.Scan(&r.ID, &r.ScanID, &r.Repo, &r.Stars, &r.OpenIssues, &r.Score,
 			&r.Language, &r.Description, &wcJSON, &r.ScorecardURL, &r.RepoURL)
 		if err != nil {
 			return nil, err

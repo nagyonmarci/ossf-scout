@@ -15,12 +15,13 @@ type ghSearchResult struct {
 }
 
 type ghRepo struct {
-	FullName    string   `json:"full_name"`
-	Description string   `json:"description"`
-	Stars       int      `json:"stargazers_count"`
-	HTMLURL     string   `json:"html_url"`
-	Language    string   `json:"language"`
-	Topics      []string `json:"topics"`
+	FullName        string   `json:"full_name"`
+	Description     string   `json:"description"`
+	Stars           int      `json:"stargazers_count"`
+	OpenIssuesCount int      `json:"open_issues_count"`
+	HTMLURL         string   `json:"html_url"`
+	Language        string   `json:"language"`
+	Topics          []string `json:"topics"`
 }
 
 func ghGet(rawURL, token string) ([]byte, error) {

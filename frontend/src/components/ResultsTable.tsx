@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { ScanResult } from '../api'
 
-type SortKey = 'repo' | 'stars' | 'score'
+type SortKey = 'repo' | 'stars' | 'issues' | 'score'
 
-const DEFAULT_WIDTHS = [200, 80, 80, 220, 320, 100]
+const DEFAULT_WIDTHS = [200, 70, 70, 80, 220, 320, 100]
 const MIN_COL_WIDTH = 60
 
 function scoreClass(score: number) {
@@ -84,6 +84,7 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
     let diff = 0
     if (sortKey === 'repo') diff = a.repo.localeCompare(b.repo)
     else if (sortKey === 'stars') diff = a.stars - b.stars
+    else if (sortKey === 'issues') diff = a.open_issues - b.open_issues
     else {
       const sa = a.score === -1 ? 999 : a.score
       const sb = b.score === -1 ? 999 : b.score
@@ -151,10 +152,11 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
               <tr>
                 {th(0, 'repo', 'Repository')}
                 {th(1, 'stars', 'Stars')}
-                {th(2, 'score', 'Score')}
-                {th(3, null, 'Weak Checks')}
-                {th(4, null, 'Description')}
-                {th(5, null, 'Links')}
+                {th(2, 'issues', 'Issues')}
+                {th(3, 'score', 'Score')}
+                {th(4, null, 'Weak Checks')}
+                {th(5, null, 'Description')}
+                {th(6, null, 'Links')}
               </tr>
             </thead>
             <tbody>
@@ -162,6 +164,7 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
                 <tr key={r.id}>
                   <td className="repo-name">{r.repo}</td>
                   <td>{r.stars.toLocaleString()}</td>
+                  <td title="Open issues + pull requests">{r.open_issues.toLocaleString()}</td>
                   <td><span className={scoreClass(r.score)}>{scoreLabel(r.score)}</span></td>
                   <td>
                     <div className="tags">

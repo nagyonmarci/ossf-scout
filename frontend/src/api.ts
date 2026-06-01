@@ -23,6 +23,7 @@ export interface ScanResult {
   scan_id: number;
   repo: string;
   stars: number;
+  open_issues: number;
   score: number;
   language: string;
   description: string;

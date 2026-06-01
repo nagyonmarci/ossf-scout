@@ -230,10 +230,16 @@ Two measured jumps after fixing the CI workflows and enabling branch protection:
 - **License**: 0 → **10** (added The Unlicense)
 - **Vulnerabilities**: 9 → **10** (patched GO-2026-5024 via `golang.org/x/sys` v0.44.0)
 
-### Score after Security-Policy + Pinned-Dependencies — 6.2 → **7.1**
+### Score after Security-Policy + Pinned-Dependencies — 6.2 → 7.1
 
 - **Security-Policy**: 0 → **10** (SECURITY.md with GitHub Private Advisory)
 - **Pinned-Dependencies**: 6 → **10** (Dockerfile digest pinning + scorecard@v5.5.0)
+
+### Score after Fuzzing + CII in-progress + CI hardening — 7.1 → **7.7**
+
+- **Fuzzing**: 0 → **10** (Go fuzz tests for `parseTrending` and `parseChecks`)
+- **CII-Best-Practices**: 0 → **2** (in-progress badge registered at bestpractices.dev)
+- CI hardening: unit tests, `golangci-lint`, `errcheck` fixes across codebase
 
 ---
 
@@ -329,8 +335,8 @@ license (Met), description (Met), interact/issues (Met), contribution_requiremen
 
 ### What's next
 
-- **CII in-progress badge** — register at bestpractices.dev (manual step)
-- **Maintained** — 2026-08-31 után automatikusan javul (repo > 90 nap)
+- **CII-Best-Practices** — complete self-attestation on bestpractices.dev to reach passing tier (0→2→5)
+- **Maintained** — will auto-improve on 2026-08-31 once the repo is 90 days old
 
 ---
 

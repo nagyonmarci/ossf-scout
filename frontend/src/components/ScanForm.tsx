@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, CreateScanParams } from '../api'
 
@@ -75,9 +75,20 @@ const PRESETS: { label: string; hint: string; params: Partial<CreateScanParams> 
 
 export default function ScanForm() {
   const navigate = useNavigate()
-  const [params, setParams] = useState<CreateScanParams>(defaults)
+  const [params, setParams] = useState<CreateScanParams>(() => ({
+    ...defaults,
+    github_token: localStorage.getItem('ossf_scout_token') ?? '',
+  }))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (params.github_token) {
+      localStorage.setItem('ossf_scout_token', params.github_token)
+    } else {
+      localStorage.removeItem('ossf_scout_token')
+    }
+  }, [params.github_token])
 
   function set<K extends keyof CreateScanParams>(key: K, value: CreateScanParams[K]) {
     setParams(p => ({ ...p, [key]: value }))

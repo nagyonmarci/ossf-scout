@@ -101,6 +101,11 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
     setActivePreset(preset.label)
   }
 
+  function resetDefaults() {
+    setParams(p => ({ ...defaults, github_token: p.github_token }))
+    setActivePreset(null)
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -294,6 +299,9 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
       <div className="form-actions">
         <button className="btn" type="submit" disabled={loading}>
           {loading ? 'Starting…' : 'Run Scan'}
+        </button>
+        <button className="btn btn-danger" type="button" onClick={resetDefaults} disabled={loading}>
+          Reset
         </button>
         {error && <span className="error-msg">{error}</span>}
       </div>

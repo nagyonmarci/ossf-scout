@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -47,26 +48,38 @@ func scorecardGet(owner, repo string) (*scorecardResponse, error) {
 }
 
 func scorecardCLI(owner, repo, token string) (*scorecardResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "scorecard",
 		"--repo=github.com/"+owner+"/"+repo,
 		"--format=json",
 	)
-	cmd.Env = append(os.Environ(), "GITHUB_TOKEN="+token)
+	// Only override GITHUB_TOKEN if we have one — don't clobber an existing env token with an empty string
+	if token != "" {
+		cmd.Env = append(os.Environ(), "GITHUB_TOKEN="+token, "GITHUB_AUTH_TOKEN="+token)
+	} else {
+		cmd.Env = os.Environ()
+	}
+
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
 
 	out, err := cmd.Output()
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("scorecard CLI: %w", err)
+		msg := err.Error()
+		if s := strings.TrimSpace(stderr.String()); s != "" {
+			msg += ": " + s
+		}
+		return nil, fmt.Errorf("scorecard CLI: %s", msg)
 	}
 
 	var sc scorecardResponse
 	if err := json.Unmarshal(out, &sc); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scorecard CLI output parse: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
 	}
 	return &sc, nil
 }

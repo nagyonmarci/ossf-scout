@@ -82,7 +82,7 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
     }
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setStickyVisible(entry.boundingClientRect.top < 0)
+        setStickyVisible(!entry.isIntersecting && entry.boundingClientRect.top < 0)
         updatePos()
       },
       { threshold: 0 }

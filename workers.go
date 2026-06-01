@@ -41,13 +41,21 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 					continue
 				}
 				if sc == nil {
-					results <- result{
-						Repo:         repo,
-						Score:        -1,
-						WeakChecks:   []string{"NOT_SCANNED"},
-						ScorecardURL: fmt.Sprintf("https://scorecard.dev/viewer/?uri=github.com/%s", repo.FullName),
+					if cfg.cliFallback {
+						sc, err = scorecardCLI(parts[0], parts[1], cfg.token)
+						if err != nil {
+							fmt.Fprintf(os.Stderr, "  [warn] CLI %s: %v\n", repo.FullName, err)
+						}
 					}
-					continue
+					if sc == nil {
+						results <- result{
+							Repo:         repo,
+							Score:        -1,
+							WeakChecks:   []string{"NOT_SCANNED"},
+							ScorecardURL: fmt.Sprintf("https://scorecard.dev/viewer/?uri=github.com/%s", repo.FullName),
+						}
+						continue
+					}
 				}
 				if sc.Score > cfg.maxScore && len(wantChecks) == 0 {
 					continue

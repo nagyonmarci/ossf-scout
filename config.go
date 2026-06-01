@@ -9,4 +9,5 @@ type config struct {
 	jsonOut     bool
 	token       string
 	checkFilter string
+	cliFallback bool
 }

@@ -48,6 +48,7 @@ The scan history is stored in `./data/ossf-scout.db` and persists across restart
 | `-checks` | _(security set)_ | Comma-separated check names to highlight |
 | `-json` | `false` | Output as JSON instead of a table |
 | `-token` | `$GITHUB_TOKEN` | GitHub personal access token |
+| `-cli-fallback` | `false` | Use local `scorecard` CLI for repos not in the Scorecard database |
 | `-serve` | `false` | Start web server mode |
 | `-port` | `7878` | Port for web server mode |
 | `-db` | `ossf-scout.db` | SQLite database path (server mode) |

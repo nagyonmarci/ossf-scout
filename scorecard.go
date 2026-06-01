@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
+	"time"
 )
 
 type scorecardResponse struct {
@@ -36,6 +41,31 @@ func scorecardGet(owner, repo string) (*scorecardResponse, error) {
 	}
 	var sc scorecardResponse
 	if err := json.NewDecoder(resp.Body).Decode(&sc); err != nil {
+		return nil, err
+	}
+	return &sc, nil
+}
+
+func scorecardCLI(owner, repo, token string) (*scorecardResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "scorecard",
+		"--repo=github.com/"+owner+"/"+repo,
+		"--format=json",
+	)
+	cmd.Env = append(os.Environ(), "GITHUB_TOKEN="+token)
+
+	out, err := cmd.Output()
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("scorecard CLI: %w", err)
+	}
+
+	var sc scorecardResponse
+	if err := json.Unmarshal(out, &sc); err != nil {
 		return nil, err
 	}
 	return &sc, nil

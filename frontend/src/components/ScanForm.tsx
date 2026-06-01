@@ -10,6 +10,7 @@ const defaults: CreateScanParams = {
   workers: 5,
   check_filter: '',
   github_token: '',
+  use_cli_fallback: false,
 }
 
 export default function ScanForm() {
@@ -111,6 +112,18 @@ export default function ScanForm() {
             onChange={e => set('github_token', e.target.value)}
             autoComplete="off"
           />
+        </div>
+
+        <div className="form-field full-width">
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={params.use_cli_fallback}
+              onChange={e => set('use_cli_fallback', e.target.checked)}
+              style={{ width: 'auto' }}
+            />
+            Use scorecard CLI for unscanned repos (slower — requires <code>scorecard</code> in PATH)
+          </label>
         </div>
       </div>
 

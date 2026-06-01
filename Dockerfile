@@ -14,10 +14,12 @@ RUN go mod download
 COPY . .
 COPY --from=frontend /app/frontend/dist ./frontend/dist
 RUN go build -o ossf-scout .
+RUN go install github.com/ossf/scorecard/v5/cmd/scorecard@latest
 
 # Stage 3: minimal runtime
 FROM alpine:3.20
 WORKDIR /app
 COPY --from=builder /app/ossf-scout .
+COPY --from=builder /root/go/bin/scorecard /usr/local/bin/scorecard
 EXPOSE 7878
-ENTRYPOINT ["./ossf-scout", "-serve"]
+CMD ["./ossf-scout", "-serve"]

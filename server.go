@@ -67,6 +67,7 @@ func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 			Workers     int     `json:"workers"`
 			CheckFilter string  `json:"check_filter"`
 			GithubToken string  `json:"github_token"`
+			CliFallback bool    `json:"use_cli_fallback"`
 		}
 		body.MinStars = 500
 		body.MaxScore = 5.0
@@ -91,6 +92,7 @@ func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 			workers:     body.Workers,
 			checkFilter: body.CheckFilter,
 			token:       token,
+			cliFallback: body.CliFallback,
 		}
 
 		id, err := dbInsertScan(db, cfg)

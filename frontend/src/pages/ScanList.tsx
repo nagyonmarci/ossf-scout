@@ -1,8 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, Scan } from '../api'
+import { api, Scan, ScanStatus } from '../api'
 import ScanForm from '../components/ScanForm'
 import StatusBadge from '../components/StatusBadge'
+import Toast from '../components/Toast'
+import { useToast } from '../hooks/useToast'
 
 function formatDate(s: string) {
   return new Date(s).toLocaleString()
@@ -12,10 +14,18 @@ export default function ScanList() {
   const navigate = useNavigate()
   const [scans, setScans] = useState<Scan[]>([])
   const [error, setError] = useState<string | null>(null)
+  const { toasts, notify, dismiss, requestPermission } = useToast()
+  const prevStatuses = useRef<Map<number, ScanStatus>>(new Map())
 
   const load = useCallback(async () => {
     try {
       const data = await api.listScans()
+      // detect running → done/error transitions
+      data.forEach(scan => {
+        const prev = prevStatuses.current.get(scan.id)
+        if (prev === 'running' && scan.status !== 'running') notify(scan)
+      })
+      prevStatuses.current = new Map(data.map(s => [s.id, s.status]))
       setScans(data)
     } catch (e) {
       setError(String(e))
@@ -49,7 +59,7 @@ export default function ScanList() {
 
       <div className="card">
         <h2>New Scan</h2>
-        <ScanForm />
+        <ScanForm onScanStarted={requestPermission} />
       </div>
 
       <div className="card">
@@ -103,6 +113,7 @@ export default function ScanList() {
           </div>
         )}
       </div>
+      <Toast toasts={toasts} onDismiss={dismiss} />
     </div>
   )
 }

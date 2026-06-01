@@ -73,7 +73,7 @@ const PRESETS: { label: string; hint: string; params: Partial<CreateScanParams> 
   },
 ]
 
-export default function ScanForm() {
+export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void } = {}) {
   const navigate = useNavigate()
   const [params, setParams] = useState<CreateScanParams>(() => ({
     ...defaults,
@@ -106,6 +106,7 @@ export default function ScanForm() {
     setLoading(true)
     setError(null)
     try {
+      onScanStarted?.()
       const scan = await api.createScan(params)
       navigate(`/scans/${scan.id}`)
     } catch (err) {

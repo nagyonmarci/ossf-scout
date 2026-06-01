@@ -1,8 +1,10 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, Scan, ScanResult } from '../api'
 import StatusBadge from '../components/StatusBadge'
 import ResultsTable from '../components/ResultsTable'
+import Toast from '../components/Toast'
+import { useToast } from '../hooks/useToast'
 
 export default function ScanDetail() {
   const { id } = useParams<{ id: string }>()
@@ -11,10 +13,14 @@ export default function ScanDetail() {
   const [scan, setScan] = useState<Scan | null>(null)
   const [results, setResults] = useState<ScanResult[]>([])
   const [error, setError] = useState<string | null>(null)
+  const { toasts, notify, dismiss } = useToast()
+  const prevStatus = useRef<string | null>(null)
 
   const loadScan = useCallback(async () => {
     try {
       const s = await api.getScan(scanId)
+      if (prevStatus.current === 'running' && s.status !== 'running') notify(s)
+      prevStatus.current = s.status
       setScan(s)
       if (s.status === 'done') {
         const r = await api.getResults(scanId)
@@ -23,7 +29,7 @@ export default function ScanDetail() {
     } catch (e) {
       setError(String(e))
     }
-  }, [scanId])
+  }, [scanId, notify])
 
   useEffect(() => {
     loadScan()
@@ -115,6 +121,7 @@ export default function ScanDetail() {
           )}
         </>
       )}
+      <Toast toasts={toasts} onDismiss={dismiss} />
     </div>
   )
 }

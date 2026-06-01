@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Scorecard analysis
-        uses: ossf/scorecard-action@62b2cac7ed8198b15735ed49ab1e5cf35480ba46 # v2.4.0
+        uses: ossf/scorecard-action@ff5dd8929f96a8a4dc67d13f32b8c75057829621 # v2.4.0
         with:
           results_file: results.sarif
           results_format: sarif
@@ -41,6 +41,6 @@ jobs:
           retention-days: 5
 
       - name: Upload to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@181d5ebb47a027a9c2f6d70c5aded514f3c5f05a # v3.28.14
+        uses: github/codeql-action/upload-sarif@4d6150cc15f4cf6b68f0c4cff5ec0f020ad4bf5b # v3.28.14
         with:
           sarif_file: results.sarif

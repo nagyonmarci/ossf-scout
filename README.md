@@ -179,6 +179,16 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 
 ---
 
+### Fix 3 — Dependency update: actions/setup-node 4.4.0 → 6.4.0
+
+**Problem:** `actions/setup-node@v4` runs on Node.js 20, which GitHub is deprecating on runners from June 2026 onwards. This generated a warning on every CI run and would eventually break the workflow.
+
+**Fix:** Merged Dependabot PR #1 — bumps to `actions/setup-node@v6.4.0` (Node.js 24 compatible), SHA-pinned by Dependabot.
+
+**Result:** Node.js 20 deprecation warning eliminated from Build and CodeQL workflows.
+
+---
+
 ### What's next
 
 The lowest-effort remaining improvements, in rough priority order:

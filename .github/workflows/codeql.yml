@@ -24,22 +24,32 @@ jobs:
         language: [go, javascript-typescript]
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         if: matrix.language == 'go'
         with:
-          go-version: '1.25'
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: matrix.language == 'go'
+        with:
+          node-version: '22'
+
+      - name: Frontend build
+        if: matrix.language == 'go'
+        working-directory: frontend
+        run: npm ci && npm run build
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@181d5ebb47a027a9c2f6d70c5aded514f3c5f05a # v3.28.14
+        uses: github/codeql-action/init@fc7e4a0fa01c3cca5fd6a1fddec5c0740c977aa2 # v3.28.14
         with:
           languages: ${{ matrix.language }}
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@181d5ebb47a027a9c2f6d70c5aded514f3c5f05a # v3.28.14
+        uses: github/codeql-action/autobuild@fc7e4a0fa01c3cca5fd6a1fddec5c0740c977aa2 # v3.28.14
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@181d5ebb47a027a9c2f6d70c5aded514f3c5f05a # v3.28.14
+        uses: github/codeql-action/analyze@fc7e4a0fa01c3cca5fd6a1fddec5c0740c977aa2 # v3.28.14
         with:
           category: /language:${{ matrix.language }}

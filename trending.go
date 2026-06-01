@@ -31,9 +31,11 @@ type trendingResult struct {
 }
 
 var (
-	reArticle      = regexp.MustCompile(`(?s)<article[^>]*Box-row[^>]*>(.*?)</article>`)
-	reHref         = regexp.MustCompile(`href="/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"`)
-	reLangAttr     = regexp.MustCompile(`itemprop="programmingLanguage">([^<]+)<`)
+	// Match any <article> — not tied to a specific class name
+	reArticle = regexp.MustCompile(`(?s)<article\b[^>]*>(.*?)</article>`)
+	// Repo link lives in the first <h2><a href="/owner/repo"> inside the article
+	reH2Link        = regexp.MustCompile(`(?s)<h2\b[^>]*>.*?<a\b[^>]*href="/([A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*)"`)
+	reLangAttr      = regexp.MustCompile(`itemprop="programmingLanguage">([^<]+)<`)
 	reStarsTrending = regexp.MustCompile(`([\d,]+)\s+stars?\s+(?:today|this week|this month)`)
 )
 
@@ -82,19 +84,12 @@ func parseTrending(html string) []trendingEntry {
 	for _, a := range articles {
 		body := a[1]
 
-		// First href matching owner/repo (two non-empty segments)
-		var fullName string
-		for _, m := range reHref.FindAllStringSubmatch(body, -1) {
-			name := m[1]
-			parts := strings.SplitN(name, "/", 2)
-			if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
-				fullName = name
-				break
-			}
-		}
-		if fullName == "" {
+		// Repo link is always in the first <h2><a href="/owner/repo">
+		m := reH2Link.FindStringSubmatch(body)
+		if len(m) < 2 {
 			continue
 		}
+		fullName := m[1]
 
 		lang := ""
 		if lm := reLangAttr.FindStringSubmatch(body); len(lm) > 1 {

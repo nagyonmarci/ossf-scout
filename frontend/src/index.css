@@ -85,6 +85,13 @@ header p {
   grid-column: 1 / -1;
 }
 
+.form-field small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
 label {
   font-size: 12px;
   color: var(--muted);
@@ -143,6 +150,9 @@ input::placeholder {
 /* Table */
 .table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 220px);
+  border-radius: var(--radius);
 }
 
 table {

@@ -193,6 +193,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.min_stars}
             onChange={e => set('min_stars', Number(e.target.value))}
           />
+          <small>Minimum GitHub star count — higher = more popular repos</small>
         </div>
 
         <div className="form-field">
@@ -205,6 +206,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.max_score}
             onChange={e => set('max_score', Number(e.target.value))}
           />
+          <small>Maximum OpenSSF total score to include — lower is stricter, 7.0 catches partial gaps</small>
         </div>
 
         <div className="form-field">
@@ -216,6 +218,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.limit}
             onChange={e => set('limit', Number(e.target.value))}
           />
+          <small>Max repos fetched from GitHub Search (100 per page)</small>
         </div>
 
         <div className="form-field">
@@ -227,6 +230,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.workers}
             onChange={e => set('workers', Number(e.target.value))}
           />
+          <small>Concurrent Scorecard API queries — 2–5 recommended to avoid rate limits</small>
         </div>
 
         <div className="form-field">
@@ -238,6 +242,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.min_maintained}
             onChange={e => set('min_maintained', Number(e.target.value))}
           />
+          <small>0 = no filter; excludes abandoned repos (Scorecard Maintained check, 3–7 is a practical range)</small>
         </div>
 
         <div className="form-field">
@@ -248,6 +253,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.check_filter}
             onChange={e => set('check_filter', e.target.value)}
           />
+          <small>Comma-separated check names to highlight — leave empty to use all security checks</small>
         </div>
 
         <div className="form-field full-width">

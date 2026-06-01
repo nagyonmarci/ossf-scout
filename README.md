@@ -122,16 +122,72 @@ PRs welcome. Run `make dev` to build locally. The web server embeds the frontend
 
 ---
 
-## Security Scorecard History
+## Eating Our Own Dog Food — Scorecard on ossf-scout
 
-Tracking [OpenSSF Scorecard](https://securityscorecards.dev/viewer/?uri=github.com/nagyonmarci/ossf-scout) improvements over time.
+ossf-scout exists to surface open-source projects with weak security postures so contributors can improve them. It seemed only fair to apply the same scrutiny to this repo itself.
 
-| Date | Score | Change | What changed |
-|------|-------|--------|-------------|
-| 2026-06-01 | **5.2** | baseline | Initial published score |
-| 2026-06-01 | _pending_ | +Branch-Protection: 0→3 | Enabled branch protection on `main` (no force-push, no deletion, required status check) |
+Below is a running log of what we found, what we fixed, and what moved the needle.
 
-> Scorecard runs weekly (Monday) and on every push to `main`. The `_pending_` rows will update after the next scheduled run.
+---
+
+### Baseline — 2026-06-01 · Score: 5.2 / 10
+
+Right after the initial release, we ran ossf-scout against itself. The [full results](https://securityscorecards.dev/viewer/?uri=github.com/nagyonmarci/ossf-scout) showed several checks at zero:
+
+| Check | Score | Reason |
+|-------|-------|--------|
+| Binary-Artifacts | 10 | ✓ |
+| Dangerous-Workflow | 10 | ✓ |
+| Dependency-Update-Tool | 10 | ✓ (Dependabot enabled) |
+| SAST | 10 | ✓ (CodeQL via GitHub Actions) |
+| Token-Permissions | 10 | ✓ |
+| Vulnerabilities | 9 | 1 open CVE |
+| Pinned-Dependencies | 6 | Dockerfile base images not pinned by digest |
+| Branch-Protection | **0** | No rules on `main` at all |
+| Code-Review | **0** | No PRs reviewed (solo project) |
+| License | **0** | No LICENSE file detected |
+| Security-Policy | **0** | No SECURITY.md |
+| Maintained | **0** | Repo < 90 days old (auto-0 by design) |
+| Fuzzing | **0** | No fuzz tests |
+
+Two problems were immediately visible beyond the check scores: the `Scorecard` CI workflow itself was **failing on every push** due to two incorrect action SHAs, so results weren't being published at all — and `main` had zero branch protection.
+
+---
+
+### Fix 1 — Scorecard CI workflow was broken
+
+**Problem:** The `ossf/scorecard-action` step used SHA `ff5dd892...` which did not correspond to its claimed `v2.4.0` tag. Separately, the `github/codeql-action/upload-sarif` step used SHA `4d6150cc...` which the Scorecard API's workflow-verification rejected as an "imposter commit" — it does not belong to that action.
+
+**Fix:** Corrected both SHAs to the verified commits for their respective tags:
+- `ossf/scorecard-action@v2.4.0` → `62b2cac7...`
+- `github/codeql-action/upload-sarif@v3.28.14` → `fc7e4a0f...`
+
+**Result:** Scorecard CI went green. Results now publish on every push to `main`.
+
+---
+
+### Fix 2 — Branch protection on `main`
+
+**Problem:** `main` had no branch protection rules. Anyone with write access could force-push or delete the branch, and no status checks were required before merging. This alone costs 3–8 points on the Branch-Protection check depending on tier.
+
+**Fix:** Enabled branch protection with:
+- Force-push **blocked**
+- Branch deletion **blocked**
+- Required status check: **`build`** (must pass before merge)
+
+**Expected impact:** Branch-Protection: 0 → **3** (Tier 1). Will be reflected in the next scheduled Scorecard run (Mondays).
+
+---
+
+### What's next
+
+The lowest-effort remaining improvements, in rough priority order:
+
+| Check | Current | Action needed |
+|-------|---------|---------------|
+| License | 0 | Add a `LICENSE` file |
+| Security-Policy | 0 | Add `SECURITY.md` with a vulnerability reporting process |
+| Pinned-Dependencies | 6 | Pin Dockerfile `FROM` images by digest |
 
 ---
 

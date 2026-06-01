@@ -3,6 +3,9 @@ import { ScanResult } from '../api'
 
 type SortKey = 'repo' | 'stars' | 'score'
 
+const DEFAULT_WIDTHS = [200, 80, 80, 220, 320, 100]
+const MIN_COL_WIDTH = 60
+
 function scoreClass(score: number) {
   if (score === -1) return 'score score-na'
   if (score < 3) return 'score score-red'
@@ -18,10 +21,29 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('score')
   const [asc, setAsc] = useState(true)
   const [filter, setFilter] = useState('')
+  const [colWidths, setColWidths] = useState(DEFAULT_WIDTHS)
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setAsc(a => !a)
     else { setSortKey(key); setAsc(true) }
+  }
+
+  function startResize(colIdx: number, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startWidth = colWidths[colIdx]
+
+    function onMove(ev: MouseEvent) {
+      const newWidth = Math.max(MIN_COL_WIDTH, startWidth + ev.clientX - startX)
+      setColWidths(prev => prev.map((w, i) => i === colIdx ? newWidth : w))
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }
 
   const sorted = [...results].sort((a, b) => {
@@ -44,12 +66,16 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
       || r.weak_checks.some(c => c.toLowerCase().includes(q))
   })
 
-  function th(key: SortKey, label: string) {
-    const active = sortKey === key
+  function th(colIdx: number, key: SortKey | null, label: string) {
+    const active = key !== null && sortKey === key
     return (
-      <th onClick={() => toggleSort(key)}>
+      <th
+        style={{ position: 'relative' }}
+        onClick={key ? () => toggleSort(key) : undefined}
+      >
         {label}
         {active && <span className="sort-indicator">{asc ? ' ↑' : ' ↓'}</span>}
+        <div className="resize-handle" onMouseDown={e => startResize(colIdx, e)} />
       </th>
     )
   }
@@ -71,15 +97,18 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
       )}
       {filtered.length > 0 && (
         <div className="table-wrap">
-          <table>
+          <table style={{ tableLayout: 'fixed', width: '100%' }}>
+            <colgroup>
+              {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
+            </colgroup>
             <thead>
               <tr>
-                {th('repo', 'Repository')}
-                {th('stars', 'Stars')}
-                {th('score', 'Score')}
-                <th>Weak Checks</th>
-                <th>Description</th>
-                <th>Links</th>
+                {th(0, 'repo', 'Repository')}
+                {th(1, 'stars', 'Stars')}
+                {th(2, 'score', 'Score')}
+                {th(3, null, 'Weak Checks')}
+                {th(4, null, 'Description')}
+                {th(5, null, 'Links')}
               </tr>
             </thead>
             <tbody>

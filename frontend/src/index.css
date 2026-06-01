@@ -154,7 +154,8 @@ th, td {
   text-align: left;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
-  white-space: nowrap;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 th {
@@ -165,6 +166,7 @@ th {
   letter-spacing: 0.5px;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
 }
 
 th:hover { color: var(--text); }
@@ -175,9 +177,6 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 td.repo-name { font-weight: 500; }
 
 td.description {
-  max-width: 240px;
-  white-space: normal;
-  word-break: break-word;
   color: var(--muted);
   font-size: 13px;
 }
@@ -222,6 +221,22 @@ td.description {
 
 .preset-btn:hover { border-color: var(--accent); color: var(--text); }
 .preset-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(59,130,246,0.08); }
+
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  user-select: none;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: var(--accent);
+  opacity: 0.4;
+}
 
 /* Score badge */
 .score {

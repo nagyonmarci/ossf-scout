@@ -179,9 +179,12 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 
 ---
 
-### Score after CI fixes — 6.1 / 10
+### Score after CI fixes — 5.2 → 5.9 → 6.1
 
-The CI and branch protection fixes together moved the needle: CI-Tests jumped from N/A to **10** (the workflow now runs and publishes results on every push), and Branch-Protection flipped from **0** to N/A (the Scorecard token lacks admin scope to read protection rules, so the check is skipped rather than penalized). Net effect: **5.2 → 6.1**.
+Two measured jumps after fixing the CI workflows and enabling branch protection:
+
+- **5.2 → 5.9**: CI-Tests jumped from N/A to **10** — the Scorecard workflow now publishes results on every push to `main`.
+- **5.9 → 6.1**: Branch-Protection flipped from **0** to N/A — the Scorecard token lacks admin scope to read protection rules, so the check is skipped rather than penalized.
 
 ---
 

@@ -63,6 +63,15 @@ The scan history is stored in `./data/ossf-scout.db` and persists across restart
 
 The token can also be provided per-scan in the web UI (overrides the server-level token).
 
+### Token scopes
+
+| Mode | Required scopes |
+|------|----------------|
+| Default (REST API via `api.securityscorecards.dev`) | None — any valid token is enough to raise the rate limit |
+| `-cli-fallback` (scorecard CLI) | Classic PAT with **`public_repo`** scope — needed for the `Branch-Protection` check (GraphQL query) |
+
+To create a classic PAT: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → tick **`public_repo`** under _repo_.
+
 ---
 
 ## Building from Source

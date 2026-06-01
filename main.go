@@ -23,6 +23,8 @@ func main() {
 	flag.BoolVar(&cfg.cliFallback, "cli-fallback", false, "Use local scorecard CLI for repos not in the Scorecard database")
 	flag.StringVar(&cfg.pushedAfter, "pushed-after", "", "Only include repos pushed after this date (YYYY-MM-DD)")
 	flag.IntVar(&cfg.minMaintained, "min-maintained", 0, "Exclude repos where Scorecard Maintained check score is below this (0 = disabled)")
+	flag.StringVar(&cfg.topic, "topic", "", "Filter by GitHub topic (e.g. ai, machine-learning)")
+	flag.StringVar(&cfg.keyword, "keyword", "", "Keyword search in repo name/description")
 	flag.BoolVar(&serve, "serve", false, "Start web server mode")
 	flag.IntVar(&port, "port", 7878, "Port for web server mode")
 	flag.StringVar(&dbPath, "db", "ossf-scout.db", "SQLite database path")

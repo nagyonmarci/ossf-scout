@@ -12,4 +12,6 @@ type config struct {
 	cliFallback   bool
 	pushedAfter   string
 	minMaintained int
+	topic         string
+	keyword       string
 }

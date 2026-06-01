@@ -70,6 +70,8 @@ func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 			CliFallback bool   `json:"use_cli_fallback"`
 			PushedAfter   string `json:"pushed_after"`
 			MinMaintained int    `json:"min_maintained"`
+			Topic         string `json:"topic"`
+			Keyword       string `json:"keyword"`
 		}
 		body.MinStars = 500
 		body.MaxScore = 5.0
@@ -97,6 +99,8 @@ func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 			cliFallback: body.CliFallback,
 			pushedAfter:   body.PushedAfter,
 			minMaintained: body.MinMaintained,
+			topic:         body.Topic,
+			keyword:       body.Keyword,
 		}
 
 		id, err := dbInsertScan(db, cfg)

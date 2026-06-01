@@ -40,6 +40,8 @@ export interface CreateScanParams {
   use_cli_fallback: boolean;
   pushed_after: string;
   min_maintained: number;
+  topic: string;
+  keyword: string;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {

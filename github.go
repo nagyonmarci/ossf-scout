@@ -45,9 +45,16 @@ func ghGet(rawURL, token string) ([]byte, error) {
 }
 
 func searchGitHub(cfg config) ([]ghRepo, error) {
-	query := fmt.Sprintf("stars:>%d", cfg.minStars)
+	query := ""
+	if cfg.keyword != "" {
+		query = cfg.keyword + " "
+	}
+	query += fmt.Sprintf("stars:>%d", cfg.minStars)
 	if cfg.language != "" {
 		query += " language:" + cfg.language
+	}
+	if cfg.topic != "" {
+		query += " topic:" + cfg.topic
 	}
 	query += " is:public archived:false"
 	if cfg.pushedAfter != "" {

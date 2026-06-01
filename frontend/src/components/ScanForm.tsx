@@ -31,6 +31,8 @@ const defaults: CreateScanParams = {
   use_cli_fallback: false,
   pushed_after: '',
   min_maintained: 0,
+  topic: '',
+  keyword: '',
 }
 
 const DEVSECOPS_PRESET: Partial<CreateScanParams> = {
@@ -85,6 +87,26 @@ export default function ScanForm() {
             placeholder="go, python, java…"
             value={params.language}
             onChange={e => set('language', e.target.value)}
+          />
+        </div>
+
+        <div className="form-field">
+          <label>Topic</label>
+          <input
+            type="text"
+            placeholder="ai, machine-learning…"
+            value={params.topic}
+            onChange={e => set('topic', e.target.value)}
+          />
+        </div>
+
+        <div className="form-field">
+          <label>Keyword</label>
+          <input
+            type="text"
+            placeholder="llm, kubernetes…"
+            value={params.keyword}
+            onChange={e => set('keyword', e.target.value)}
           />
         </div>
 

@@ -10,4 +10,5 @@ type config struct {
 	token       string
 	checkFilter string
 	cliFallback bool
+	pushedAfter string
 }

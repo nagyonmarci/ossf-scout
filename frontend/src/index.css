@@ -175,13 +175,53 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 td.repo-name { font-weight: 500; }
 
 td.description {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 240px;
+  white-space: normal;
+  word-break: break-word;
   color: var(--muted);
   font-size: 13px;
-  white-space: nowrap;
 }
+
+.links-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 10px;
+  width: 300px;
+  margin-bottom: 12px;
+  outline: none;
+}
+
+.filter-input:focus { border-color: var(--accent); }
+
+.preset-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.preset-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 12px;
+  transition: all 0.15s;
+}
+
+.preset-btn:hover { border-color: var(--accent); color: var(--text); }
+.preset-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(59,130,246,0.08); }
 
 /* Score badge */
 .score {

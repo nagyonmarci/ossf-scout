@@ -21,6 +21,7 @@ func main() {
 	flag.StringVar(&cfg.token, "token", os.Getenv("GITHUB_TOKEN"), "GitHub PAT (or set GITHUB_TOKEN env)")
 	flag.StringVar(&cfg.checkFilter, "checks", "", "Comma-separated Scorecard checks to highlight (default: security set)")
 	flag.BoolVar(&cfg.cliFallback, "cli-fallback", false, "Use local scorecard CLI for repos not in the Scorecard database")
+	flag.StringVar(&cfg.pushedAfter, "pushed-after", "", "Only include repos pushed after this date (YYYY-MM-DD)")
 	flag.BoolVar(&serve, "serve", false, "Start web server mode")
 	flag.IntVar(&port, "port", 7878, "Port for web server mode")
 	flag.StringVar(&dbPath, "db", "ossf-scout.db", "SQLite database path")

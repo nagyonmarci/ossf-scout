@@ -2,6 +2,24 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, CreateScanParams } from '../api'
 
+function firstDayOfMonth(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+function daysAgo(n: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  return d.toISOString().slice(0, 10)
+}
+
+const DATE_PRESETS = [
+  { label: 'Any time', value: '' },
+  { label: 'This month', value: firstDayOfMonth() },
+  { label: 'Last 30 days', value: daysAgo(30) },
+  { label: 'Last 90 days', value: daysAgo(90) },
+]
+
 const defaults: CreateScanParams = {
   language: '',
   min_stars: 500,
@@ -11,6 +29,7 @@ const defaults: CreateScanParams = {
   check_filter: '',
   github_token: '',
   use_cli_fallback: false,
+  pushed_after: '',
 }
 
 export default function ScanForm() {
@@ -111,6 +130,27 @@ export default function ScanForm() {
             value={params.github_token}
             onChange={e => set('github_token', e.target.value)}
             autoComplete="off"
+          />
+        </div>
+
+        <div className="form-field full-width">
+          <label>Pushed after</label>
+          <div className="preset-btns">
+            {DATE_PRESETS.map(p => (
+              <button
+                key={p.label}
+                type="button"
+                className={params.pushed_after === p.value ? 'preset-btn active' : 'preset-btn'}
+                onClick={() => set('pushed_after', p.value)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <input
+            type="date"
+            value={params.pushed_after}
+            onChange={e => set('pushed_after', e.target.value)}
           />
         </div>
 

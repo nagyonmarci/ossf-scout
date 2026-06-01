@@ -21,6 +21,7 @@ type scanRow struct {
 	Workers     int      `json:"workers"`
 	CheckFilter string   `json:"check_filter"`
 	CliFallback bool     `json:"cli_fallback"`
+	PushedAfter string   `json:"pushed_after"`
 	TotalRepos  *int     `json:"total_repos"`
 	ResultCount *int     `json:"result_count"`
 }
@@ -52,6 +53,7 @@ CREATE TABLE IF NOT EXISTS scans (
     workers      INTEGER NOT NULL DEFAULT 5,
     check_filter TEXT NOT NULL DEFAULT '',
     cli_fallback INTEGER NOT NULL DEFAULT 0,
+    pushed_after TEXT NOT NULL DEFAULT '',
     total_repos  INTEGER,
     result_count INTEGER
 );
@@ -83,8 +85,9 @@ func openDB(path string) (*sql.DB, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
-	// Migrate: add cli_fallback column for existing databases
+	// Migrate: add columns for existing databases
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN cli_fallback INTEGER NOT NULL DEFAULT 0`)
+	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN pushed_after TEXT NOT NULL DEFAULT ''`)
 	// Mark any scans that were running when the server last died
 	_, _ = db.Exec(`UPDATE scans SET status='error', error_msg='server restarted' WHERE status='running'`)
 	return db, nil
@@ -92,9 +95,9 @@ func openDB(path string) (*sql.DB, error) {
 
 func dbInsertScan(db *sql.DB, cfg config) (int64, error) {
 	res, err := db.Exec(
-		`INSERT INTO scans (language, min_stars, max_score, limit_, workers, check_filter, cli_fallback)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		cfg.language, cfg.minStars, cfg.maxScore, cfg.limit, cfg.workers, cfg.checkFilter, cfg.cliFallback,
+		`INSERT INTO scans (language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		cfg.language, cfg.minStars, cfg.maxScore, cfg.limit, cfg.workers, cfg.checkFilter, cfg.cliFallback, cfg.pushedAfter,
 	)
 	if err != nil {
 		return 0, err
@@ -151,7 +154,7 @@ func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
 func dbListScans(db *sql.DB) ([]scanRow, error) {
 	rows, err := db.Query(
 		`SELECT id, created_at, finished_at, status, error_msg,
-		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback,
+		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after,
 		        total_repos, result_count
 		 FROM scans ORDER BY id DESC`,
 	)
@@ -165,7 +168,7 @@ func dbListScans(db *sql.DB) ([]scanRow, error) {
 func dbGetScan(db *sql.DB, id int64) (*scanRow, error) {
 	rows, err := db.Query(
 		`SELECT id, created_at, finished_at, status, error_msg,
-		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback,
+		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after,
 		        total_repos, result_count
 		 FROM scans WHERE id=?`, id,
 	)
@@ -221,7 +224,7 @@ func scanRowsFromSQL(rows *sql.Rows) ([]scanRow, error) {
 		var s scanRow
 		err := rows.Scan(
 			&s.ID, &s.CreatedAt, &s.FinishedAt, &s.Status, &s.ErrorMsg,
-			&s.Language, &s.MinStars, &s.MaxScore, &s.Limit, &s.Workers, &s.CheckFilter, &s.CliFallback,
+			&s.Language, &s.MinStars, &s.MaxScore, &s.Limit, &s.Workers, &s.CheckFilter, &s.CliFallback, &s.PushedAfter,
 			&s.TotalRepos, &s.ResultCount,
 		)
 		if err != nil {

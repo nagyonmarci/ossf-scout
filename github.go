@@ -50,6 +50,9 @@ func searchGitHub(cfg config) ([]ghRepo, error) {
 		query += " language:" + cfg.language
 	}
 	query += " is:public archived:false"
+	if cfg.pushedAfter != "" {
+		query += " pushed:>=" + cfg.pushedAfter
+	}
 
 	params := url.Values{}
 	params.Set("q", query)

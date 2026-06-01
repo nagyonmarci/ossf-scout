@@ -17,6 +17,7 @@ function scoreLabel(score: number) {
 export default function ResultsTable({ results }: { results: ScanResult[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('score')
   const [asc, setAsc] = useState(true)
+  const [filter, setFilter] = useState('')
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setAsc(a => !a)
@@ -35,6 +36,14 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
     return asc ? diff : -diff
   })
 
+  const filtered = sorted.filter(r => {
+    if (!filter) return true
+    const q = filter.toLowerCase()
+    return r.repo.toLowerCase().includes(q)
+      || r.description.toLowerCase().includes(q)
+      || r.weak_checks.some(c => c.toLowerCase().includes(q))
+  })
+
   function th(key: SortKey, label: string) {
     const active = sortKey === key
     return (
@@ -50,38 +59,51 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
   }
 
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {th('repo', 'Repository')}
-            {th('stars', 'Stars')}
-            {th('score', 'Score')}
-            <th>Weak Checks</th>
-            <th>Description</th>
-            <th>Links</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map(r => (
-            <tr key={r.id}>
-              <td className="repo-name">{r.repo}</td>
-              <td>{r.stars.toLocaleString()}</td>
-              <td><span className={scoreClass(r.score)}>{scoreLabel(r.score)}</span></td>
-              <td>
-                <div className="tags">
-                  {r.weak_checks.map(c => <span key={c} className="tag">{c}</span>)}
-                </div>
-              </td>
-              <td className="description" title={r.description}>{r.description}</td>
-              <td style={{ display: 'flex', gap: 8 }}>
-                <a href={r.repo_url} target="_blank" rel="noopener noreferrer">GitHub</a>
-                <a href={r.scorecard_url} target="_blank" rel="noopener noreferrer">Scorecard</a>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <input
+        className="filter-input"
+        placeholder="Filter by repo, description, check…"
+        value={filter}
+        onChange={e => setFilter(e.target.value)}
+      />
+      {filtered.length === 0 && (
+        <p className="empty">No results match the filter.</p>
+      )}
+      {filtered.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                {th('repo', 'Repository')}
+                {th('stars', 'Stars')}
+                {th('score', 'Score')}
+                <th>Weak Checks</th>
+                <th>Description</th>
+                <th>Links</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(r => (
+                <tr key={r.id}>
+                  <td className="repo-name">{r.repo}</td>
+                  <td>{r.stars.toLocaleString()}</td>
+                  <td><span className={scoreClass(r.score)}>{scoreLabel(r.score)}</span></td>
+                  <td>
+                    <div className="tags">
+                      {r.weak_checks.map(c => <span key={c} className="tag">{c}</span>)}
+                    </div>
+                  </td>
+                  <td className="description">{r.description}</td>
+                  <td className="links-cell">
+                    <a href={r.repo_url} target="_blank" rel="noopener noreferrer">GitHub</a>
+                    <a href={r.scorecard_url} target="_blank" rel="noopener noreferrer">Scorecard</a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
   )
 }

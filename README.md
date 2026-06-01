@@ -205,6 +205,16 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 
 ---
 
+### Fix 5 — CodeQL `language:go` analysis was silently missing on PRs
+
+**Problem:** `codeql.yml` used the same incorrect SHA (`4d6150cc...`) for all three `github/codeql-action` steps (`init`, `autobuild`, `analyze`) that we had already fixed in `scorecard.yml`. As a result, the `go` matrix job produced no results — GitHub reported "1 configuration not found / language:go" on every PR while the `javascript-typescript` job passed normally.
+
+**Fix:** Replaced all three occurrences with the verified v3.28.14 SHA (`fc7e4a0f...`), consistent with `scorecard.yml`.
+
+**Result:** Both `go` and `javascript-typescript` CodeQL analyses now run correctly on PRs.
+
+---
+
 ### What's next
 
 The lowest-effort remaining improvements, in rough priority order:

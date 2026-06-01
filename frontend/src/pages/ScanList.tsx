@@ -68,7 +68,7 @@ export default function ScanList() {
         {scans.length === 0 ? (
           <p className="empty">No scans yet. Run one above.</p>
         ) : (
-          <div className="table-wrap" style={{ maxHeight: 360 }}>
+          <div className="table-wrap">
             <table className="scans-table">
               <thead>
                 <tr>

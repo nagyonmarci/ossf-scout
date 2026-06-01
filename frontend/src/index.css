@@ -150,9 +150,7 @@ input::placeholder {
 /* Table */
 .table-wrap {
   overflow-x: auto;
-  overflow-y: auto;
-  max-height: calc(100vh - 220px);
-  border-radius: var(--radius);
+  overflow-y: clip;
 }
 
 table {

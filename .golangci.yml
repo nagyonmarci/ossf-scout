@@ -1,0 +1,14 @@
+linters:
+  enable:
+    - errcheck
+    - staticcheck
+    - govet
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters: [errcheck]

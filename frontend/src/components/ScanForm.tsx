@@ -271,7 +271,8 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             ))}
           </div>
           <input
-            type="date"
+            type="text"
+            placeholder="YYYY-MM-DD"
             value={params.pushed_after}
             onChange={e => set('pushed_after', e.target.value)}
           />

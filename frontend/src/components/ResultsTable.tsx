@@ -21,6 +21,7 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('score')
   const [asc, setAsc] = useState(true)
   const [filter, setFilter] = useState('')
+  const [hideNA, setHideNA] = useState(false)
   const [colWidths, setColWidths] = useState(DEFAULT_WIDTHS)
 
   function toggleSort(key: SortKey) {
@@ -59,6 +60,7 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
   })
 
   const filtered = sorted.filter(r => {
+    if (hideNA && r.score === -1) return false
     if (!filter) return true
     const q = filter.toLowerCase()
     return r.repo.toLowerCase().includes(q)
@@ -86,12 +88,23 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
 
   return (
     <>
-      <input
-        className="filter-input"
-        placeholder="Filter by repo, description, check…"
-        value={filter}
-        onChange={e => setFilter(e.target.value)}
-      />
+      <div className="filter-bar">
+        <input
+          className="filter-input"
+          placeholder="Filter by repo, description, check…"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+        />
+        <label className="filter-toggle">
+          <input
+            type="checkbox"
+            checked={hideNA}
+            onChange={e => setHideNA(e.target.checked)}
+            style={{ width: 'auto' }}
+          />
+          Hide N/A
+        </label>
+      </div>
       {filtered.length === 0 && (
         <p className="empty">No results match the filter.</p>
       )}

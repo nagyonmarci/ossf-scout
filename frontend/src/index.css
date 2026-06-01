@@ -191,6 +191,23 @@ td.description {
   gap: 4px;
 }
 
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .filter-input {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -199,7 +216,6 @@ td.description {
   font-size: 13px;
   padding: 6px 10px;
   width: 300px;
-  margin-bottom: 12px;
   outline: none;
 }
 

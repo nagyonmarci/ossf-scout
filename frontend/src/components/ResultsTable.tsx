@@ -125,7 +125,10 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
                   <td className="description">{r.description}</td>
                   <td className="links-cell">
                     <a href={r.repo_url} target="_blank" rel="noopener noreferrer">GitHub</a>
-                    <a href={r.scorecard_url} target="_blank" rel="noopener noreferrer">Scorecard</a>
+                    {r.scorecard_url
+                      ? <a href={r.scorecard_url} target="_blank" rel="noopener noreferrer">Scorecard</a>
+                      : <span style={{ color: 'var(--muted)', fontSize: 12 }}>CLI scan</span>
+                    }
                   </td>
                 </tr>
               ))}

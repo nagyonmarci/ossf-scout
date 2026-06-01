@@ -40,11 +40,14 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 					fmt.Fprintf(os.Stderr, "  [warn] %s: %v\n", repo.FullName, err)
 					continue
 				}
+				fromCLI := false
 				if sc == nil {
 					if cfg.cliFallback {
 						sc, err = scorecardCLI(parts[0], parts[1], cfg.token)
 						if err != nil {
 							fmt.Fprintf(os.Stderr, "  [warn] CLI %s: %v\n", repo.FullName, err)
+						} else if sc != nil {
+							fromCLI = true
 						}
 					}
 					if sc == nil {
@@ -65,13 +68,17 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 				if cfg.singleRepo == "" && sc.Score > cfg.maxScore && len(wantChecks) == 0 {
 					continue
 				}
+				scorecardURL := fmt.Sprintf("https://scorecard.dev/viewer/?uri=github.com/%s", repo.FullName)
+				if fromCLI {
+					scorecardURL = "" // repo not indexed in online database
+				}
 				weak := weakChecks(sc.Checks, wantChecks)
 				if cfg.singleRepo != "" || sc.Score <= cfg.maxScore || len(weak) > 0 {
 					results <- result{
 						Repo:         repo,
 						Score:        sc.Score,
 						WeakChecks:   weak,
-						ScorecardURL: fmt.Sprintf("https://scorecard.dev/viewer/?uri=github.com/%s", repo.FullName),
+						ScorecardURL: scorecardURL,
 					}
 				}
 				time.Sleep(200 * time.Millisecond)

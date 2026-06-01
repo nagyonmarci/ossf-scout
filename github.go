@@ -51,6 +51,14 @@ func fetchRepos(cfg config) ([]ghRepo, error) {
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 			return nil, fmt.Errorf("invalid repo format %q — expected owner/repo", cfg.singleRepo)
 		}
+		body, err := ghGet("https://api.github.com/repos/"+cfg.singleRepo, cfg.token)
+		if err == nil {
+			var repo ghRepo
+			if json.Unmarshal(body, &repo) == nil {
+				return []ghRepo{repo}, nil
+			}
+		}
+		// fallback: synthetic repo (no stars, no description)
 		return []ghRepo{{
 			FullName: cfg.singleRepo,
 			HTMLURL:  "https://github.com/" + cfg.singleRepo,

@@ -81,6 +81,18 @@ export default function ScanDetail() {
                 <span className="meta-label">Workers:</span>
                 {scan.workers}
               </span>
+              {scan.topic && (
+                <span className="meta-item">
+                  <span className="meta-label">Topic:</span>
+                  {scan.topic}
+                </span>
+              )}
+              {scan.keyword && (
+                <span className="meta-item">
+                  <span className="meta-label">Keyword:</span>
+                  {scan.keyword}
+                </span>
+              )}
               {scan.check_filter && (
                 <span className="meta-item">
                   <span className="meta-label">Checks:</span>

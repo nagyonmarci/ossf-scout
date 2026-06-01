@@ -167,6 +167,10 @@ th {
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
 }
 
 th:hover { color: var(--text); }
@@ -272,6 +276,30 @@ td.description {
   border-color: var(--accent);
   color: var(--accent);
   background: rgba(59,130,246,0.1);
+}
+
+.back-to-top {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 18px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  z-index: 999;
+}
+
+.back-to-top:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .toast-container {

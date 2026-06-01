@@ -12,6 +12,8 @@ export interface Scan {
   limit: number;
   workers: number;
   check_filter: string;
+  topic: string;
+  keyword: string;
   total_repos: number | null;
   result_count: number | null;
 }

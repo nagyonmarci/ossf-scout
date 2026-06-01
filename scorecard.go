@@ -62,24 +62,30 @@ func scorecardCLI(owner, repo, token string) (*scorecardResponse, error) {
 		cmd.Env = os.Environ()
 	}
 
-	var stderr strings.Builder
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	out, err := cmd.Output()
-	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return nil, nil
+	runErr := cmd.Run()
+	if runErr != nil && errors.Is(runErr, exec.ErrNotFound) {
+		return nil, nil
+	}
+
+	// scorecard exits with status 1 when any check fails (e.g. token scope issues),
+	// but still writes valid JSON to stdout — use it if we can parse it
+	if out := stdout.String(); out != "" {
+		var sc scorecardResponse
+		if err := json.Unmarshal([]byte(out), &sc); err == nil {
+			return &sc, nil
 		}
-		msg := err.Error()
+	}
+
+	if runErr != nil {
+		msg := runErr.Error()
 		if s := strings.TrimSpace(stderr.String()); s != "" {
 			msg += ": " + s
 		}
 		return nil, fmt.Errorf("scorecard CLI: %s", msg)
 	}
-
-	var sc scorecardResponse
-	if err := json.Unmarshal(out, &sc); err != nil {
-		return nil, fmt.Errorf("scorecard CLI output parse: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
-	}
-	return &sc, nil
+	return nil, fmt.Errorf("scorecard CLI: empty output")
 }

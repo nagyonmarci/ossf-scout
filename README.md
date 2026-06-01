@@ -195,6 +195,16 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 
 ---
 
+### Fix 4 — Dependency updates: ossf/scorecard-action 2.4.0 → 2.4.3, actions/checkout 4.2.2 → 6.0.2
+
+**Problem:** `ossf/scorecard-action@v2.4.0` had a pinned SHA that we had to correct manually earlier in this session. The patch release 2.4.3 ships with the correct SHA out of the box and picks up Scorecard v5.0.x bug fixes. `actions/checkout@v4` was the last remaining Node.js 20 action across all three workflows.
+
+**Fix:** Merged Dependabot PRs #3 and #4. All GitHub Actions across `build.yml`, `codeql.yml`, and `scorecard.yml` now run on Node.js 24.
+
+**Result:** Node.js 20 deprecation warnings fully eliminated. No more manual SHA corrections needed for `scorecard-action` — Dependabot will keep it current going forward.
+
+---
+
 ### What's next
 
 The lowest-effort remaining improvements, in rough priority order:

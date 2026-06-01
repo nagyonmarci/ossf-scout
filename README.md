@@ -122,6 +122,19 @@ PRs welcome. Run `make dev` to build locally. The web server embeds the frontend
 
 ---
 
+## Security Scorecard History
+
+Tracking [OpenSSF Scorecard](https://securityscorecards.dev/viewer/?uri=github.com/nagyonmarci/ossf-scout) improvements over time.
+
+| Date | Score | Change | What changed |
+|------|-------|--------|-------------|
+| 2026-06-01 | **5.2** | baseline | Initial published score |
+| 2026-06-01 | _pending_ | +Branch-Protection: 0→3 | Enabled branch protection on `main` (no force-push, no deletion, required status check) |
+
+> Scorecard runs weekly (Monday) and on every push to `main`. The `_pending_` rows will update after the next scheduled run.
+
+---
+
 ## License
 
 MIT

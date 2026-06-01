@@ -3,6 +3,7 @@
 [![Go](https://img.shields.io/badge/go-1.25-00acd7?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-Unlicense-blue)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/nagyonmarci/ossf-scout/badge)](https://securityscorecards.dev/viewer/?uri=github.com/nagyonmarci/ossf-scout)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13066/badge)](https://www.bestpractices.dev/projects/13066)
 
 Discover GitHub repositories where security practices are weakest — and where a well-crafted PR can make the biggest impact.
 
@@ -308,17 +309,21 @@ Both ran 900k+ executions in 5 seconds each with no crashes found.
 
 ---
 
-### Fix 11 — CII Best Practices in-progress badge (pending)
+### Fix 11 — CII Best Practices (in-progress → passing)
 
-**Why:** The Scorecard CII-Best-Practices check awards 2 points for an in-progress badge (vs. 0 now), without requiring the full passing tier (~67 criteria).
+**Why:** The Scorecard CII-Best-Practices check: in-progress badge = 2 points, passing badge = 5 points. Registered at bestpractices.dev (project ID: 13066).
 
-**To register** (requires GitHub login):
-1. Go to https://www.bestpractices.dev/en/projects/new
-2. Log in with GitHub, enter repo URL: `https://github.com/nagyonmarci/ossf-scout`
-3. Save → note the project ID
-4. Share the ID so the README badge can be added
+**Work done to close gaps:**
+- Added `CONTRIBUTING.md` — contribution process documented
+- Added `CHANGELOG.md` — release notes in Keep a Changelog format
+- Added unit tests (`workers_test.go`, `trending_test.go`) — 7% statement coverage, CI-verified
+- Added `golangci-lint` to CI (`build.yml`) with `errcheck` + `staticcheck`
+- Badge added to README
 
-**Result (expected):** CII-Best-Practices: 0 → **2**.
+**Self-attestation checklist** (to fill in on bestpractices.dev):
+license (Met), description (Met), interact/issues (Met), contribution_requirements (Met), report_tracker (Met), english (Met), maintained (Met), version_semver/tags (Met), build (Met), test_invocation (Met), warnings/go vet (Met), crypto_* (N/A), delivery_mitm (Met), static_analysis/CodeQL (Met), dynamic_analysis/fuzzing (Met)
+
+**Result (expected):** CII-Best-Practices: 0 → **2** (in-progress) → **5** (passing after self-attestation).
 
 ---
 

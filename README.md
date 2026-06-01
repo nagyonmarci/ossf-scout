@@ -26,6 +26,22 @@ Available as a **CLI tool** or a **web server** with a browser UI and scan histo
 
 ---
 
+## Screenshots
+
+**Scan configuration and history**
+
+![Scans](screenshots/scans.png)
+
+**Scan results — repos with weak Scorecard scores**
+
+![Results](screenshots/results.png)
+
+**GitHub Trending scored against Scorecard API**
+
+![Trending](screenshots/trending.png)
+
+---
+
 ## Quick Start
 
 ### CLI

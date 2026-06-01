@@ -20,6 +20,6 @@ RUN go install github.com/ossf/scorecard/v5@latest
 FROM alpine:3.22
 WORKDIR /app
 COPY --from=builder /app/ossf-scout .
-COPY --from=builder /root/go/bin/scorecard /usr/local/bin/scorecard
+COPY --from=builder /go/bin/scorecard /usr/local/bin/scorecard
 EXPOSE 7878
 CMD ["./ossf-scout", "-serve"]

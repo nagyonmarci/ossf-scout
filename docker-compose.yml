@@ -1,6 +1,9 @@
 services:
   ossf-scout:
-    build: .
+    build:
+      context: .
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
     ports:
       - "7878:7878"
     volumes:

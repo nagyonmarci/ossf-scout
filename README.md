@@ -122,6 +122,101 @@ PRs welcome. Run `make dev` to build locally. The web server embeds the frontend
 
 ---
 
+## Eating Our Own Dog Food — Scorecard on ossf-scout
+
+ossf-scout exists to surface open-source projects with weak security postures so contributors can improve them. It seemed only fair to apply the same scrutiny to this repo itself.
+
+Below is a running log of what we found, what we fixed, and what moved the needle.
+
+---
+
+### Baseline — 2026-06-01 · Score: 5.2 / 10
+
+Right after the initial release, we ran ossf-scout against itself. The [full results](https://securityscorecards.dev/viewer/?uri=github.com/nagyonmarci/ossf-scout) showed several checks at zero:
+
+| Check | Score | Reason |
+|-------|-------|--------|
+| Binary-Artifacts | 10 | ✓ |
+| Dangerous-Workflow | 10 | ✓ |
+| Dependency-Update-Tool | 10 | ✓ (Dependabot enabled) |
+| SAST | 10 | ✓ (CodeQL via GitHub Actions) |
+| Token-Permissions | 10 | ✓ |
+| Vulnerabilities | 9 | 1 open CVE |
+| Pinned-Dependencies | 6 | Dockerfile base images not pinned by digest |
+| Branch-Protection | **0** | No rules on `main` at all |
+| Code-Review | **0** | No PRs reviewed (solo project) |
+| License | **0** | No LICENSE file detected |
+| Security-Policy | **0** | No SECURITY.md |
+| Maintained | **0** | Repo < 90 days old (auto-0 by design) |
+| Fuzzing | **0** | No fuzz tests |
+
+Two problems were immediately visible beyond the check scores: the `Scorecard` CI workflow itself was **failing on every push** due to two incorrect action SHAs, so results weren't being published at all — and `main` had zero branch protection.
+
+---
+
+### Fix 1 — Scorecard CI workflow was broken
+
+**Problem:** The `ossf/scorecard-action` step used SHA `ff5dd892...` which did not correspond to its claimed `v2.4.0` tag. Separately, the `github/codeql-action/upload-sarif` step used SHA `4d6150cc...` which the Scorecard API's workflow-verification rejected as an "imposter commit" — it does not belong to that action.
+
+**Fix:** Corrected both SHAs to the verified commits for their respective tags:
+- `ossf/scorecard-action@v2.4.0` → `62b2cac7...`
+- `github/codeql-action/upload-sarif@v3.28.14` → `fc7e4a0f...`
+
+**Result:** Scorecard CI went green. Results now publish on every push to `main`.
+
+---
+
+### Fix 2 — Branch protection on `main`
+
+**Problem:** `main` had no branch protection rules. Anyone with write access could force-push or delete the branch, and no status checks were required before merging. This alone costs 3–8 points on the Branch-Protection check depending on tier.
+
+**Fix:** Enabled branch protection with:
+- Force-push **blocked**
+- Branch deletion **blocked**
+- Required status check: **`build`** (must pass before merge)
+
+**Expected impact:** Branch-Protection: 0 → **3** (Tier 1). Will be reflected in the next scheduled Scorecard run (Mondays).
+
+---
+
+### Fix 3 — Dependency updates: actions/setup-node 4.4.0 → 6.4.0, actions/upload-artifact 4.6.2 → 7.0.1
+
+**Problem:** Both actions ran on Node.js 20, deprecated on GitHub runners from June 2026. `upload-artifact` is also used in the Scorecard workflow to store the SARIF results file.
+
+**Fix:** Merged Dependabot PRs #1 and #2 — both bumped to Node.js 24 compatible major versions, SHA-pinned by Dependabot.
+
+**Result:** Node.js 20 deprecation warnings eliminated from Build, CodeQL, and Scorecard workflows.
+
+**Problem:** `actions/setup-node@v4` runs on Node.js 20, which GitHub is deprecating on runners from June 2026 onwards. This generated a warning on every CI run and would eventually break the workflow.
+
+**Fix:** Merged Dependabot PR #1 — bumps to `actions/setup-node@v6.4.0` (Node.js 24 compatible), SHA-pinned by Dependabot.
+
+**Result:** Node.js 20 deprecation warning eliminated from Build and CodeQL workflows.
+
+---
+
+### Fix 4 — Dependency updates: ossf/scorecard-action 2.4.0 → 2.4.3, actions/checkout 4.2.2 → 6.0.2
+
+**Problem:** `ossf/scorecard-action@v2.4.0` had a pinned SHA that we had to correct manually earlier in this session. The patch release 2.4.3 ships with the correct SHA out of the box and picks up Scorecard v5.0.x bug fixes. `actions/checkout@v4` was the last remaining Node.js 20 action across all three workflows.
+
+**Fix:** Merged Dependabot PRs #3 and #4. All GitHub Actions across `build.yml`, `codeql.yml`, and `scorecard.yml` now run on Node.js 24.
+
+**Result:** Node.js 20 deprecation warnings fully eliminated. No more manual SHA corrections needed for `scorecard-action` — Dependabot will keep it current going forward.
+
+---
+
+### What's next
+
+The lowest-effort remaining improvements, in rough priority order:
+
+| Check | Current | Action needed |
+|-------|---------|---------------|
+| License | 0 | Add a `LICENSE` file |
+| Security-Policy | 0 | Add `SECURITY.md` with a vulnerability reporting process |
+| Pinned-Dependencies | 6 | Pin Dockerfile `FROM` images by digest |
+
+---
+
 ## License
 
 MIT

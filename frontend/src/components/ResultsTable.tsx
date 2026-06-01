@@ -211,14 +211,14 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
                     <td className="repo-name">
                       <a href={r.repo_url} target="_blank" rel="noopener noreferrer">{r.repo}</a>
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       {r.stars.toLocaleString()}
                       {(r.stars_today ?? 0) > 0 && (
                         <span className="stars-today"> +{r.stars_today!.toLocaleString()}</span>
                       )}
                     </td>
-                    <td title="Open issues + pull requests">{r.open_issues.toLocaleString()}</td>
-                    <td>
+                    <td style={{ whiteSpace: 'nowrap' }} title="Open issues + pull requests">{r.open_issues.toLocaleString()}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
                       {r.scorecard_url
                         ? <a href={r.scorecard_url} target="_blank" rel="noopener noreferrer" className={scoreClass(r.score)}>{scoreLabel(r.score)}</a>
                         : <span className={scoreClass(r.score)} title="CLI scan — not indexed online">{scoreLabel(r.score)}</span>

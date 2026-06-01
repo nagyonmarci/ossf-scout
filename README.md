@@ -293,10 +293,38 @@ go install github.com/ossf/scorecard/v5@v5.5.0
 
 ---
 
+### Fix 10 — Go fuzz tests (Fuzzing: 0 → 10)
+
+**Problem:** No fuzz tests existed. The Scorecard Fuzzing check looks for `FuzzXxx` functions in `*_test.go` files.
+
+**Fix:** Added `fuzz_test.go` with two fuzz targets covering the highest-risk parsing logic:
+
+- **`FuzzParseTrending`** — feeds arbitrary HTML into the regex-based GitHub trending scraper (`trending.go`). Four compiled regexes run on untrusted input; this is the highest-risk parsing path.
+- **`FuzzParseChecks`** — feeds arbitrary strings into the comma-separated check filter parser (`workers.go`). Pure function, no external calls.
+
+Both ran 900k+ executions in 5 seconds each with no crashes found.
+
+**Result:** Fuzzing: 0 → **10**.
+
+---
+
+### Fix 11 — CII Best Practices in-progress badge (pending)
+
+**Why:** The Scorecard CII-Best-Practices check awards 2 points for an in-progress badge (vs. 0 now), without requiring the full passing tier (~67 criteria).
+
+**To register** (requires GitHub login):
+1. Go to https://www.bestpractices.dev/en/projects/new
+2. Log in with GitHub, enter repo URL: `https://github.com/nagyonmarci/ossf-scout`
+3. Save → note the project ID
+4. Share the ID so the README badge can be added
+
+**Result (expected):** CII-Best-Practices: 0 → **2**.
+
+---
+
 ### What's next
 
-- **Fuzzing** — Go `testing.F` fuzz tesztek
-- **CII-Best-Practices** — OpenSSF badge (bestpractices.dev)
+- **CII in-progress badge** — register at bestpractices.dev (manual step)
 - **Maintained** — 2026-08-31 után automatikusan javul (repo > 90 nap)
 
 ---

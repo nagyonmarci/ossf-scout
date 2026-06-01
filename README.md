@@ -1,10 +1,27 @@
 # ossf-scout
 
-Find GitHub repos with weak [OpenSSF Scorecard](https://scorecard.dev/) security scores.
+[![Go](https://img.shields.io/badge/go-1.25-00acd7?logo=go&logoColor=white)](go.mod)
+[![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/nagyonmarci/ossf-scout/badge)](https://securityscorecards.dev/viewer/?uri=github.com/nagyonmarci/ossf-scout)
 
-Searches GitHub for popular repositories, queries the Scorecard API for each, and surfaces projects missing key security practices — no CI tests, no SAST, no branch protection, etc.
+Discover GitHub repositories where security practices are weakest — and where a well-crafted PR can make the biggest impact.
+
+Searches GitHub for popular repositories, queries the [OpenSSF Scorecard](https://scorecard.dev/) API for each, and surfaces projects missing key security practices — no CI tests, no SAST, no branch protection, etc.
 
 Available as a **CLI tool** or a **web server** with a browser UI and scan history.
+
+---
+
+## Features
+
+- **Scorecard API + CLI fallback** — queries `api.securityscorecards.dev`; falls back to the local `scorecard` binary for repos not yet indexed
+- **Web UI** — filterable results table, resizable columns, sticky header, scan history
+- **Quick presets** — DevSecOps opportunities, AI/LLM, MCP/Agents, Cloud Native, Security tooling
+- **Filters** — language, topic, keyword, min stars, date range, min Maintained score, specific checks
+- **Single-repo mode** — score any repo directly by `owner/repo`
+- **Open issues count** — from GitHub Search API (no extra token scopes)
+- **Notifications** — in-app toast + browser Notification API on scan completion
+- **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
 
 ---
 
@@ -41,8 +58,12 @@ The scan history is stored in `./data/ossf-scout.db` and persists across restart
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-lang` | _(any)_ | Filter by language (`go`, `python`, `java`, …) |
+| `-topic` | _(any)_ | Filter by GitHub topic (`llm`, `kubernetes`, …) |
+| `-keyword` | _(any)_ | Filter by keyword in repo name or description |
+| `-single-repo` | _(none)_ | Score a specific repo directly (`owner/repo`) |
 | `-min-stars` | `500` | Minimum GitHub star count |
 | `-max-score` | `5.0` | Maximum OpenSSF score to include (0–10) |
+| `-min-maintained` | `0` | Minimum Maintained check score (0 = disabled) |
 | `-limit` | `100` | Max repos to fetch from GitHub search |
 | `-workers` | `5` | Concurrent Scorecard API queries |
 | `-checks` | _(security set)_ | Comma-separated check names to highlight |
@@ -76,7 +97,7 @@ To create a classic PAT: GitHub → Settings → Developer settings → Personal
 
 ## Building from Source
 
-Prerequisites: **Go 1.22+**, **Node 20+**
+Prerequisites: **Go 1.25+**, **Node 22+**
 
 ```bash
 make build
@@ -92,6 +113,12 @@ Single Go binary. The web server embeds the React frontend via `//go:embed` — 
 The OpenSSF checks evaluated by default:
 
 `CI-Tests` · `SAST` · `Dependency-Update-Tool` · `Vulnerabilities` · `Pinned-Dependencies` · `Branch-Protection` · `Code-Review` · `Maintained`
+
+---
+
+## Contributing
+
+PRs welcome. Run `make dev` to build locally. The web server embeds the frontend at build time — edit `frontend/src/` and rebuild with `make dev`.
 
 ---
 

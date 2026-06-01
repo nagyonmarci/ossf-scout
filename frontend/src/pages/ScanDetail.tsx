@@ -120,7 +120,7 @@ export default function ScanDetail() {
             )}
           </div>
 
-          {scan.status === 'done' && (
+          {scan.status === 'done' && results.length > 0 && (
             <div className="card">
               <h2>Results ({results.length})</h2>
               <ResultsTable results={results} />

@@ -33,7 +33,7 @@ func scorecardGet(owner, repo string) (*scorecardResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode == 404 {
 		return nil, nil
 	}

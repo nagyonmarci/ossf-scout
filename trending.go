@@ -60,7 +60,7 @@ func scrapeTrending(language, since, token string) ([]trendingEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub trending returned HTTP %d", resp.StatusCode)
 	}

@@ -423,6 +423,26 @@ td.description {
   white-space: nowrap;
 }
 
+.tag-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.tag-link:hover {
+  background: rgba(239,68,68,0.2);
+  border-color: rgba(239,68,68,0.4);
+  text-decoration: none;
+}
+
+.tag-score {
+  font-weight: 700;
+  font-size: 11px;
+  opacity: 0.9;
+}
+
 /* Scan history table */
 .scans-table td { vertical-align: middle; }
 .scan-row { cursor: pointer; }

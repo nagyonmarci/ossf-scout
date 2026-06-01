@@ -17,6 +17,39 @@ function scoreLabel(score: number) {
   return score === -1 ? 'N/A' : score.toFixed(1)
 }
 
+// "Branch-Protection(0)" → name="Branch-Protection", checkScore=0
+function parseCheckTag(tag: string): { name: string; checkScore: string } {
+  const m = tag.match(/^(.+)\((-?\d+)\)$/)
+  if (!m) return { name: tag, checkScore: '' }
+  return { name: m[1], checkScore: m[2] }
+}
+
+function checkDocsUrl(name: string): string {
+  return `https://github.com/ossf/scorecard/blob/main/docs/checks.md#${name.toLowerCase()}`
+}
+
+function CheckTag({ tag }: { tag: string }) {
+  const { name, checkScore } = parseCheckTag(tag)
+  const scoreNum = parseInt(checkScore, 10)
+  const scoreColor = scoreNum === -1 ? 'var(--muted)' : scoreNum < 3 ? 'var(--red)' : 'var(--orange)'
+  return (
+    <a
+      href={checkDocsUrl(name)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="tag tag-link"
+      title={`View ${name} check documentation`}
+    >
+      {name}
+      {checkScore !== '' && (
+        <span className="tag-score" style={{ color: scoreColor }}>
+          {scoreNum === -1 ? 'N/A' : scoreNum}
+        </span>
+      )}
+    </a>
+  )
+}
+
 export default function ResultsTable({ results }: { results: ScanResult[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('score')
   const [asc, setAsc] = useState(true)
@@ -132,7 +165,7 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
                   <td><span className={scoreClass(r.score)}>{scoreLabel(r.score)}</span></td>
                   <td>
                     <div className="tags">
-                      {r.weak_checks.map(c => <span key={c} className="tag">{c}</span>)}
+                      {r.weak_checks.map(c => <CheckTag key={c} tag={c} />)}
                     </div>
                   </td>
                   <td className="description">{r.description}</td>

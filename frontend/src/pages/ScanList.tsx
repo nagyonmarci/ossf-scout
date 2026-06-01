@@ -52,11 +52,6 @@ export default function ScanList() {
 
   return (
     <div className="container">
-      <header>
-        <h1>ossf-scout</h1>
-        <p>Find GitHub repos with weak OpenSSF Scorecard scores</p>
-      </header>
-
       <div className="card">
         <h2>New Scan</h2>
         <ScanForm onScanStarted={requestPermission} />

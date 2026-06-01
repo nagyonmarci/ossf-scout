@@ -1,7 +1,36 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, Outlet } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import ScanList from './pages/ScanList'
 import ScanDetail from './pages/ScanDetail'
+import TrendingPage from './pages/TrendingPage'
+
+function AppHeader() {
+  return (
+    <div className="app-header">
+      <div className="container">
+        <div className="app-header-inner">
+          <div>
+            <h1>ossf-scout</h1>
+            <p>Find GitHub repos with weak OpenSSF Scorecard scores</p>
+          </div>
+          <nav className="tab-nav">
+            <NavLink to="/" end>Scans</NavLink>
+            <NavLink to="/trending">Trending</NavLink>
+          </nav>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Layout() {
+  return (
+    <>
+      <AppHeader />
+      <Outlet />
+    </>
+  )
+}
 
 function BackToTop() {
   const [visible, setVisible] = useState(false)
@@ -24,8 +53,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<ScanList />} />
-        <Route path="/scans/:id" element={<ScanDetail />} />
+        <Route element={<Layout />}>
+          <Route path="/" element={<ScanList />} />
+          <Route path="/trending" element={<TrendingPage />} />
+          <Route path="/scans/:id" element={<ScanDetail />} />
+        </Route>
       </Routes>
       <BackToTop />
     </BrowserRouter>

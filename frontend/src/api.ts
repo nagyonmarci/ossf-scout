@@ -19,10 +19,11 @@ export interface Scan {
 }
 
 export interface ScanResult {
-  id: number;
-  scan_id: number;
+  id?: number;
+  scan_id?: number;
   repo: string;
   stars: number;
+  stars_today?: number;
   open_issues: number;
   score: number;
   language: string;
@@ -62,10 +63,24 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return res.json();
 }
 
+export interface GetTrendingParams {
+  language?: string;
+  since?: string;
+  token?: string;
+}
+
 export const api = {
   listScans: () => request<Scan[]>('GET', '/api/scans'),
   getScan: (id: number) => request<Scan>('GET', `/api/scans/${id}`),
   createScan: (params: CreateScanParams) => request<Scan>('POST', '/api/scans', params),
   deleteScan: (id: number) => request<void>('DELETE', `/api/scans/${id}`),
   getResults: (id: number) => request<ScanResult[]>('GET', `/api/scans/${id}/results`),
+  getTrending: (params: GetTrendingParams) => {
+    const q = new URLSearchParams()
+    if (params.language) q.set('language', params.language)
+    if (params.since) q.set('since', params.since)
+    if (params.token) q.set('token', params.token)
+    const qs = q.toString()
+    return request<ScanResult[]>('GET', `/api/trending${qs ? '?' + qs : ''}`)
+  },
 };

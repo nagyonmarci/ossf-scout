@@ -29,6 +29,7 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("GET /api/scans/{id}", handleGetScan(db))
 	mux.HandleFunc("GET /api/scans/{id}/results", handleGetResults(db))
 	mux.HandleFunc("DELETE /api/scans/{id}", handleDeleteScan(db))
+	mux.HandleFunc("GET /api/trending", handleTrending(serverToken))
 
 	sub, err := fs.Sub(staticFiles, "frontend/dist")
 	if err != nil {

@@ -44,11 +44,6 @@ export default function ScanDetail() {
 
   return (
     <div className="container">
-      <header>
-        <h1>ossf-scout</h1>
-        <p>Find GitHub repos with weak OpenSSF Scorecard scores</p>
-      </header>
-
       <Link to="/" className="back-link">← Back to scans</Link>
 
       {error && <p className="error-msg">{error}</p>}

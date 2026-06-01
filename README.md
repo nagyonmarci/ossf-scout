@@ -179,7 +179,13 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 
 ---
 
-### Fix 3 — Dependency update: actions/setup-node 4.4.0 → 6.4.0
+### Fix 3 — Dependency updates: actions/setup-node 4.4.0 → 6.4.0, actions/upload-artifact 4.6.2 → 7.0.1
+
+**Problem:** Both actions ran on Node.js 20, deprecated on GitHub runners from June 2026. `upload-artifact` is also used in the Scorecard workflow to store the SARIF results file.
+
+**Fix:** Merged Dependabot PRs #1 and #2 — both bumped to Node.js 24 compatible major versions, SHA-pinned by Dependabot.
+
+**Result:** Node.js 20 deprecation warnings eliminated from Build, CodeQL, and Scorecard workflows.
 
 **Problem:** `actions/setup-node@v4` runs on Node.js 20, which GitHub is deprecating on runners from June 2026 onwards. This generated a warning on every CI run and would eventually break the workflow.
 

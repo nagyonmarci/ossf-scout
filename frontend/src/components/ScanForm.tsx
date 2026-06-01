@@ -36,11 +36,42 @@ const defaults: CreateScanParams = {
   single_repo: '',
 }
 
-const DEVSECOPS_PRESET: Partial<CreateScanParams> = {
+const BASE_DEVSECOPS: Partial<CreateScanParams> = {
   check_filter: 'CI-Tests,SAST,Dependency-Update-Tool,Pinned-Dependencies,Branch-Protection,Code-Review',
   min_maintained: 3,
   max_score: 7.0,
+  language: '',
+  keyword: '',
+  topic: '',
 }
+
+const PRESETS: { label: string; hint: string; params: Partial<CreateScanParams> }[] = [
+  {
+    label: 'DevSecOps opportunities',
+    hint: 'Aktívan karbantartott repók hiányos CI/CD security pipeline-nal',
+    params: { ...BASE_DEVSECOPS },
+  },
+  {
+    label: 'AI / LLM ecosystem',
+    hint: 'AI és LLM projektek hiányos pipeline-nal — trendi, látható contributiók',
+    params: { ...BASE_DEVSECOPS, topic: 'llm', keyword: '' },
+  },
+  {
+    label: 'MCP / Agent tools',
+    hint: 'MCP és agent infrastruktúra projektek — gyorsan növekvő ökoszisztéma',
+    params: { ...BASE_DEVSECOPS, topic: 'mcp', keyword: '' },
+  },
+  {
+    label: 'Cloud Native',
+    hint: 'Kubernetes és cloud native projektek security hiányossággal',
+    params: { ...BASE_DEVSECOPS, topic: 'kubernetes', keyword: '' },
+  },
+  {
+    label: 'Security tooling',
+    hint: 'Security eszközök, amelyek maguk is hiányos pipeline-nal rendelkeznek',
+    params: { ...BASE_DEVSECOPS, topic: 'security', min_stars: 200 },
+  },
+]
 
 export default function ScanForm() {
   const navigate = useNavigate()
@@ -52,8 +83,11 @@ export default function ScanForm() {
     setParams(p => ({ ...p, [key]: value }))
   }
 
-  function applyDevSecOpsPreset() {
-    setParams(p => ({ ...p, ...DEVSECOPS_PRESET }))
+  const [activePreset, setActivePreset] = useState<string | null>(null)
+
+  function applyPreset(preset: typeof PRESETS[number]) {
+    setParams(p => ({ ...p, ...preset.params }))
+    setActivePreset(preset.label)
   }
 
   async function submit(e: React.FormEvent) {
@@ -71,13 +105,26 @@ export default function ScanForm() {
 
   return (
     <form onSubmit={submit}>
-      <div className="preset-banner">
-        <button type="button" className="btn btn-preset" onClick={applyDevSecOpsPreset}>
-          DevSecOps opportunities
-        </button>
-        <span className="preset-hint">
-          Aktívan karbantartott repók hiányos CI/CD security pipeline-nal
-        </span>
+      <div className="preset-section">
+        <div className="preset-label">Quick presets</div>
+        <div className="preset-list">
+          {PRESETS.map(p => (
+            <button
+              key={p.label}
+              type="button"
+              className={activePreset === p.label ? 'btn btn-preset active' : 'btn btn-preset'}
+              onClick={() => applyPreset(p)}
+              title={p.hint}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {activePreset && (
+          <p className="preset-hint">
+            {PRESETS.find(p => p.label === activePreset)?.hint}
+          </p>
+        )}
       </div>
 
       <div className="form-field" style={{ marginBottom: 16 }}>

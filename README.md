@@ -224,9 +224,10 @@ Two measured jumps after fixing the CI workflows and enabling branch protection:
 
 ---
 
-### Score after License fix — pending next Scorecard run
+### Score after License + vulnerability fix — 6.1 → 6.2
 
-License: 0 → **10** added. Expected score: above 6.1.
+- **License**: 0 → **10** (added The Unlicense)
+- **Vulnerabilities**: 9 → **10** (patched GO-2026-5024 via `golang.org/x/sys` v0.44.0)
 
 ---
 

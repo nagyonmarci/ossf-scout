@@ -229,6 +229,11 @@ Two measured jumps after fixing the CI workflows and enabling branch protection:
 - **License**: 0 → **10** (added The Unlicense)
 - **Vulnerabilities**: 9 → **10** (patched GO-2026-5024 via `golang.org/x/sys` v0.44.0)
 
+### Score after Security-Policy + Pinned-Dependencies — 6.2 → **7.1**
+
+- **Security-Policy**: 0 → **10** (SECURITY.md with GitHub Private Advisory)
+- **Pinned-Dependencies**: 6 → **10** (Dockerfile digest pinning + scorecard@v5.5.0)
+
 ---
 
 ### Fix 6 — The Unlicense (public domain)

@@ -146,7 +146,7 @@ func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	defer stmt.Close()
@@ -159,7 +159,7 @@ func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
 			r.ScorecardURL, r.Repo.HTMLURL,
 		)
 		if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return err
 		}
 	}

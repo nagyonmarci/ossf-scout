@@ -222,6 +222,35 @@ td.description {
 .preset-btn:hover { border-color: var(--accent); color: var(--text); }
 .preset-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(59,130,246,0.08); }
 
+.preset-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: rgba(59,130,246,0.06);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: var(--radius);
+}
+
+.preset-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.btn-preset {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 6px 14px;
+  white-space: nowrap;
+}
+
+.btn-preset:hover:not(:disabled) {
+  background: rgba(59,130,246,0.1);
+  opacity: 1;
+}
+
 .resize-handle {
   position: absolute;
   right: 0;

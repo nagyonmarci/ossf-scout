@@ -39,6 +39,7 @@ export interface CreateScanParams {
   github_token: string;
   use_cli_fallback: boolean;
   pushed_after: string;
+  min_maintained: number;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {

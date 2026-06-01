@@ -9,6 +9,7 @@ type config struct {
 	jsonOut     bool
 	token       string
 	checkFilter string
-	cliFallback bool
-	pushedAfter string
+	cliFallback   bool
+	pushedAfter   string
+	minMaintained int
 }

@@ -30,6 +30,13 @@ const defaults: CreateScanParams = {
   github_token: '',
   use_cli_fallback: false,
   pushed_after: '',
+  min_maintained: 0,
+}
+
+const DEVSECOPS_PRESET: Partial<CreateScanParams> = {
+  check_filter: 'CI-Tests,SAST,Dependency-Update-Tool,Pinned-Dependencies,Branch-Protection,Code-Review',
+  min_maintained: 3,
+  max_score: 7.0,
 }
 
 export default function ScanForm() {
@@ -40,6 +47,10 @@ export default function ScanForm() {
 
   function set<K extends keyof CreateScanParams>(key: K, value: CreateScanParams[K]) {
     setParams(p => ({ ...p, [key]: value }))
+  }
+
+  function applyDevSecOpsPreset() {
+    setParams(p => ({ ...p, ...DEVSECOPS_PRESET }))
   }
 
   async function submit(e: React.FormEvent) {
@@ -57,6 +68,15 @@ export default function ScanForm() {
 
   return (
     <form onSubmit={submit}>
+      <div className="preset-banner">
+        <button type="button" className="btn btn-preset" onClick={applyDevSecOpsPreset}>
+          DevSecOps opportunities
+        </button>
+        <span className="preset-hint">
+          Aktívan karbantartott repók hiányos CI/CD security pipeline-nal
+        </span>
+      </div>
+
       <div className="form-grid">
         <div className="form-field">
           <label>Language</label>
@@ -109,6 +129,17 @@ export default function ScanForm() {
             max={20}
             value={params.workers}
             onChange={e => set('workers', Number(e.target.value))}
+          />
+        </div>
+
+        <div className="form-field">
+          <label>Min Maintained score</label>
+          <input
+            type="number"
+            min={0}
+            max={10}
+            value={params.min_maintained}
+            onChange={e => set('min_maintained', Number(e.target.value))}
           />
         </div>
 

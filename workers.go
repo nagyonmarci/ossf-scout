@@ -57,6 +57,11 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 						continue
 					}
 				}
+				if cfg.minMaintained > 0 {
+					if m := findCheckScore(sc.Checks, "Maintained"); m >= 0 && m < cfg.minMaintained {
+						continue
+					}
+				}
 				if sc.Score > cfg.maxScore && len(wantChecks) == 0 {
 					continue
 				}
@@ -99,6 +104,15 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 		return si < sj
 	})
 	return out
+}
+
+func findCheckScore(checks []scorecardCheck, name string) int {
+	for _, c := range checks {
+		if c.Name == name {
+			return c.Score
+		}
+	}
+	return -1
 }
 
 func parseChecks(s string) map[string]bool {

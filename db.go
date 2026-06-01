@@ -149,7 +149,7 @@ func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
 		_ = tx.Rollback()
 		return err
 	}
-	defer stmt.Close()
+	defer stmt.Close() //nolint:errcheck
 
 	for _, r := range results {
 		wc, _ := json.Marshal(r.WeakChecks)
@@ -176,7 +176,7 @@ func dbListScans(db *sql.DB) ([]scanRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	return scanRowsFromSQL(rows)
 }
 
@@ -190,7 +190,7 @@ func dbGetScan(db *sql.DB, id int64) (*scanRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	scans, err := scanRowsFromSQL(rows)
 	if err != nil || len(scans) == 0 {
 		return nil, err
@@ -208,7 +208,7 @@ func dbGetResults(db *sql.DB, scanID int64) ([]scanResultRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var out []scanResultRow
 	for rows.Next() {

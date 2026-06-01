@@ -150,7 +150,23 @@ input::placeholder {
 /* Table */
 .table-wrap {
   overflow-x: auto;
-  overflow-y: clip;
+}
+
+.sticky-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.sticky-header table {
+  border-collapse: collapse;
+  table-layout: fixed;
 }
 
 table {
@@ -175,10 +191,6 @@ th {
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  position: sticky;
-  top: 0;
-  background: var(--surface);
-  z-index: 1;
 }
 
 th:hover { color: var(--text); }

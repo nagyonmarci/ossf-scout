@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ScanResult } from '../api'
 
 type SortKey = 'repo' | 'stars' | 'issues' | 'score'
 
-const DEFAULT_WIDTHS = [200, 70, 70, 80, 220, 320, 100]
+const DEFAULT_WIDTHS = [220, 70, 70, 80, 240, 0]  // 0 = Description takes remaining space
 const MIN_COL_WIDTH = 60
 
 function scoreClass(score: number) {
@@ -17,7 +17,6 @@ function scoreLabel(score: number) {
   return score === -1 ? 'N/A' : score.toFixed(1)
 }
 
-// "Branch-Protection(0)" → name="Branch-Protection", checkScore=0
 function parseCheckTag(tag: string): { name: string; checkScore: string } {
   const m = tag.match(/^(.+)\((-?\d+)\)$/)
   if (!m) return { name: tag, checkScore: '' }
@@ -50,12 +49,53 @@ function CheckTag({ tag }: { tag: string }) {
   )
 }
 
+const COLS: { label: string; sortKey: SortKey | null }[] = [
+  { label: 'Repository', sortKey: 'repo' },
+  { label: 'Stars',      sortKey: 'stars' },
+  { label: 'Issues',     sortKey: 'issues' },
+  { label: 'Score',      sortKey: 'score' },
+  { label: 'Weak Checks', sortKey: null },
+  { label: 'Description', sortKey: null },
+]
+
 export default function ResultsTable({ results }: { results: ScanResult[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('score')
   const [asc, setAsc] = useState(true)
   const [filter, setFilter] = useState('')
   const [hideNA, setHideNA] = useState(false)
-  const [colWidths, setColWidths] = useState(DEFAULT_WIDTHS)
+  const [colWidths, setColWidths] = useState(DEFAULT_WIDTHS.slice(0, COLS.length))
+  const [stickyVisible, setStickyVisible] = useState(false)
+  const [tableLeft, setTableLeft] = useState(0)
+  const [tableWidth, setTableWidth] = useState(0)
+  const theadRef = useRef<HTMLTableSectionElement>(null)
+  const tableRef = useRef<HTMLTableElement>(null)
+
+  useEffect(() => {
+    const el = theadRef.current
+    if (!el) return
+    const updatePos = () => {
+      if (tableRef.current) {
+        const r = tableRef.current.getBoundingClientRect()
+        setTableLeft(r.left)
+        setTableWidth(r.width)
+      }
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setStickyVisible(entry.boundingClientRect.top < 0)
+        updatePos()
+      },
+      { threshold: 0 }
+    )
+    observer.observe(el)
+    window.addEventListener('scroll', updatePos, { passive: true })
+    window.addEventListener('resize', updatePos, { passive: true })
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('scroll', updatePos)
+      window.removeEventListener('resize', updatePos)
+    }
+  }, [])
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setAsc(a => !a)
@@ -67,7 +107,6 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
     e.stopPropagation()
     const startX = e.clientX
     const startWidth = colWidths[colIdx]
-
     function onMove(ev: MouseEvent) {
       const newWidth = Math.max(MIN_COL_WIDTH, startWidth + ev.clientX - startX)
       setColWidths(prev => prev.map((w, i) => i === colIdx ? newWidth : w))
@@ -102,14 +141,15 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
       || r.weak_checks.some(c => c.toLowerCase().includes(q))
   })
 
-  function th(colIdx: number, key: SortKey | null, label: string) {
-    const active = key !== null && sortKey === key
+  function renderTh(colIdx: number, col: typeof COLS[number]) {
+    const active = col.sortKey !== null && sortKey === col.sortKey
     return (
       <th
-        style={{ position: 'relative' }}
-        onClick={key ? () => toggleSort(key) : undefined}
+        key={col.label}
+        style={{ position: 'relative', width: colWidths[colIdx] || undefined }}
+        onClick={col.sortKey ? () => toggleSort(col.sortKey!) : undefined}
       >
-        {label}
+        {col.label}
         {active && <span className="sort-indicator">{asc ? ' ↑' : ' ↓'}</span>}
         <div className="resize-handle" onMouseDown={e => startResize(colIdx, e)} />
       </th>
@@ -139,51 +179,58 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
           Hide N/A
         </label>
       </div>
-      {filtered.length === 0 && (
-        <p className="empty">No results match the filter.</p>
-      )}
+
+      {filtered.length === 0 && <p className="empty">No results match the filter.</p>}
+
       {filtered.length > 0 && (
-        <div className="table-wrap">
-          <table style={{ tableLayout: 'fixed', width: '100%' }}>
-            <colgroup>
-              {colWidths.map((w, i) => <col key={i} style={{ width: w }} />)}
-            </colgroup>
-            <thead>
-              <tr>
-                {th(0, 'repo', 'Repository')}
-                {th(1, 'stars', 'Stars')}
-                {th(2, 'issues', 'Issues')}
-                {th(3, 'score', 'Score')}
-                {th(4, null, 'Weak Checks')}
-                {th(5, null, 'Description')}
-                {th(6, null, 'Links')}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(r => (
-                <tr key={r.id}>
-                  <td className="repo-name">{r.repo}</td>
-                  <td>{r.stars.toLocaleString()}</td>
-                  <td title="Open issues + pull requests">{r.open_issues.toLocaleString()}</td>
-                  <td><span className={scoreClass(r.score)}>{scoreLabel(r.score)}</span></td>
-                  <td>
-                    <div className="tags">
-                      {r.weak_checks.map(c => <CheckTag key={c} tag={c} />)}
-                    </div>
-                  </td>
-                  <td className="description">{r.description}</td>
-                  <td className="links-cell">
-                    <a href={r.repo_url} target="_blank" rel="noopener noreferrer">GitHub</a>
-                    {r.scorecard_url
-                      ? <a href={r.scorecard_url} target="_blank" rel="noopener noreferrer">Scorecard</a>
-                      : <span style={{ color: 'var(--muted)', fontSize: 12 }}>CLI scan</span>
-                    }
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {stickyVisible && (
+            <div className="sticky-header" style={{ left: tableLeft, width: tableWidth }}>
+              <table style={{ tableLayout: 'fixed', width: tableWidth }}>
+                <colgroup>
+                  {colWidths.map((w, i) => <col key={i} style={{ width: w || undefined }} />)}
+                </colgroup>
+                <thead>
+                  <tr>{COLS.map((col, i) => renderTh(i, col))}</tr>
+                </thead>
+              </table>
+            </div>
+          )}
+
+          <div className="table-wrap">
+            <table ref={tableRef} style={{ tableLayout: 'fixed', width: '100%' }}>
+              <colgroup>
+                {colWidths.map((w, i) => <col key={i} style={{ width: w || undefined }} />)}
+              </colgroup>
+              <thead ref={theadRef}>
+                <tr>{COLS.map((col, i) => renderTh(i, col))}</tr>
+              </thead>
+              <tbody>
+                {filtered.map(r => (
+                  <tr key={r.id}>
+                    <td className="repo-name">
+                      <a href={r.repo_url} target="_blank" rel="noopener noreferrer">{r.repo}</a>
+                    </td>
+                    <td>{r.stars.toLocaleString()}</td>
+                    <td title="Open issues + pull requests">{r.open_issues.toLocaleString()}</td>
+                    <td>
+                      {r.scorecard_url
+                        ? <a href={r.scorecard_url} target="_blank" rel="noopener noreferrer" className={scoreClass(r.score)}>{scoreLabel(r.score)}</a>
+                        : <span className={scoreClass(r.score)} title="CLI scan — not indexed online">{scoreLabel(r.score)}</span>
+                      }
+                    </td>
+                    <td>
+                      <div className="tags">
+                        {r.weak_checks.map(c => <CheckTag key={c} tag={c} />)}
+                      </div>
+                    </td>
+                    <td className="description">{r.description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </>
   )

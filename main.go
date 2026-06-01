@@ -25,6 +25,7 @@ func main() {
 	flag.IntVar(&cfg.minMaintained, "min-maintained", 0, "Exclude repos where Scorecard Maintained check score is below this (0 = disabled)")
 	flag.StringVar(&cfg.topic, "topic", "", "Filter by GitHub topic (e.g. ai, machine-learning)")
 	flag.StringVar(&cfg.keyword, "keyword", "", "Keyword search in repo name/description")
+	flag.StringVar(&cfg.singleRepo, "repo", "", "Scan a single specific repo (owner/repo), skips GitHub search")
 	flag.BoolVar(&serve, "serve", false, "Start web server mode")
 	flag.IntVar(&port, "port", 7878, "Port for web server mode")
 	flag.StringVar(&dbPath, "db", "ossf-scout.db", "SQLite database path")
@@ -39,10 +40,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Warning: no GITHUB_TOKEN set — GitHub rate limit is 60 req/hour unauthenticated")
 	}
 
-	fmt.Fprintf(os.Stderr, "Searching GitHub: language=%q minStars=%d limit=%d\n",
-		cfg.language, cfg.minStars, cfg.limit)
-
-	repos, err := searchGitHub(cfg)
+	repos, err := fetchRepos(cfg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)

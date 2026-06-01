@@ -70,8 +70,9 @@ func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 			CliFallback bool   `json:"use_cli_fallback"`
 			PushedAfter   string `json:"pushed_after"`
 			MinMaintained int    `json:"min_maintained"`
-			Topic         string `json:"topic"`
-			Keyword       string `json:"keyword"`
+			Topic      string `json:"topic"`
+			Keyword    string `json:"keyword"`
+			SingleRepo string `json:"single_repo"`
 		}
 		body.MinStars = 500
 		body.MaxScore = 5.0
@@ -99,8 +100,9 @@ func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 			cliFallback: body.CliFallback,
 			pushedAfter:   body.PushedAfter,
 			minMaintained: body.MinMaintained,
-			topic:         body.Topic,
-			keyword:       body.Keyword,
+			topic:      body.Topic,
+			keyword:    body.Keyword,
+			singleRepo: body.SingleRepo,
 		}
 
 		id, err := dbInsertScan(db, cfg)
@@ -110,7 +112,7 @@ func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 		}
 
 		go func() {
-			repos, err := searchGitHub(cfg)
+			repos, err := fetchRepos(cfg)
 			if err != nil {
 				_ = dbUpdateScanError(db, id, err.Error())
 				return

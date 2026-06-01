@@ -14,4 +14,5 @@ type config struct {
 	minMaintained int
 	topic         string
 	keyword       string
+	singleRepo    string
 }

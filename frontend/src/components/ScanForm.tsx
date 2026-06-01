@@ -33,6 +33,7 @@ const defaults: CreateScanParams = {
   min_maintained: 0,
   topic: '',
   keyword: '',
+  single_repo: '',
 }
 
 const DEVSECOPS_PRESET: Partial<CreateScanParams> = {
@@ -77,6 +78,16 @@ export default function ScanForm() {
         <span className="preset-hint">
           Aktívan karbantartott repók hiányos CI/CD security pipeline-nal
         </span>
+      </div>
+
+      <div className="form-field" style={{ marginBottom: 16 }}>
+        <label>Single repo (owner/repo) — skips search if filled</label>
+        <input
+          type="text"
+          placeholder="e.g. torvalds/linux"
+          value={params.single_repo}
+          onChange={e => set('single_repo', e.target.value)}
+        />
       </div>
 
       <div className="form-grid">

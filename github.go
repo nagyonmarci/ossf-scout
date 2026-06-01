@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -42,6 +43,20 @@ func ghGet(rawURL, token string) ([]byte, error) {
 		return nil, fmt.Errorf("github %d: %s", resp.StatusCode, string(body))
 	}
 	return io.ReadAll(resp.Body)
+}
+
+func fetchRepos(cfg config) ([]ghRepo, error) {
+	if cfg.singleRepo != "" {
+		parts := strings.SplitN(cfg.singleRepo, "/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return nil, fmt.Errorf("invalid repo format %q — expected owner/repo", cfg.singleRepo)
+		}
+		return []ghRepo{{
+			FullName: cfg.singleRepo,
+			HTMLURL:  "https://github.com/" + cfg.singleRepo,
+		}}, nil
+	}
+	return searchGitHub(cfg)
 }
 
 func searchGitHub(cfg config) ([]ghRepo, error) {

@@ -42,6 +42,7 @@ export interface CreateScanParams {
   min_maintained: number;
   topic: string;
   keyword: string;
+  single_repo: string;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {

@@ -25,6 +25,7 @@ type scanRow struct {
 	MinMaintained int    `json:"min_maintained"`
 	Topic         string `json:"topic"`
 	Keyword       string `json:"keyword"`
+	SingleRepo    string `json:"single_repo"`
 	TotalRepos    *int   `json:"total_repos"`
 	ResultCount *int     `json:"result_count"`
 }
@@ -60,6 +61,7 @@ CREATE TABLE IF NOT EXISTS scans (
     min_maintained INTEGER NOT NULL DEFAULT 0,
     topic          TEXT NOT NULL DEFAULT '',
     keyword        TEXT NOT NULL DEFAULT '',
+    single_repo    TEXT NOT NULL DEFAULT '',
     total_repos    INTEGER,
     result_count INTEGER
 );
@@ -97,6 +99,7 @@ func openDB(path string) (*sql.DB, error) {
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN min_maintained INTEGER NOT NULL DEFAULT 0`)
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN topic TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN keyword TEXT NOT NULL DEFAULT ''`)
+	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN single_repo TEXT NOT NULL DEFAULT ''`)
 	// Mark any scans that were running when the server last died
 	_, _ = db.Exec(`UPDATE scans SET status='error', error_msg='server restarted' WHERE status='running'`)
 	return db, nil
@@ -104,9 +107,9 @@ func openDB(path string) (*sql.DB, error) {
 
 func dbInsertScan(db *sql.DB, cfg config) (int64, error) {
 	res, err := db.Exec(
-		`INSERT INTO scans (language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		cfg.language, cfg.minStars, cfg.maxScore, cfg.limit, cfg.workers, cfg.checkFilter, cfg.cliFallback, cfg.pushedAfter, cfg.minMaintained, cfg.topic, cfg.keyword,
+		`INSERT INTO scans (language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword, single_repo)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		cfg.language, cfg.minStars, cfg.maxScore, cfg.limit, cfg.workers, cfg.checkFilter, cfg.cliFallback, cfg.pushedAfter, cfg.minMaintained, cfg.topic, cfg.keyword, cfg.singleRepo,
 	)
 	if err != nil {
 		return 0, err
@@ -163,7 +166,7 @@ func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
 func dbListScans(db *sql.DB) ([]scanRow, error) {
 	rows, err := db.Query(
 		`SELECT id, created_at, finished_at, status, error_msg,
-		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword,
+		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword, single_repo,
 		        total_repos, result_count
 		 FROM scans ORDER BY id DESC`,
 	)
@@ -177,7 +180,7 @@ func dbListScans(db *sql.DB) ([]scanRow, error) {
 func dbGetScan(db *sql.DB, id int64) (*scanRow, error) {
 	rows, err := db.Query(
 		`SELECT id, created_at, finished_at, status, error_msg,
-		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword,
+		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword, single_repo,
 		        total_repos, result_count
 		 FROM scans WHERE id=?`, id,
 	)
@@ -233,7 +236,7 @@ func scanRowsFromSQL(rows *sql.Rows) ([]scanRow, error) {
 		var s scanRow
 		err := rows.Scan(
 			&s.ID, &s.CreatedAt, &s.FinishedAt, &s.Status, &s.ErrorMsg,
-			&s.Language, &s.MinStars, &s.MaxScore, &s.Limit, &s.Workers, &s.CheckFilter, &s.CliFallback, &s.PushedAfter, &s.MinMaintained, &s.Topic, &s.Keyword,
+			&s.Language, &s.MinStars, &s.MaxScore, &s.Limit, &s.Workers, &s.CheckFilter, &s.CliFallback, &s.PushedAfter, &s.MinMaintained, &s.Topic, &s.Keyword, &s.SingleRepo,
 			&s.TotalRepos, &s.ResultCount,
 		)
 		if err != nil {

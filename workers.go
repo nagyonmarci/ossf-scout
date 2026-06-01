@@ -62,11 +62,11 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 						continue
 					}
 				}
-				if sc.Score > cfg.maxScore && len(wantChecks) == 0 {
+				if cfg.singleRepo == "" && sc.Score > cfg.maxScore && len(wantChecks) == 0 {
 					continue
 				}
 				weak := weakChecks(sc.Checks, wantChecks)
-				if sc.Score <= cfg.maxScore || len(weak) > 0 {
+				if cfg.singleRepo != "" || sc.Score <= cfg.maxScore || len(weak) > 0 {
 					results <- result{
 						Repo:         repo,
 						Score:        sc.Score,

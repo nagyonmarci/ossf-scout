@@ -1,7 +1,7 @@
 # ossf-scout
 
 [![Go](https://img.shields.io/badge/go-1.25-00acd7?logo=go&logoColor=white)](go.mod)
-[![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
+[![License](https://img.shields.io/badge/license-Unlicense-blue)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/nagyonmarci/ossf-scout/badge)](https://securityscorecards.dev/viewer/?uri=github.com/nagyonmarci/ossf-scout)
 
 Discover GitHub repositories where security practices are weakest — and where a well-crafted PR can make the biggest impact.
@@ -215,13 +215,40 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 
 ---
 
-### What's next
+### Fix 6 — The Unlicense (public domain)
 
-The lowest-effort remaining improvements, in rough priority order:
+**Problem:** No `LICENSE` file existed in the repo. The README and badge claimed MIT but pointed to a missing file. Scorecard's License check scored 0.
+
+**Fix:** Added `LICENSE` with [The Unlicense](https://unlicense.org) — public domain, no copyright, no restrictions. Updated the README badge and footer to match.
+
+**Result:** License check: 0 → **10**.
+
+---
+
+### Fix 7 — Frontend major version upgrade
+
+**Problem:** Five Dependabot PRs for major frontend bumps were closed because they broke the build individually — React, `@types/react`, `react-dom`, `@types/react-dom`, `@vitejs/plugin-react`, `vite`, and `typescript` all needed to move together.
+
+**Fix:** Combined bump in a single commit:
+
+| Package | Before | After |
+|---------|--------|-------|
+| `react` + `react-dom` | 18.3.1 | 19.2.6 |
+| `@types/react` + `@types/react-dom` | 18.x | 19.x |
+| `vite` | 6.0.7 | 8.0.16 |
+| `@vitejs/plugin-react` | 4.3.4 | 6.0.2 |
+| `typescript` | 5.6.3 | 6.0.3 |
+
+One code fix required: TypeScript 6 introduced `TS2882` for CSS side-effect imports — fixed by adding the standard Vite `src/vite-env.d.ts` (`/// <reference types="vite/client" />`).
+
+**Result:** Build passes. All frontend tooling on current major versions.
+
+---
+
+### What's next
 
 | Check | Current | Action needed |
 |-------|---------|---------------|
-| License | 0 | Add a `LICENSE` file |
 | Security-Policy | 0 | Add `SECURITY.md` with a vulnerability reporting process |
 | Pinned-Dependencies | 6 | Pin Dockerfile `FROM` images by digest |
 
@@ -229,4 +256,4 @@ The lowest-effort remaining improvements, in rough priority order:
 
 ## License
 
-MIT
+[The Unlicense](LICENSE) — public domain

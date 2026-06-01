@@ -179,6 +179,12 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 
 ---
 
+### Score after CI fixes — 6.1 / 10
+
+The CI and branch protection fixes together moved the needle: CI-Tests jumped from N/A to **10** (the workflow now runs and publishes results on every push), and Branch-Protection flipped from **0** to N/A (the Scorecard token lacks admin scope to read protection rules, so the check is skipped rather than penalized). Net effect: **5.2 → 6.1**.
+
+---
+
 ### Fix 3 — Dependency updates: actions/setup-node 4.4.0 → 6.4.0, actions/upload-artifact 4.6.2 → 7.0.1
 
 **Problem:** Both actions ran on Node.js 20, deprecated on GitHub runners from June 2026. `upload-artifact` is also used in the Scorecard workflow to store the SARIF results file.
@@ -212,6 +218,12 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 **Fix:** Replaced all three occurrences with the verified v3.28.14 SHA (`fc7e4a0f...`), consistent with `scorecard.yml`.
 
 **Result:** Both `go` and `javascript-typescript` CodeQL analyses now run correctly on PRs.
+
+---
+
+### Score after License fix — pending next Scorecard run
+
+License: 0 → **10** added. Expected score: above 6.1.
 
 ---
 

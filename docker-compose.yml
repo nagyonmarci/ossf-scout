@@ -1,0 +1,10 @@
+services:
+  ossf-scout:
+    build: .
+    ports:
+      - "7878:7878"
+    volumes:
+      - ./data:/app/data
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    command: ["./ossf-scout", "-serve", "-port", "7878", "-db", "/app/data/ossf-scout.db"]

@@ -8,10 +8,6 @@ linters:
   settings:
     errcheck:
       check-type-assertions: false
-      exclude-functions:
-        - (database/sql.Rows).Close
-        - (database/sql.Stmt).Close
-        - (*github.com/nagyonmarci/ossf-scout.Rows).Close
   exclusions:
     rules:
       - path: _test\.go

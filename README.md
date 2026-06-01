@@ -261,12 +261,38 @@ One code fix required: TypeScript 6 introduced `TS2882` for CSS side-effect impo
 
 ---
 
+### Fix 8 — SECURITY.md (Security-Policy: 0 → 10)
+
+**Problem:** No security policy existed. The Scorecard Security-Policy check looks for a file whose name contains "security" in the repo root or `.github/`, with vulnerability reporting instructions.
+
+**Fix:** Added `SECURITY.md` pointing to GitHub's built-in [Private Vulnerability Reporting](https://github.com/nagyonmarci/ossf-scout/security/advisories/new) — no email required, the standard approach for open source projects.
+
+**Result:** Security-Policy: 0 → **10**.
+
+---
+
+### Fix 9 — Dockerfile digest pinning (Pinned-Dependencies: 6 → ~9)
+
+**Problem:** All three `FROM` statements used floating tags (`node:22-alpine`, `golang:1.25-alpine`, `alpine:3.22`), and `go install` used `@latest`. Floating tags can silently pull a different image on each build, introducing unreproducible builds and potential supply chain risk.
+
+**Fix:** Pinned all base images by manifest list digest and locked the scorecard CLI version:
+
+```dockerfile
+FROM node:22-alpine@sha256:968df3...
+FROM golang:1.25-alpine@sha256:8d22e2...
+FROM alpine:3.22@sha256:310c62...
+go install github.com/ossf/scorecard/v5@v5.5.0
+```
+
+**Result:** Pinned-Dependencies: 6 → ~9. Builds are now fully reproducible.
+
+---
+
 ### What's next
 
-| Check | Current | Action needed |
-|-------|---------|---------------|
-| Security-Policy | 0 | Add `SECURITY.md` with a vulnerability reporting process |
-| Pinned-Dependencies | 6 | Pin Dockerfile `FROM` images by digest |
+- **Fuzzing** — Go `testing.F` fuzz tesztek
+- **CII-Best-Practices** — OpenSSF badge (bestpractices.dev)
+- **Maintained** — 2026-08-31 után automatikusan javul (repo > 90 nap)
 
 ---
 

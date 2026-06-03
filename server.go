@@ -226,6 +226,8 @@ type createAuditRequest struct {
 	GithubToken  string `json:"github_token"`
 	AnthropicKey string `json:"anthropic_key"`
 	Model        string `json:"model"`
+	Provider     string `json:"provider"`    // "anthropic" | "ollama" | "" (template)
+	OllamaURL    string `json:"ollama_url"`  // default: http://localhost:11434
 }
 
 func handleCreateAudit(db *sql.DB) http.HandlerFunc {
@@ -236,23 +238,30 @@ func handleCreateAudit(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		provider := req.Provider
+
 		apiKey := req.AnthropicKey
-		if apiKey == "" {
+		if apiKey == "" && provider == "anthropic" {
 			apiKey = os.Getenv("ANTHROPIC_API_KEY")
 		}
 
+		ollamaURL := req.OllamaURL
+		if ollamaURL == "" {
+			ollamaURL = os.Getenv("OLLAMA_BASE_URL")
+		}
+
 		model := req.Model
-		if model == "" && apiKey != "" {
+		if model == "" && provider == "anthropic" && apiKey != "" {
 			model = defaultModel
 		}
 
 		id := uuid.New().String()
-		if err := dbCreateAudit(db, id, req.Repo, model); err != nil {
+		if err := dbCreateAudit(db, id, req.Repo, model, provider); err != nil {
 			http.Error(w, "db error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		go runAudit(db, id, req.Repo, req.GithubToken, apiKey, model)
+		go runAudit(db, id, req.Repo, req.GithubToken, provider, apiKey, ollamaURL, model)
 
 		a, err := dbGetAudit(db, id)
 		if err != nil {

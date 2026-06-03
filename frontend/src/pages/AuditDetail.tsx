@@ -73,7 +73,11 @@ export default function AuditDetail() {
               )}
               <span className="meta-item">
                 <span className="meta-label">Mode:</span>
-                {audit.input_tokens ? audit.model || 'AI' : 'Static snapshot'}
+                {audit.provider === 'ollama'
+                  ? `Ollama · ${audit.model || '?'}`
+                  : audit.provider === 'anthropic'
+                  ? audit.model || 'Anthropic'
+                  : 'Static snapshot'}
               </span>
               {(audit.input_tokens ?? 0) > 0 && (
                 <span className="meta-item">

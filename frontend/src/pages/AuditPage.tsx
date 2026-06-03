@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, Audit, AuditStatus } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
-const MODELS = [
+const ANTHROPIC_MODELS = [
   { id: 'claude-opus-4-8',           label: 'Opus 4',   hint: '~$0.50–$1.50/run', inputRate: 15,   outputRate: 75  },
   { id: 'claude-sonnet-4-6',         label: 'Sonnet 4', hint: '~$0.10–$0.30/run', inputRate: 3,    outputRate: 15  },
   { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4',  hint: '~$0.02–$0.05/run', inputRate: 0.80, outputRate: 4   },
@@ -13,9 +13,10 @@ function formatDate(s: string) {
   return new Date(s).toLocaleString();
 }
 
-function costEstimate(model: string, inputTokens: number | null, outputTokens: number | null): string {
+function costEstimate(provider: string, model: string, inputTokens: number | null, outputTokens: number | null): string {
+  if (provider === 'ollama') return 'free (local)';
   if (!inputTokens && !outputTokens) return '—';
-  const m = MODELS.find((x) => x.id === model);
+  const m = ANTHROPIC_MODELS.find((x) => x.id === model);
   const inputRate  = m?.inputRate  ?? 15;
   const outputRate = m?.outputRate ?? 75;
   const cost = ((inputTokens ?? 0) / 1_000_000) * inputRate
@@ -23,8 +24,13 @@ function costEstimate(model: string, inputTokens: number | null, outputTokens: n
   return `~$${cost.toFixed(3)}`;
 }
 
-function modelLabel(model: string): string {
-  return MODELS.find((x) => x.id === model)?.label ?? (model || 'Snapshot');
+function modeLabel(provider: string, model: string): string {
+  if (provider === 'ollama') return model ? `Ollama · ${model}` : 'Ollama';
+  if (provider === 'anthropic') {
+    const m = ANTHROPIC_MODELS.find((x) => x.id === model);
+    return m?.label ?? model ?? 'Anthropic';
+  }
+  return 'Snapshot';
 }
 
 const LS = {
@@ -37,18 +43,17 @@ export default function AuditPage() {
   const [audits, setAudits] = useState<Audit[]>([]);
   const [repo, setRepo] = useState('');
   const [token, setToken] = useState(() => LS.get('audit.ghToken', ''));
+  const [provider, setProvider] = useState(() => LS.get('audit.provider', ''));
   const [anthropicKey, setAnthropicKey] = useState(() => LS.get('audit.anthropicKey', ''));
-  const [model, setModel] = useState(() => LS.get('audit.model', MODELS[0].id));
+  const [anthropicModel, setAnthropicModel] = useState(() => LS.get('audit.model', ANTHROPIC_MODELS[0].id));
+  const [ollamaURL, setOllamaURL] = useState(() => LS.get('audit.ollamaURL', 'http://localhost:11434'));
+  const [ollamaModel, setOllamaModel] = useState(() => LS.get('audit.ollamaModel', ''));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    try {
-      const data = await api.listAudits();
-      setAudits(data);
-    } catch (e) {
-      setError(String(e));
-    }
+    try { setAudits(await api.listAudits()); }
+    catch (e) { setError(String(e)); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -69,12 +74,12 @@ export default function AuditPage() {
       await api.createAudit({
         repo: repo.trim(),
         github_token: token || undefined,
-        anthropic_key: anthropicKey || undefined,
-        model: anthropicKey ? model : undefined,
+        provider: provider || undefined,
+        anthropic_key: provider === 'anthropic' ? (anthropicKey || undefined) : undefined,
+        model: provider === 'anthropic' ? anthropicModel : provider === 'ollama' ? ollamaModel : undefined,
+        ollama_url: provider === 'ollama' ? (ollamaURL || undefined) : undefined,
       });
       setRepo('');
-      setToken('');
-      setAnthropicKey('');
       load();
     } catch (e) {
       setError(String(e));
@@ -89,7 +94,7 @@ export default function AuditPage() {
     setAudits((prev) => prev.filter((a) => a.id !== id));
   }
 
-  const selectedModel = MODELS.find((m) => m.id === model);
+  const selectedAnthropicModel = ANTHROPIC_MODELS.find((m) => m.id === anthropicModel);
 
   return (
     <div className="container">
@@ -108,41 +113,92 @@ export default function AuditPage() {
               style={{ marginTop: 4 }}
             />
           </label>
-          <label>
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-              Anthropic API key{' '}
-              <span style={{ fontWeight: 400 }}>(optional — without it a free static snapshot is generated)</span>
-            </span>
-            <input
-              type="password"
-              className="input"
-              placeholder="sk-ant-…"
-              value={anthropicKey}
-              onChange={(e) => { setAnthropicKey(e.target.value); LS.set('audit.anthropicKey', e.target.value); }}
-              style={{ marginTop: 4 }}
-            />
-          </label>
-          <label style={{ opacity: anthropicKey ? 1 : 0.45 }}>
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-              Model{' '}
-              {selectedModel && anthropicKey && (
-                <span style={{ fontWeight: 400 }}>{selectedModel.hint}</span>
-              )}
-            </span>
-            <select
-              className="input"
-              value={model}
-              onChange={(e) => { setModel(e.target.value); LS.set('audit.model', e.target.value); }}
-              disabled={!anthropicKey}
-              style={{ marginTop: 4 }}
-            >
-              {MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label} — {m.hint}
-                </option>
+
+          {/* Provider */}
+          <div>
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>AI provider</span>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              {(['', 'anthropic', 'ollama'] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={`btn${provider === p ? ' btn-primary' : ''}`}
+                  style={{ padding: '5px 14px', fontSize: 13, background: provider === p ? undefined : 'transparent', border: '1px solid var(--border)', color: provider === p ? undefined : 'var(--muted)' }}
+                  onClick={() => { setProvider(p); LS.set('audit.provider', p); }}
+                >
+                  {p === '' ? 'Static snapshot' : p === 'anthropic' ? 'Anthropic' : 'Ollama'}
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
+
+          {/* Anthropic fields */}
+          {provider === 'anthropic' && (
+            <>
+              <label>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Anthropic API key{' '}
+                  <span style={{ fontWeight: 400 }}>(or set <code>ANTHROPIC_API_KEY</code> on the server)</span>
+                </span>
+                <input
+                  type="password"
+                  className="input"
+                  placeholder="sk-ant-…"
+                  value={anthropicKey}
+                  onChange={(e) => { setAnthropicKey(e.target.value); LS.set('audit.anthropicKey', e.target.value); }}
+                  style={{ marginTop: 4 }}
+                />
+              </label>
+              <label>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Model{' '}
+                  {selectedAnthropicModel && <span style={{ fontWeight: 400 }}>{selectedAnthropicModel.hint}</span>}
+                </span>
+                <select
+                  className="input"
+                  value={anthropicModel}
+                  onChange={(e) => { setAnthropicModel(e.target.value); LS.set('audit.model', e.target.value); }}
+                  style={{ marginTop: 4 }}
+                >
+                  {ANTHROPIC_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label} — {m.hint}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+
+          {/* Ollama fields */}
+          {provider === 'ollama' && (
+            <>
+              <label>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Ollama base URL</span>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="http://localhost:11434"
+                  value={ollamaURL}
+                  onChange={(e) => { setOllamaURL(e.target.value); LS.set('audit.ollamaURL', e.target.value); }}
+                  style={{ marginTop: 4 }}
+                />
+              </label>
+              <label>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Model{' '}
+                  <span style={{ fontWeight: 400 }}>(<code>ollama list</code> to see available models)</span>
+                </span>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="llama3.2, qwen2.5, deepseek-r1:8b, …"
+                  value={ollamaModel}
+                  onChange={(e) => { setOllamaModel(e.target.value); LS.set('audit.ollamaModel', e.target.value); }}
+                  style={{ marginTop: 4 }}
+                />
+              </label>
+            </>
+          )}
+
           <label>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>
               GitHub token{' '}
@@ -157,14 +213,18 @@ export default function AuditPage() {
               style={{ marginTop: 4 }}
             />
           </label>
+
           {error && <p className="error-msg">{error}</p>}
           <button type="submit" className="btn btn-primary" disabled={submitting || !repo.trim()}>
             {submitting ? 'Starting…' : 'Run Audit'}
           </button>
         </form>
         <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
-          Clones the repo and runs static analysis. With an Anthropic API key the selected model synthesises a full
-          DevSecOps report. Without a key a free raw data snapshot is generated.
+          {provider === 'ollama'
+            ? 'Clones the repo, runs static analysis, generates a report with your local Ollama model — free, no API key needed.'
+            : provider === 'anthropic'
+            ? 'Clones the repo, runs static analysis, calls the Anthropic API. Typical cost: $0.02–$1.50/run.'
+            : 'Clones the repo and runs static analysis. Returns a structured raw-data snapshot — free, no AI.'}
         </p>
       </div>
 
@@ -181,7 +241,7 @@ export default function AuditPage() {
                   <th>Started</th>
                   <th>Completed</th>
                   <th>Status</th>
-                  <th>Model</th>
+                  <th>Mode</th>
                   <th>Cost</th>
                   <th></th>
                 </tr>
@@ -193,8 +253,8 @@ export default function AuditPage() {
                     <td>{formatDate(a.created_at)}</td>
                     <td>{a.completed_at ? formatDate(a.completed_at) : '—'}</td>
                     <td><StatusBadge status={a.status as AuditStatus} /></td>
-                    <td style={{ color: 'var(--muted)', fontSize: 12 }}>{modelLabel(a.model)}</td>
-                    <td>{costEstimate(a.model, a.input_tokens, a.output_tokens)}</td>
+                    <td style={{ color: 'var(--muted)', fontSize: 12 }}>{modeLabel(a.provider, a.model)}</td>
+                    <td>{costEstimate(a.provider, a.model, a.input_tokens, a.output_tokens)}</td>
                     <td>
                       <button className="btn btn-danger" onClick={(e) => deleteAudit(e, a.id)}>
                         Delete

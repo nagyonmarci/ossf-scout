@@ -78,6 +78,7 @@ export interface Audit {
   repo: string;
   status: AuditStatus;
   model: string;
+  provider: string;
   created_at: string;
   completed_at: string | null;
   report: string | null;
@@ -91,6 +92,8 @@ export interface CreateAuditParams {
   github_token?: string;
   anthropic_key?: string;
   model?: string;
+  provider?: string;
+  ollama_url?: string;
 }
 
 export const api = {

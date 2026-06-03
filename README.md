@@ -23,6 +23,7 @@ Available as a **CLI tool** or a **web server** with a browser UI and scan histo
 - **Open issues count** — from GitHub Search API (no extra token scopes)
 - **Notifications** — in-app toast + browser Notification API on scan completion
 - **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
+- **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, and generates a formal DevSecOps report via the Claude Opus API; cost ~$0.50–$1.50 per run
 
 ---
 
@@ -68,6 +69,18 @@ GITHUB_TOKEN=ghp_... docker compose up --build
 
 The scan history is stored in `./data/ossf-scout.db` and persists across restarts.
 
+### Audit Tab
+
+Set an Anthropic API key (or provide it per-audit in the UI) and open the **Audit** tab in the web UI:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+go run . -serve
+# Navigate to http://localhost:7878 → Audit tab
+```
+
+Enter `owner/repo` (e.g. `directus/directus`), optionally a GitHub token for secret-scanning alerts, then click **Run Audit**. The server clones the repo, runs static analysis, and calls Claude Opus. The Markdown report appears in the browser when complete (~1–3 min).
+
 ---
 
 ## CLI Flags
@@ -98,6 +111,7 @@ The scan history is stored in `./data/ossf-scout.db` and persists across restart
 | Variable | Description |
 |----------|-------------|
 | `GITHUB_TOKEN` | GitHub PAT. Without it, GitHub limits unauthenticated requests to 60/hour. |
+| `ANTHROPIC_API_KEY` | Anthropic API key for the Audit tab. Can also be provided per-audit in the web UI (overrides the server-level key). |
 
 The token can also be provided per-scan in the web UI (overrides the server-level token).
 

@@ -23,7 +23,7 @@ Available as a **CLI tool** or a **web server** with a browser UI and scan histo
 - **Open issues count** — from GitHub Search API (no extra token scopes)
 - **Notifications** — in-app toast + browser Notification API on scan completion
 - **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
-- **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, and generates a formal DevSecOps report via the Claude Opus API; cost ~$0.50–$1.50 per run
+- **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, and generates a formal DevSecOps report; choose Opus 4 / Sonnet 4 / Haiku 4 or run for free without an API key (static data snapshot)
 
 ---
 
@@ -71,15 +71,22 @@ The scan history is stored in `./data/ossf-scout.db` and persists across restart
 
 ### Audit Tab
 
-Set an Anthropic API key (or provide it per-audit in the UI) and open the **Audit** tab in the web UI:
+Open the **Audit** tab in the web UI:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
 go run . -serve
 # Navigate to http://localhost:7878 → Audit tab
 ```
 
-Enter `owner/repo` (e.g. `directus/directus`), optionally a GitHub token for secret-scanning alerts, then click **Run Audit**. The server clones the repo, runs static analysis, and calls Claude Opus. The Markdown report appears in the browser when complete (~1–3 min) and can be downloaded as a `.md` file.
+Enter `owner/repo` (e.g. `directus/directus`) and click **Run Audit**. No API key is required — without one a free static data snapshot is generated. To get a full AI-synthesised report, provide an Anthropic API key (per-audit in the UI or server-wide via `ANTHROPIC_API_KEY`) and select a model:
+
+| Model | Typical cost |
+|-------|-------------|
+| Opus 4 (most capable) | ~$0.50–$1.50 |
+| Sonnet 4 | ~$0.10–$0.30 |
+| Haiku 4 (fastest / cheapest) | ~$0.02–$0.05 |
+
+The Markdown report appears in the browser when complete (~1–3 min for AI, ~30s for snapshot) and can be downloaded as a `.md` file.
 
 **What it collects**
 
@@ -105,7 +112,7 @@ The generated Markdown document follows a fixed structure:
 7. Shift-left guardrails — maps each finding to an automated CI gate
 8. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm
 
-**Cost:** ~$0.50–$1.50 per run (Claude Opus input/output token counts are shown in the audit history table).
+**Cost:** Free without an API key (static snapshot). With a key: Opus 4 ~$0.50–$1.50, Sonnet 4 ~$0.10–$0.30, Haiku 4 ~$0.02–$0.05 per run. Token counts and estimated cost are shown in the audit history table.
 
 ---
 

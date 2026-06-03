@@ -10,25 +10,25 @@ import (
 )
 
 type scanRow struct {
-	ID          int64    `json:"id"`
-	CreatedAt   string   `json:"created_at"`
-	FinishedAt  *string  `json:"finished_at"`
-	Status      string   `json:"status"`
-	ErrorMsg    *string  `json:"error_msg,omitempty"`
-	Language    string   `json:"language"`
-	MinStars    int      `json:"min_stars"`
-	MaxScore    float64  `json:"max_score"`
-	Limit       int      `json:"limit"`
-	Workers     int      `json:"workers"`
-	CheckFilter string   `json:"check_filter"`
-	CliFallback bool     `json:"cli_fallback"`
-	PushedAfter   string `json:"pushed_after"`
-	MinMaintained int    `json:"min_maintained"`
-	Topic         string `json:"topic"`
-	Keyword       string `json:"keyword"`
-	SingleRepo    string `json:"single_repo"`
-	TotalRepos    *int   `json:"total_repos"`
-	ResultCount *int     `json:"result_count"`
+	ID            int64   `json:"id"`
+	CreatedAt     string  `json:"created_at"`
+	FinishedAt    *string `json:"finished_at"`
+	Status        string  `json:"status"`
+	ErrorMsg      *string `json:"error_msg,omitempty"`
+	Language      string  `json:"language"`
+	MinStars      int     `json:"min_stars"`
+	MaxScore      float64 `json:"max_score"`
+	Limit         int     `json:"limit"`
+	Workers       int     `json:"workers"`
+	CheckFilter   string  `json:"check_filter"`
+	CliFallback   bool    `json:"cli_fallback"`
+	PushedAfter   string  `json:"pushed_after"`
+	MinMaintained int     `json:"min_maintained"`
+	Topic         string  `json:"topic"`
+	Keyword       string  `json:"keyword"`
+	SingleRepo    string  `json:"single_repo"`
+	TotalRepos    *int    `json:"total_repos"`
+	ResultCount   *int    `json:"result_count"`
 }
 
 type auditRow struct {
@@ -43,6 +43,7 @@ type auditRow struct {
 	Error        *string    `json:"error"`
 	InputTokens  *int       `json:"input_tokens"`
 	OutputTokens *int       `json:"output_tokens"`
+	HasContext   bool       `json:"has_context"`
 }
 
 type scanResultRow struct {
@@ -137,6 +138,7 @@ CREATE TABLE IF NOT EXISTS audits (
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN single_repo TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN model TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN provider TEXT NOT NULL DEFAULT ''`)
+	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN context_json TEXT`)
 	// Mark any scans that were running when the server last died
 	_, _ = db.Exec(`UPDATE scans SET status='error', error_msg='server restarted' WHERE status='running'`)
 	return db, nil
@@ -280,6 +282,28 @@ func dbUpdateAuditRunning(db *sql.DB, id string) error {
 	return err
 }
 
+func dbUpdateAuditContext(db *sql.DB, id, contextJSON string) error {
+	_, err := db.Exec(`UPDATE audits SET context_json=? WHERE id=?`, contextJSON, id)
+	return err
+}
+
+func dbGetAuditContext(db *sql.DB, id string) (*string, error) {
+	var ctx *string
+	err := db.QueryRow(`SELECT context_json FROM audits WHERE id=?`, id).Scan(&ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ctx, nil
+}
+
+func dbRestartAudit(db *sql.DB, id, model, provider string) error {
+	_, err := db.Exec(
+		`UPDATE audits SET status='running', model=?, provider=?, error=NULL WHERE id=?`,
+		model, provider, id,
+	)
+	return err
+}
+
 func dbUpdateAuditDone(db *sql.DB, id, report string, inputTokens, outputTokens int) error {
 	_, err := db.Exec(
 		`UPDATE audits SET status='done', completed_at=?, report=?, input_tokens=?, output_tokens=? WHERE id=?`,
@@ -306,7 +330,8 @@ func dbUpdateAuditErrorWithReport(db *sql.DB, id, errMsg, report string) error {
 
 func dbListAudits(db *sql.DB) ([]auditRow, error) {
 	rows, err := db.Query(
-		`SELECT id, repo, status, model, provider, created_at, completed_at, error, input_tokens, output_tokens
+		`SELECT id, repo, status, model, provider, created_at, completed_at, error, input_tokens, output_tokens,
+		        CASE WHEN context_json IS NULL THEN 0 ELSE 1 END
 		 FROM audits ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -316,10 +341,12 @@ func dbListAudits(db *sql.DB) ([]auditRow, error) {
 	var out []auditRow
 	for rows.Next() {
 		var a auditRow
+		var hasCtx int
 		if err := rows.Scan(&a.ID, &a.Repo, &a.Status, &a.Model, &a.Provider, &a.CreatedAt,
-			&a.CompletedAt, &a.Error, &a.InputTokens, &a.OutputTokens); err != nil {
+			&a.CompletedAt, &a.Error, &a.InputTokens, &a.OutputTokens, &hasCtx); err != nil {
 			return nil, err
 		}
+		a.HasContext = hasCtx != 0
 		out = append(out, a)
 	}
 	return out, rows.Err()
@@ -327,14 +354,17 @@ func dbListAudits(db *sql.DB) ([]auditRow, error) {
 
 func dbGetAudit(db *sql.DB, id string) (*auditRow, error) {
 	var a auditRow
+	var hasCtx int
 	err := db.QueryRow(
-		`SELECT id, repo, status, model, provider, created_at, completed_at, report, error, input_tokens, output_tokens
+		`SELECT id, repo, status, model, provider, created_at, completed_at, report, error, input_tokens, output_tokens,
+		        CASE WHEN context_json IS NULL THEN 0 ELSE 1 END
 		 FROM audits WHERE id=?`, id,
 	).Scan(&a.ID, &a.Repo, &a.Status, &a.Model, &a.Provider, &a.CreatedAt,
-		&a.CompletedAt, &a.Report, &a.Error, &a.InputTokens, &a.OutputTokens)
+		&a.CompletedAt, &a.Report, &a.Error, &a.InputTokens, &a.OutputTokens, &hasCtx)
 	if err != nil {
 		return nil, err
 	}
+	a.HasContext = hasCtx != 0
 	return &a, nil
 }
 

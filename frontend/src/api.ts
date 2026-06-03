@@ -85,6 +85,7 @@ export interface Audit {
   error: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
+  has_context: boolean;
 }
 
 export interface CreateAuditParams {
@@ -92,7 +93,18 @@ export interface CreateAuditParams {
   github_token?: string;
   anthropic_key?: string;
   model?: string;
+  analysis_model?: string;
+  split_generation?: boolean;
   provider?: string;
+  ollama_url?: string;
+}
+
+export interface GenerateAuditParams {
+  provider?: string;
+  anthropic_key?: string;
+  model?: string;
+  analysis_model?: string;
+  split_generation?: boolean;
   ollama_url?: string;
 }
 
@@ -105,6 +117,7 @@ export const api = {
   listAudits: () => request<Audit[]>('GET', '/api/audits'),
   getAudit: (id: string) => request<Audit>('GET', `/api/audits/${id}`),
   createAudit: (params: CreateAuditParams) => request<Audit>('POST', '/api/audits', params),
+  generateAudit: (id: string, params: GenerateAuditParams) => request<Audit>('POST', `/api/audits/${id}/generate`, params),
   deleteAudit: (id: string) => request<void>('DELETE', `/api/audits/${id}`),
   getTrending: (params: GetTrendingParams) => {
     const q = new URLSearchParams()

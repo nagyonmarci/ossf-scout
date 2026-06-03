@@ -34,6 +34,7 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("GET /api/trending", handleTrending(serverToken))
 
 	mux.HandleFunc("POST /api/audits", handleCreateAudit(db))
+	mux.HandleFunc("POST /api/audits/{id}/generate", handleGenerateAudit(db))
 	mux.HandleFunc("GET /api/audits", handleListAudits(db))
 	mux.HandleFunc("GET /api/audits/{id}", handleGetAudit(db))
 	mux.HandleFunc("DELETE /api/audits/{id}", handleDeleteAudit(db))
@@ -68,19 +69,19 @@ func startServer(port int, dbPath string, serverToken string) {
 func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Language    string  `json:"language"`
-			MinStars    int     `json:"min_stars"`
-			MaxScore    float64 `json:"max_score"`
-			Limit       int     `json:"limit"`
-			Workers     int     `json:"workers"`
-			CheckFilter string  `json:"check_filter"`
-			GithubToken string  `json:"github_token"`
-			CliFallback bool   `json:"use_cli_fallback"`
-			PushedAfter   string `json:"pushed_after"`
-			MinMaintained int    `json:"min_maintained"`
-			Topic      string `json:"topic"`
-			Keyword    string `json:"keyword"`
-			SingleRepo string `json:"single_repo"`
+			Language      string  `json:"language"`
+			MinStars      int     `json:"min_stars"`
+			MaxScore      float64 `json:"max_score"`
+			Limit         int     `json:"limit"`
+			Workers       int     `json:"workers"`
+			CheckFilter   string  `json:"check_filter"`
+			GithubToken   string  `json:"github_token"`
+			CliFallback   bool    `json:"use_cli_fallback"`
+			PushedAfter   string  `json:"pushed_after"`
+			MinMaintained int     `json:"min_maintained"`
+			Topic         string  `json:"topic"`
+			Keyword       string  `json:"keyword"`
+			SingleRepo    string  `json:"single_repo"`
 		}
 		body.MinStars = 500
 		body.MaxScore = 5.0
@@ -98,19 +99,19 @@ func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 		}
 
 		cfg := config{
-			language:    body.Language,
-			minStars:    body.MinStars,
-			maxScore:    body.MaxScore,
-			limit:       body.Limit,
-			workers:     body.Workers,
-			checkFilter: body.CheckFilter,
-			token:       token,
-			cliFallback: body.CliFallback,
+			language:      body.Language,
+			minStars:      body.MinStars,
+			maxScore:      body.MaxScore,
+			limit:         body.Limit,
+			workers:       body.Workers,
+			checkFilter:   body.CheckFilter,
+			token:         token,
+			cliFallback:   body.CliFallback,
 			pushedAfter:   body.PushedAfter,
 			minMaintained: body.MinMaintained,
-			topic:      body.Topic,
-			keyword:    body.Keyword,
-			singleRepo: body.SingleRepo,
+			topic:         body.Topic,
+			keyword:       body.Keyword,
+			singleRepo:    body.SingleRepo,
 		}
 
 		id, err := dbInsertScan(db, cfg)
@@ -222,12 +223,14 @@ func parseScanID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 // ── audit handlers ────────────────────────────────────────────────────────────
 
 type createAuditRequest struct {
-	Repo         string `json:"repo"`
-	GithubToken  string `json:"github_token"`
-	AnthropicKey string `json:"anthropic_key"`
-	Model        string `json:"model"`
-	Provider     string `json:"provider"`    // "anthropic" | "ollama" | "" (template)
-	OllamaURL    string `json:"ollama_url"`  // default: http://localhost:11434
+	Repo            string `json:"repo"`
+	GithubToken     string `json:"github_token"`
+	AnthropicKey    string `json:"anthropic_key"`
+	Model           string `json:"model"`
+	AnalysisModel   string `json:"analysis_model"`
+	SplitGeneration bool   `json:"split_generation"`
+	Provider        string `json:"provider"`   // "anthropic" | "ollama" | "" (template)
+	OllamaURL       string `json:"ollama_url"` // default: http://localhost:11434
 }
 
 func handleCreateAudit(db *sql.DB) http.HandlerFunc {
@@ -261,7 +264,7 @@ func handleCreateAudit(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		go runAudit(db, id, req.Repo, req.GithubToken, provider, apiKey, ollamaURL, model)
+		go runAudit(db, id, req.Repo, req.GithubToken, provider, apiKey, ollamaURL, model, req.AnalysisModel, req.SplitGeneration)
 
 		a, err := dbGetAudit(db, id)
 		if err != nil {
@@ -269,6 +272,46 @@ func handleCreateAudit(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusCreated, a)
+	}
+}
+
+func handleGenerateAudit(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		contextJSON, err := dbGetAuditContext(db, id)
+		if err != nil || contextJSON == nil {
+			http.Error(w, "no saved context for this audit", http.StatusNotFound)
+			return
+		}
+		var req createAuditRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		provider := req.Provider
+		apiKey := req.AnthropicKey
+		if apiKey == "" && provider == "anthropic" {
+			apiKey = os.Getenv("ANTHROPIC_API_KEY")
+		}
+		ollamaURL := req.OllamaURL
+		if ollamaURL == "" {
+			ollamaURL = os.Getenv("OLLAMA_BASE_URL")
+		}
+		model := req.Model
+		if model == "" && provider == "anthropic" && apiKey != "" {
+			model = defaultModel
+		}
+		if err := dbRestartAudit(db, id, model, provider); err != nil {
+			http.Error(w, "db error", http.StatusInternalServerError)
+			return
+		}
+		go runAuditFromContext(db, id, *contextJSON, provider, apiKey, ollamaURL, model, req.AnalysisModel, req.SplitGeneration)
+		a, err := dbGetAudit(db, id)
+		if err != nil {
+			http.Error(w, "db error", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, a)
 	}
 }
 

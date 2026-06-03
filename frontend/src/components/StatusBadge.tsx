@@ -1,9 +1,7 @@
-import { ScanStatus } from '../api'
-
-export default function StatusBadge({ status }: { status: ScanStatus }) {
+export default function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`badge badge-${status}`}>
-      {status === 'running' && <span className="spinner" />}
+      {(status === 'running' || status === 'pending') && <span className="spinner" />}
       {status}
     </span>
   )

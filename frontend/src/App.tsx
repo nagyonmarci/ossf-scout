@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import ScanList from './pages/ScanList'
 import ScanDetail from './pages/ScanDetail'
 import TrendingPage from './pages/TrendingPage'
+import AuditPage from './pages/AuditPage'
+import AuditDetail from './pages/AuditDetail'
 
 function AppHeader() {
   return (
@@ -16,6 +18,7 @@ function AppHeader() {
           <nav className="tab-nav">
             <NavLink to="/" end>Scans</NavLink>
             <NavLink to="/trending">Trending</NavLink>
+            <NavLink to="/audits">Audit</NavLink>
           </nav>
         </div>
       </div>
@@ -57,6 +60,8 @@ export default function App() {
           <Route path="/" element={<ScanList />} />
           <Route path="/trending" element={<TrendingPage />} />
           <Route path="/scans/:id" element={<ScanDetail />} />
+          <Route path="/audits" element={<AuditPage />} />
+          <Route path="/audits/:id" element={<AuditDetail />} />
         </Route>
       </Routes>
       <BackToTop />

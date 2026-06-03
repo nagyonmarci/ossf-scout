@@ -4,9 +4,9 @@ import { api, Audit, AuditStatus } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
 const ANTHROPIC_MODELS = [
-  { id: 'claude-opus-4-8',           label: 'Opus 4',   hint: '~$0.50–$1.50/run', inputRate: 15,   outputRate: 75  },
-  { id: 'claude-sonnet-4-6',         label: 'Sonnet 4', hint: '~$0.10–$0.30/run', inputRate: 3,    outputRate: 15  },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4',  hint: '~$0.02–$0.05/run', inputRate: 0.80, outputRate: 4   },
+  { id: 'claude-opus-4-8',           label: 'Opus 4',   hint: '~$1–$4/run',        inputRate: 15,   outputRate: 75  },
+  { id: 'claude-sonnet-4-6',         label: 'Sonnet 4', hint: '~$0.20–$0.80/run',  inputRate: 3,    outputRate: 15  },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4',  hint: '~$0.05–$0.20/run',  inputRate: 0.80, outputRate: 4   },
 ];
 
 function formatDate(s: string) {
@@ -49,6 +49,8 @@ export default function AuditPage() {
   const [anthropicModel, setAnthropicModel] = useState(() => LS.get('audit.model', ANTHROPIC_MODELS[0].id));
   const [ollamaURL, setOllamaURL] = useState(() => LS.get('audit.ollamaURL', ''));
   const [ollamaModel, setOllamaModel] = useState(() => LS.get('audit.ollamaModel', ''));
+  const [splitGeneration, setSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'false') === 'true');
+  const [analysisModel, setAnalysisModel] = useState(() => LS.get('audit.analysisModel', ''));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +88,8 @@ export default function AuditPage() {
         provider: provider || undefined,
         anthropic_key: provider === 'anthropic' ? (anthropicKey || undefined) : undefined,
         model: provider === 'anthropic' ? anthropicModel : provider === 'ollama' ? ollamaModel : undefined,
+        split_generation: provider === 'ollama' ? splitGeneration : undefined,
+        analysis_model: provider === 'ollama' && splitGeneration ? (analysisModel || undefined) : undefined,
         ollama_url: provider === 'ollama' ? (ollamaURL || undefined) : undefined,
       });
       setRepo('');
@@ -198,7 +202,7 @@ export default function AuditPage() {
               </label>
               <label>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  Model{' '}
+                  Final report model{' '}
                   <span style={{ fontWeight: 400 }}>(<code>ollama list</code> to see available models)</span>
                 </span>
                 <input
@@ -210,6 +214,35 @@ export default function AuditPage() {
                   style={{ marginTop: 4 }}
                 />
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={splitGeneration}
+                  onChange={(e) => {
+                    setSplitGeneration(e.target.checked);
+                    LS.set('audit.splitGeneration', String(e.target.checked));
+                  }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Split generation into section summaries before the final report
+                </span>
+              </label>
+              {splitGeneration && (
+                <label>
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                    Analysis model{' '}
+                    <span style={{ fontWeight: 400 }}>(optional — empty uses the final report model)</span>
+                  </span>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="llama3.2, qwen2.5:7b, …"
+                    value={analysisModel}
+                    onChange={(e) => { setAnalysisModel(e.target.value); LS.set('audit.analysisModel', e.target.value); }}
+                    style={{ marginTop: 4 }}
+                  />
+                </label>
+              )}
             </>
           )}
 

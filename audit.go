@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql"
 	"encoding/json"
@@ -389,7 +390,7 @@ Non-negotiable principles:
 
 func buildUserPrompt(ctx *auditContext) string {
 	dateShort := ctx.Meta.Date[:10]
-	ctxJSON, _ := json.MarshalIndent(ctx, "", "  ")
+	ctxJSON, _ := json.Marshal(ctx)
 
 	return fmt.Sprintf(`Generate a complete DevSecOps audit report for the scan results below.
 
@@ -447,6 +448,47 @@ Produce the following sections in order. Do not omit any.
 		`For HTTP security headers: use keyFiles.helmetConfig to assess CSP directives, HSTS enforcement, and `+
 		`X-Powered-By suppression with full context — distinguish deliberate upstream defaults from oversights.`,
 		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, string(ctxJSON))
+}
+
+func buildSummarizedUserPrompt(ctx *auditContext, summaries []auditSectionSummary) string {
+	dateShort := ctx.Meta.Date[:10]
+	summaryJSON, _ := json.MarshalIndent(summaries, "", "  ")
+
+	return fmt.Sprintf(`Generate a complete DevSecOps audit report for the scan results below.
+
+Repository: %s
+Commit: %s
+Scan date: %s
+
+## Collected security context
+
+The raw audit context has already been reduced into focused evidence summaries. Treat these summaries as the source of truth. Preserve concrete file paths, commands, tool names, and finding evidence. Do not invent findings not supported by the evidence.
+
+`+"```json\n%s\n```"+`
+
+## Required document structure
+
+Produce the following sections in order. Do not omit any.
+
+1. **Metadata table** — date, repository, commit, auditor ("Automated — split model workflow"), status
+2. **Scope** — what was checked (files, tools, GitHub API calls)
+3. **Methodology** — tools used, static vs dynamic distinction, known limitations
+4. **Findings Summary** — table: ID | Priority | Severity | Title | OWASP 2021 | Status
+5. **Per-finding sections** (one H3 per finding) — each must contain:
+   - OWASP, CWE, Severity metadata
+   - Description
+   - Root Cause
+   - Impact Chain
+   - Fix (code or config snippet where applicable)
+   - Verification (shell commands)
+6. **Open GitHub Issues & PRs** — security-relevant items with risk assessment
+7. **P2 Recommendations** — backlog items not immediately critical
+8. **Remediation Status table** — all findings with commit or PR reference where fixed
+9. **Verification Checklist** — numbered list of copy-paste commands, one per finding
+10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate
+11. **Appendix: Full Application Security Assessment** — one H3 subsection per category.
+Each appendix subsection must start with the methodology note before listing observations.`,
+		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, string(summaryJSON))
 }
 
 // ── Claude API ────────────────────────────────────────────────────────────────
@@ -520,6 +562,31 @@ type ollamaResponse struct {
 	} `json:"error,omitempty"`
 }
 
+type ollamaStreamChunk struct {
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage"`
+	Error *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+	} `json:"error,omitempty"`
+}
+
+type auditSectionSummary struct {
+	Section string `json:"section"`
+	Model   string `json:"model"`
+	Summary string `json:"summary"`
+}
+
 // truncateField caps s at maxBytes and appends a note if truncated.
 func truncateField(s string, maxBytes int) string {
 	if len(s) <= maxBytes {
@@ -555,47 +622,215 @@ func generateOllamaReport(ctx *auditContext, ollamaURL, model string) (report st
 	return generateOllamaReportWith(ctx, ollamaURL, model, false)
 }
 
+func generateSplitOllamaReport(ctx *auditContext, ollamaURL, analysisModel, finalModel string) (report string, inputTokens, outputTokens int, err error) {
+	if ollamaURL == "" {
+		ollamaURL = "http://localhost:11434"
+	}
+	if analysisModel == "" {
+		analysisModel = finalModel
+	}
+
+	sections := buildAuditSummarySections(ctx)
+	summaries := make([]auditSectionSummary, 0, len(sections))
+	for _, section := range sections {
+		sectionPrompt, merr := json.Marshal(section.Content)
+		if merr != nil {
+			return "", 0, 0, fmt.Errorf("marshal %s section: %w", section.Name, merr)
+		}
+		sectionEvidence := string(sectionPrompt)
+		if len(sectionEvidence) > ollamaMaxSummaryPromptChars {
+			sectionEvidence = sectionEvidence[:ollamaMaxSummaryPromptChars] + "\n\n[Section evidence truncated to fit the analysis model context window]"
+		}
+		prompt := fmt.Sprintf(`Summarize this DevSecOps audit evidence section for a later final report writer.
+
+Section: %s
+
+Rules:
+- Keep concrete file paths, tool outputs, commands, package names, workflow names, and API evidence.
+- Identify actionable findings, likely false positives, and clear "no issue found" categories.
+- Calibrate severity. Do not inflate weak evidence.
+- Output concise Markdown with headings: Evidence, Findings, No-Issue Notes, Open Questions.
+- Do not write the final report.
+
+Evidence:
+`+"```json\n%s\n```", section.Name, sectionEvidence)
+
+		summary, in, out, serr := generateOllamaChat(ollamaURL, analysisModel, auditSummarySystemPrompt, prompt)
+		inputTokens += in
+		outputTokens += out
+		if serr != nil {
+			return "", inputTokens, outputTokens, fmt.Errorf("summarize %s: %w", section.Name, serr)
+		}
+		summaries = append(summaries, auditSectionSummary{
+			Section: section.Name,
+			Model:   analysisModel,
+			Summary: summary,
+		})
+	}
+
+	finalPrompt := buildSummarizedUserPrompt(ctx, summaries)
+	report, in, out, err := generateOllamaChat(ollamaURL, finalModel, auditSystemPrompt, finalPrompt)
+	inputTokens += in
+	outputTokens += out
+	if err != nil {
+		return "", inputTokens, outputTokens, fmt.Errorf("final report: %w", err)
+	}
+	return report, inputTokens, outputTokens, nil
+}
+
+const auditSummarySystemPrompt = `You are a careful DevSecOps evidence summarizer. ` +
+	`Your job is to reduce one section of raw audit data into compact, accurate evidence for another model. ` +
+	`Never invent findings. Preserve concrete evidence and uncertainty.`
+
+const ollamaMaxSummaryPromptChars = 250_000
+
+type auditSummarySection struct {
+	Name    string
+	Content any
+}
+
+func buildAuditSummarySections(ctx *auditContext) []auditSummarySection {
+	return []auditSummarySection{
+		{Name: "CI/CD and policy gates", Content: map[string]any{
+			"cicd": ctx.CICD,
+		}},
+		{Name: "Application code and key files", Content: map[string]any{
+			"code":     ctx.Code,
+			"keyFiles": ctx.KeyFiles,
+		}},
+		{Name: "Dependencies and secrets", Content: map[string]any{
+			"dependencies": ctx.Dependencies,
+			"secrets":      ctx.Secrets,
+		}},
+		{Name: "Infrastructure, containers, Kubernetes, and SLSA", Content: map[string]any{
+			"infrastructure": ctx.Infra,
+			"iac":            ctx.IaC,
+			"policy":         ctx.Policy,
+			"slsa":           ctx.SLSA,
+		}},
+		{Name: "Git and GitHub signals", Content: map[string]any{
+			"git":    ctx.Git,
+			"github": ctx.GitHub,
+		}},
+	}
+}
+
+// ollamaMaxPromptChars targets ~200k tokens (3 chars/token for code-heavy content),
+// leaving headroom for the system prompt under 262k context windows.
+const ollamaMaxPromptChars = 600_000
+
 func generateOllamaReportWith(ctx *auditContext, ollamaURL, model string, compact bool) (report string, inputTokens, outputTokens int, err error) {
 	sendCtx := ctx
 	if compact {
 		sendCtx = compactForOllama(ctx)
 	}
+	userPrompt := buildUserPrompt(sendCtx)
+	if compact && len(userPrompt) > ollamaMaxPromptChars {
+		userPrompt = userPrompt[:ollamaMaxPromptChars] + "\n\n[Context truncated to fit model context window]"
+	}
+	report, inputTokens, outputTokens, err = generateOllamaChat(ollamaURL, model, auditSystemPrompt, userPrompt)
+	if err != nil {
+		if !compact && isOllamaCompactRetryError(err) {
+			return generateOllamaReportWith(ctx, ollamaURL, model, true)
+		}
+		return "", 0, 0, err
+	}
+
+	return report, inputTokens, outputTokens, nil
+}
+
+func generateOllamaChat(ollamaURL, model, systemPrompt, userPrompt string) (report string, inputTokens, outputTokens int, err error) {
 	payload := ollamaRequest{
 		Model:  model,
-		Stream: false,
+		Stream: true,
 		Messages: []ollamaMessage{
-			{Role: "system", Content: auditSystemPrompt},
-			{Role: "user", Content: buildUserPrompt(sendCtx)},
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
 		},
 	}
 	body, _ := json.Marshal(payload)
 	req, _ := http.NewRequest("POST", ollamaURL+"/v1/chat/completions", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 15 * time.Minute}
+	client := &http.Client{Timeout: 2 * time.Hour}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", 0, 0, fmt.Errorf("ollama request failed: %w", err)
+		hint := ""
+		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "refused") {
+			hint = " (is Ollama running and reachable? if inside Docker, set OLLAMA_HOST=0.0.0.0 on the host)"
+		}
+		return "", 0, 0, fmt.Errorf("ollama request failed: %w%s", err, hint)
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
-	var or_ ollamaResponse
-	if err := json.NewDecoder(resp.Body).Decode(&or_); err != nil {
-		return "", 0, 0, fmt.Errorf("ollama decode failed: %w", err)
-	}
-	if or_.Error != nil {
-		msg := or_.Error.Message
-		// Retry once with compacted context if the model reports a context length error
-		if !compact && strings.Contains(msg, "exceeds") && strings.Contains(msg, "context") {
-			return generateOllamaReportWith(ctx, ollamaURL, model, true)
-		}
-		return "", 0, 0, fmt.Errorf("ollama error %s: %s", or_.Error.Type, msg)
-	}
-	if len(or_.Choices) == 0 || or_.Choices[0].Message.Content == "" {
-		return "", 0, 0, fmt.Errorf("ollama returned empty content")
+	report, inputTokens, outputTokens, err = readOllamaStream(resp)
+	if err != nil {
+		return "", 0, 0, err
 	}
 
-	return or_.Choices[0].Message.Content, or_.Usage.PromptTokens, or_.Usage.CompletionTokens, nil
+	return report, inputTokens, outputTokens, nil
+}
+
+func isOllamaCompactRetryError(err error) bool {
+	msg := err.Error()
+	contextTooLong := strings.Contains(msg, "exceeds") && strings.Contains(msg, "context")
+	backendCrash := strings.Contains(msg, "EOF") || strings.Contains(msg, "api_error")
+	return contextTooLong || backendCrash
+}
+
+func readOllamaStream(resp *http.Response) (report string, inputTokens, outputTokens int, err error) {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		var or_ ollamaResponse
+		if derr := json.Unmarshal(body, &or_); derr == nil && or_.Error != nil {
+			return "", 0, 0, fmt.Errorf("ollama error %s: %s", or_.Error.Type, or_.Error.Message)
+		}
+		return "", 0, 0, fmt.Errorf("ollama HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var b strings.Builder
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		}
+		if line == "[DONE]" {
+			break
+		}
+
+		var chunk ollamaStreamChunk
+		if err := json.Unmarshal([]byte(line), &chunk); err != nil {
+			return "", 0, 0, fmt.Errorf("ollama stream decode failed: %w", err)
+		}
+		if chunk.Error != nil {
+			return "", 0, 0, fmt.Errorf("ollama error %s: %s", chunk.Error.Type, chunk.Error.Message)
+		}
+		if chunk.Usage.PromptTokens > 0 {
+			inputTokens = chunk.Usage.PromptTokens
+		}
+		if chunk.Usage.CompletionTokens > 0 {
+			outputTokens = chunk.Usage.CompletionTokens
+		}
+		for _, choice := range chunk.Choices {
+			if choice.Delta.Content != "" {
+				b.WriteString(choice.Delta.Content)
+			} else if choice.Message.Content != "" {
+				b.WriteString(choice.Message.Content)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", 0, 0, fmt.Errorf("ollama stream failed: %w", err)
+	}
+	if b.Len() == 0 {
+		return "", 0, 0, fmt.Errorf("ollama returned empty content")
+	}
+	return b.String(), inputTokens, outputTokens, nil
 }
 
 // generateTemplateReport formats the collected context as a structured Markdown
@@ -1042,7 +1277,7 @@ func generateReport(ctx *auditContext, apiKey, model string) (report string, inp
 
 // ── Runner ────────────────────────────────────────────────────────────────────
 
-func runAudit(db *sql.DB, id, repo, ghToken, provider, anthropicKey, ollamaURL, model string) {
+func runAudit(db *sql.DB, id, repo, ghToken, provider, anthropicKey, ollamaURL, model, analysisModel string, splitGeneration bool) {
 	_ = dbUpdateAuditRunning(db, id)
 
 	auditCtx, tmpDir, err := collectContext(repo, ghToken)
@@ -1052,14 +1287,36 @@ func runAudit(db *sql.DB, id, repo, ghToken, provider, anthropicKey, ollamaURL, 
 	}
 	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
+	if raw, merr := json.Marshal(auditCtx); merr == nil {
+		_ = dbUpdateAuditContext(db, id, string(raw))
+	}
+
+	runAuditGenerate(db, id, auditCtx, provider, anthropicKey, ollamaURL, model, analysisModel, splitGeneration)
+}
+
+func runAuditFromContext(db *sql.DB, id, contextJSON, provider, anthropicKey, ollamaURL, model, analysisModel string, splitGeneration bool) {
+	var auditCtx auditContext
+	if err := json.Unmarshal([]byte(contextJSON), &auditCtx); err != nil {
+		_ = dbUpdateAuditError(db, id, "context unmarshal failed: "+err.Error())
+		return
+	}
+	runAuditGenerate(db, id, &auditCtx, provider, anthropicKey, ollamaURL, model, analysisModel, splitGeneration)
+}
+
+func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, provider, anthropicKey, ollamaURL, model, analysisModel string, splitGeneration bool) {
 	var report string
 	var inputTokens, outputTokens int
+	var err error
 
 	switch provider {
 	case "anthropic":
 		report, inputTokens, outputTokens, err = generateReport(auditCtx, anthropicKey, model)
 	case "ollama":
-		report, inputTokens, outputTokens, err = generateOllamaReport(auditCtx, ollamaURL, model)
+		if splitGeneration {
+			report, inputTokens, outputTokens, err = generateSplitOllamaReport(auditCtx, ollamaURL, analysisModel, model)
+		} else {
+			report, inputTokens, outputTokens, err = generateOllamaReport(auditCtx, ollamaURL, model)
+		}
 	default:
 		_ = dbUpdateAuditDone(db, id, generateTemplateReport(auditCtx), 0, 0)
 		return

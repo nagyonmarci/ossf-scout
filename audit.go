@@ -22,10 +22,11 @@ type auditMeta struct {
 }
 
 type auditCICD struct {
-	UnpinnedActions string `json:"unpinnedActions"`
-	Zizmor          string `json:"zizmor"`
-	Actionlint      string `json:"actionlint"`
-	WorkflowList    string `json:"workflowList"`
+	UnpinnedActions  string `json:"unpinnedActions"`
+	Zizmor           string `json:"zizmor"`
+	Actionlint       string `json:"actionlint"`
+	WorkflowList     string `json:"workflowList"`
+	WorkflowContents string `json:"workflowContents"`
 }
 
 type auditCode struct {
@@ -86,10 +87,13 @@ type auditIaC struct {
 }
 
 type auditKeyFiles struct {
-	EntryPoint       string `json:"entryPoint"`
-	AuthMiddleware   string `json:"authMiddleware"`
-	PermissionSystem string `json:"permissionSystem"`
-	SecurityConfig   string `json:"securityConfig"`
+	EntryPoint        string `json:"entryPoint"`
+	AuthMiddleware    string `json:"authMiddleware"`
+	PermissionSystem  string `json:"permissionSystem"`
+	SecurityConfig    string `json:"securityConfig"`
+	StartupValidation string `json:"startupValidation"`
+	ErrorHandler      string `json:"errorHandler"`
+	HelmetConfig      string `json:"helmetConfig"`
 }
 
 type auditPolicy struct {
@@ -187,6 +191,8 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 				"actionlint -format '{{range $e := .}}{{$e.Filepath}}:{{$e.Line}}: [{{$e.Kind}}] {{$e.Message}}\n{{end}}' .github/workflows/*.yml 2>&1 | head -100 || echo 'actionlint not installed — skipped'"),
 			WorkflowList: shIn(tmpDir, "(none)",
 				"ls .github/workflows/ 2>/dev/null || echo '(none)'"),
+			WorkflowContents: shIn(tmpDir, "(none)",
+				"for f in $(find .github/workflows/ -name '*.yml' | xargs grep -l 'codeql\\|trivy\\|scorecard\\|dependency' 2>/dev/null | head -5); do echo \"=== $f ===\"; cat \"$f\"; echo; done 2>/dev/null || echo '(none)'"),
 		},
 		Code: auditCode{
 			EvalUsage: shIn(tmpDir, "none",
@@ -227,6 +233,12 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 				"find . -not -path '*/node_modules/*' -not -path '*test*' -name '*.ts' | xargs grep -l 'permission\\|authorize\\|rbac\\|\\bACL\\b' 2>/dev/null | head -2 | xargs -I{} sh -c 'echo \"=== {} ===\"; head -150 \"{}\"' 2>/dev/null || echo '(not found)'"),
 			SecurityConfig: shIn(tmpDir, "(not found)",
 				"grep -rn 'helmet\\|cors(\\|session(\\|cookieParser' --include='*.ts' . | grep -v node_modules | head -30 || echo '(not found)'"),
+			StartupValidation: shIn(tmpDir, "(not found)",
+				"find . -not -path '*/node_modules/*' -not -path '*test*' -name '*.ts' | xargs grep -l 'process\\.exit\\|logger\\.warn\\|logger\\.error' 2>/dev/null | xargs grep -l 'SECRET\\|NODE_ENV\\|env\\[' 2>/dev/null | head -2 | xargs -I{} sh -c 'echo \"=== {} ===\"; head -200 \"{}\"' 2>/dev/null || echo '(not found)'"),
+			ErrorHandler: shIn(tmpDir, "(not found)",
+				"find . -not -path '*/node_modules/*' -not -path '*test*' -name '*.ts' | xargs grep -l 'error.*handler\\|ErrorHandler\\|err.*Request.*Response' 2>/dev/null | head -2 | xargs -I{} sh -c 'echo \"=== {} ===\"; head -150 \"{}\"' 2>/dev/null || echo '(not found)'"),
+			HelmetConfig: shIn(tmpDir, "(not found)",
+				"find . -not -path '*/node_modules/*' -not -path '*test*' -name '*.ts' | xargs grep -l 'helmet(' 2>/dev/null | head -2 | xargs -I{} sh -c 'echo \"=== {} ===\"; grep -n -A 40 \"helmet(\" \"{}\"' 2>/dev/null || echo '(not found)'"),
 		},
 		Infra: auditInfra{
 			HelmLint: shIn(tmpDir, "helm not installed — skipped",
@@ -424,7 +436,16 @@ Produce the following sections in order. Do not omit any.
 		`For IaC: synthesise Checkov and Trivy findings, flag unencrypted storage / overly-permissive IAM / missing network policies. `+
 		`For Policy as Code: assess OPA/Kyverno coverage gaps — what admission controls are missing. `+
 		`For SLSA / Supply Chain: determine the current SLSA level (L0–L3) based on the evidence, `+
-		`state exactly what is needed to reach the next level, and flag any unsigned artifacts or missing provenance.`,
+		`state exactly what is needed to reach the next level, and flag any unsigned artifacts or missing provenance. `+
+		`For CI/CD gate enforcement: check cicd.workflowContents for each security workflow (codeql, trivy, scorecard). `+
+		`If any lacks an 'on: pull_request' trigger, flag as High — the scan is scheduled-only and does not block merges. `+
+		`For startup validation: check keyFiles.startupValidation for advisory-only (logger.warn without process.exit) `+
+		`enforcement of critical config (SECRET, tokens, signing keys). If production can start with insecure config `+
+		`without hard-failing, flag as High — misconfiguration silently reaches production. `+
+		`For error handling: check keyFiles.errorHandler for stack trace or internal error details in production responses `+
+		`(res.json(err) / err.stack exposure without NODE_ENV guard). Flag as Medium. `+
+		`For HTTP security headers: use keyFiles.helmetConfig to assess CSP directives, HSTS enforcement, and `+
+		`X-Powered-By suppression with full context — distinguish deliberate upstream defaults from oversights.`,
 		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, string(ctxJSON))
 }
 
@@ -506,6 +527,12 @@ func generateTemplateReport(ctx *auditContext) string {
 	w("")
 	w("```")
 	w("%s", ctx.CICD.Zizmor)
+	w("```")
+	w("")
+	w("### Security workflow contents (codeql / trivy / scorecard triggers)")
+	w("")
+	w("```yaml")
+	w("%s", ctx.CICD.WorkflowContents)
 	w("```")
 	w("")
 	w("---")
@@ -622,6 +649,24 @@ func generateTemplateReport(ctx *auditContext) string {
 	w("")
 	w("```")
 	w("%s", ctx.KeyFiles.SecurityConfig)
+	w("```")
+	w("")
+	w("### Startup validation (SECRET / env enforcement)")
+	w("")
+	w("```typescript")
+	w("%s", ctx.KeyFiles.StartupValidation)
+	w("```")
+	w("")
+	w("### Error handler")
+	w("")
+	w("```typescript")
+	w("%s", ctx.KeyFiles.ErrorHandler)
+	w("```")
+	w("")
+	w("### Helmet config")
+	w("")
+	w("```typescript")
+	w("%s", ctx.KeyFiles.HelmetConfig)
 	w("```")
 	w("")
 	w("---")

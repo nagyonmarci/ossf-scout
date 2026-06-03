@@ -60,14 +60,46 @@ type auditGitHub struct {
 	SecurityAlerts string      `json:"securityAlerts"`
 }
 
+type auditSecrets struct {
+	Gitleaks          string `json:"gitleaks"`
+	PrivateKeyHeaders string `json:"privateKeyHeaders"`
+	EnvFiles          string `json:"envFiles"`
+	TokenPatterns     string `json:"tokenPatterns"`
+}
+
+type auditIaC struct {
+	TerraformFiles string `json:"terraformFiles"`
+	Checkov        string `json:"checkov"`
+	KubeManifests  string `json:"kubeManifests"`
+	KubeLinter     string `json:"kubeLinter"`
+}
+
+type auditPolicy struct {
+	OPAFiles     string `json:"opaFiles"`
+	KyvernoFiles string `json:"kyvernoFiles"`
+	FalcoRules   string `json:"falcoRules"`
+}
+
+type auditSLSA struct {
+	ProvenanceFiles string `json:"provenanceFiles"`
+	SBOMFiles       string `json:"sbomFiles"`
+	CosignFiles     string `json:"cosignFiles"`
+	SLSAWorkflow    string `json:"slsaWorkflow"`
+	SignedCommit    string `json:"signedCommit"`
+}
+
 type auditContext struct {
-	Meta         auditMeta   `json:"meta"`
-	CICD         auditCICD   `json:"cicd"`
-	Code         auditCode   `json:"code"`
-	Infra        auditInfra  `json:"infra"`
-	Dependencies auditDeps   `json:"dependencies"`
-	Git          auditGit    `json:"git"`
-	GitHub       auditGitHub `json:"github"`
+	Meta         auditMeta    `json:"meta"`
+	CICD         auditCICD    `json:"cicd"`
+	Code         auditCode    `json:"code"`
+	Infra        auditInfra   `json:"infra"`
+	Dependencies auditDeps    `json:"dependencies"`
+	Git          auditGit     `json:"git"`
+	GitHub       auditGitHub  `json:"github"`
+	Secrets      auditSecrets `json:"secrets"`
+	IaC          auditIaC     `json:"iac"`
+	Policy       auditPolicy  `json:"policy"`
+	SLSA         auditSLSA    `json:"slsa"`
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -166,6 +198,50 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 			RecentlyChangedFiles: shIn(tmpDir, "(unavailable)",
 				"git diff HEAD~10..HEAD --name-only 2>/dev/null | head -60 || echo '(unavailable)'"),
 		},
+	}
+
+	ctx.Secrets = auditSecrets{
+		Gitleaks: shIn(tmpDir, "gitleaks not installed — skipped",
+			"gitleaks detect --source . --no-git --report-format json 2>&1 | head -200 || echo 'gitleaks not installed — skipped'"),
+		PrivateKeyHeaders: shIn(tmpDir, "none",
+			"grep -rn '-----BEGIN.*PRIVATE KEY-----' . --include='*.pem' --include='*.key' --include='*.env' | grep -v node_modules | head -20 || echo 'none'"),
+		EnvFiles: shIn(tmpDir, "(none found)",
+			"find . -name '.env*' -not -path '*/node_modules/*' | head -5 | xargs grep -v '^#' 2>/dev/null | head -50 || echo '(none found)'"),
+		TokenPatterns: shIn(tmpDir, "none",
+			`grep -rEn "AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+" . | grep -v node_modules | grep -v '\.git' | head -20 || echo 'none'`),
+	}
+
+	ctx.IaC = auditIaC{
+		TerraformFiles: shIn(tmpDir, "(none found)",
+			"find . -name '*.tf' -not -path '*/node_modules/*' | head -20 || echo '(none found)'"),
+		Checkov: shIn(tmpDir, "checkov not installed — skipped",
+			"checkov -d . --quiet --compact --output json 2>&1 | head -300 || echo 'checkov not installed — skipped'"),
+		KubeManifests: shIn(tmpDir, "(none found)",
+			"grep -rl 'kind:' --include='*.yaml' --include='*.yml' . | grep -v node_modules | head -20 || echo '(none found)'"),
+		KubeLinter: shIn(tmpDir, "kube-linter not installed — skipped",
+			"kube-linter lint . 2>&1 | head -100 || echo 'kube-linter not installed — skipped'"),
+	}
+
+	ctx.Policy = auditPolicy{
+		OPAFiles: shIn(tmpDir, "(none found)",
+			"find . -name '*.rego' -not -path '*/node_modules/*' | head -10 || echo '(none found)'"),
+		KyvernoFiles: shIn(tmpDir, "(none found)",
+			"grep -rl 'kind: ClusterPolicy\\|kind: Policy' --include='*.yaml' . | grep -v node_modules | head -10 || echo '(none found)'"),
+		FalcoRules: shIn(tmpDir, "(none found)",
+			"grep -rl 'rule:' --include='*.yaml' . | xargs grep -l 'condition:\\|output:' 2>/dev/null | head -10 || echo '(none found)'"),
+	}
+
+	ctx.SLSA = auditSLSA{
+		ProvenanceFiles: shIn(tmpDir, "(none found)",
+			"find . -name '*.intoto.jsonl' -o -name 'provenance.json' | head -5 || echo '(none found)'"),
+		SBOMFiles: shIn(tmpDir, "(none found)",
+			"find . \\( -name '*.spdx' -o -name '*.spdx.json' -o -name '*.cyclonedx.json' -o -name 'sbom*.json' \\) | head -5 || echo '(none found)'"),
+		CosignFiles: shIn(tmpDir, "(none found)",
+			"find . -name 'cosign.pub' -o -name '*.pem' | grep -v node_modules | head -5 || echo '(none found)'"),
+		SLSAWorkflow: shIn(tmpDir, "none",
+			"grep -rn 'slsa-framework/slsa-github-generator\\|sigstore/cosign-action\\|actions/attest-build-provenance' .github/workflows/ 2>/dev/null || echo 'none'"),
+		SignedCommit: shIn(tmpDir, "(unavailable)",
+			"git log --show-signature -1 2>/dev/null | head -30 || echo '(unavailable)'"),
 	}
 
 	ctx.GitHub = fetchGitHubContext(repo, ghToken)
@@ -275,8 +351,14 @@ Produce the following sections in order. Do not omit any.
 10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate
 11. **Appendix: Full Application Security Assessment** — one H3 subsection per category `+
 		`(SQL Injection, Authentication, Authorisation, Deserialization, SSRF, XXE, Path Traversal, `+
-		`Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm). `+
-		`Each subsection must start with the methodology note before listing observations.`,
+		`Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm, `+
+		`Secrets / Credential Hygiene, IaC Security, Policy as Code, SLSA / Supply Chain). `+
+		`Each subsection must start with the methodology note before listing observations. `+
+		`For Secrets: assess Gitleaks output or grep results, estimate false positive rate, list any confirmed leaks as Critical findings. `+
+		`For IaC: synthesise Checkov findings, flag unencrypted storage / overly-permissive IAM / missing network policies. `+
+		`For Policy as Code: assess OPA/Kyverno coverage gaps — what admission controls are missing. `+
+		`For SLSA / Supply Chain: determine the current SLSA level (L0–L3) based on the evidence, `+
+		`state exactly what is needed to reach the next level, and flag any unsigned artifacts or missing provenance.`,
 		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, string(ctxJSON))
 }
 
@@ -482,6 +564,118 @@ func generateTemplateReport(ctx *auditContext) string {
 	w("")
 	w("```")
 	w("%s", ctx.GitHub.SecurityAlerts)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## Secrets Scanning")
+	w("")
+	w("### Gitleaks")
+	w("")
+	w("```")
+	w("%s", ctx.Secrets.Gitleaks)
+	w("```")
+	w("")
+	w("### Private key headers")
+	w("")
+	w("```")
+	w("%s", ctx.Secrets.PrivateKeyHeaders)
+	w("```")
+	w("")
+	w("### .env files")
+	w("")
+	w("```")
+	w("%s", ctx.Secrets.EnvFiles)
+	w("```")
+	w("")
+	w("### Token patterns (AWS/JWT/GH)")
+	w("")
+	w("```")
+	w("%s", ctx.Secrets.TokenPatterns)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## Infrastructure as Code (IaC)")
+	w("")
+	w("### Terraform files")
+	w("")
+	w("```")
+	w("%s", ctx.IaC.TerraformFiles)
+	w("```")
+	w("")
+	w("### Checkov")
+	w("")
+	w("```")
+	w("%s", ctx.IaC.Checkov)
+	w("```")
+	w("")
+	w("### Kubernetes manifests")
+	w("")
+	w("```")
+	w("%s", ctx.IaC.KubeManifests)
+	w("```")
+	w("")
+	w("### kube-linter")
+	w("")
+	w("```")
+	w("%s", ctx.IaC.KubeLinter)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## Policy as Code")
+	w("")
+	w("### OPA (.rego files)")
+	w("")
+	w("```")
+	w("%s", ctx.Policy.OPAFiles)
+	w("```")
+	w("")
+	w("### Kyverno policies")
+	w("")
+	w("```")
+	w("%s", ctx.Policy.KyvernoFiles)
+	w("```")
+	w("")
+	w("### Falco rules")
+	w("")
+	w("```")
+	w("%s", ctx.Policy.FalcoRules)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## SLSA / Supply Chain")
+	w("")
+	w("### Provenance files")
+	w("")
+	w("```")
+	w("%s", ctx.SLSA.ProvenanceFiles)
+	w("```")
+	w("")
+	w("### SBOM files")
+	w("")
+	w("```")
+	w("%s", ctx.SLSA.SBOMFiles)
+	w("```")
+	w("")
+	w("### Cosign / signing keys")
+	w("")
+	w("```")
+	w("%s", ctx.SLSA.CosignFiles)
+	w("```")
+	w("")
+	w("### SLSA / attestation workflow usage")
+	w("")
+	w("```")
+	w("%s", ctx.SLSA.SLSAWorkflow)
+	w("```")
+	w("")
+	w("### Signed commit (latest)")
+	w("")
+	w("```")
+	w("%s", ctx.SLSA.SignedCommit)
 	w("```")
 
 	return b.String()

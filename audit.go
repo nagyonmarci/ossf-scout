@@ -103,7 +103,7 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 	cloneURL := fmt.Sprintf("https://github.com/%s.git", repo)
 	cloneCmd := exec.Command("git", "clone", "--depth=50", "--quiet", cloneURL, tmpDir)
 	if out, err := cloneCmd.CombinedOutput(); err != nil {
-		os.RemoveAll(tmpDir)
+		os.RemoveAll(tmpDir) //nolint:errcheck
 		return nil, "", fmt.Errorf("git clone failed: %s", strings.TrimSpace(string(out)))
 	}
 
@@ -369,7 +369,7 @@ func runAudit(db *sql.DB, id, repo, ghToken, anthropicKey string) {
 		_ = dbUpdateAuditError(db, id, fmt.Sprintf("collect failed: %v", err))
 		return
 	}
-	defer os.RemoveAll(tmpDir)
+	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
 	report, inputTokens, outputTokens, err := generateReport(auditCtx, anthropicKey)
 	if err != nil {

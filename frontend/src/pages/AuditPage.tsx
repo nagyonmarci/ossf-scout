@@ -24,7 +24,7 @@ function costEstimate(model: string, inputTokens: number | null, outputTokens: n
 }
 
 function modelLabel(model: string): string {
-  return MODELS.find((x) => x.id === model)?.label ?? model || 'Snapshot';
+  return MODELS.find((x) => x.id === model)?.label ?? (model || 'Snapshot');
 }
 
 export default function AuditPage() {

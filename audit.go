@@ -63,13 +63,15 @@ type auditGit struct {
 }
 
 type auditGitHub struct {
-	OpenIssues     interface{} `json:"openIssues"`
-	OpenPRs        interface{} `json:"openPRs"`
-	SecurityAlerts string      `json:"securityAlerts"`
+	OpenIssues       interface{} `json:"openIssues"`
+	OpenPRs          interface{} `json:"openPRs"`
+	SecurityAlerts   string      `json:"securityAlerts"`
+	BranchProtection string      `json:"branchProtection"`
 }
 
 type auditSecrets struct {
 	Gitleaks          string `json:"gitleaks"`
+	TruffleHog        string `json:"truffleHog"`
 	PrivateKeyHeaders string `json:"privateKeyHeaders"`
 	EnvFiles          string `json:"envFiles"`
 	TokenPatterns     string `json:"tokenPatterns"`
@@ -246,6 +248,8 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 	ctx.Secrets = auditSecrets{
 		Gitleaks: shIn(tmpDir, "gitleaks not installed — skipped",
 			"gitleaks detect --source . --no-git --report-format json 2>&1 | head -200 || echo 'gitleaks not installed — skipped'"),
+		TruffleHog: shIn(tmpDir, "trufflehog not installed — skipped",
+			"trufflehog filesystem . --json --no-update 2>&1 | head -200 || echo 'trufflehog not installed — skipped'"),
 		PrivateKeyHeaders: shIn(tmpDir, "none",
 			"grep -rn '-----BEGIN.*PRIVATE KEY-----' . --include='*.pem' --include='*.key' --include='*.env' | grep -v node_modules | head -20 || echo 'none'"),
 		EnvFiles: shIn(tmpDir, "(none found)",
@@ -329,10 +333,14 @@ func fetchGitHubContext(repo, ghToken string) auditGitHub {
 		}
 	}
 
+	bp, _ := fetch(base + "/branches/main/protection")
+	bpJSON, _ := json.Marshal(bp)
+
 	return auditGitHub{
-		OpenIssues:     issues,
-		OpenPRs:        prs,
-		SecurityAlerts: alerts,
+		OpenIssues:       issues,
+		OpenPRs:          prs,
+		SecurityAlerts:   alerts,
+		BranchProtection: string(bpJSON),
 	}
 }
 
@@ -693,6 +701,12 @@ func generateTemplateReport(ctx *auditContext) string {
 	w("%s", ctx.GitHub.SecurityAlerts)
 	w("```")
 	w("")
+	w("### Branch protection (main)")
+	w("")
+	w("```json")
+	w("%s", ctx.GitHub.BranchProtection)
+	w("```")
+	w("")
 	w("---")
 	w("")
 	w("## Secrets Scanning")
@@ -701,6 +715,12 @@ func generateTemplateReport(ctx *auditContext) string {
 	w("")
 	w("```")
 	w("%s", ctx.Secrets.Gitleaks)
+	w("```")
+	w("")
+	w("### TruffleHog")
+	w("")
+	w("```")
+	w("%s", ctx.Secrets.TruffleHog)
 	w("```")
 	w("")
 	w("### Private key headers")

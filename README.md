@@ -79,7 +79,33 @@ go run . -serve
 # Navigate to http://localhost:7878 → Audit tab
 ```
 
-Enter `owner/repo` (e.g. `directus/directus`), optionally a GitHub token for secret-scanning alerts, then click **Run Audit**. The server clones the repo, runs static analysis, and calls Claude Opus. The Markdown report appears in the browser when complete (~1–3 min).
+Enter `owner/repo` (e.g. `directus/directus`), optionally a GitHub token for secret-scanning alerts, then click **Run Audit**. The server clones the repo, runs static analysis, and calls Claude Opus. The Markdown report appears in the browser when complete (~1–3 min) and can be downloaded as a `.md` file.
+
+**What it collects**
+
+| Category | Checks |
+|----------|--------|
+| CI/CD | Unpinned GitHub Actions (`uses: action@vX` tags), `zizmor` workflow analysis (if installed), workflow file list |
+| Code | `eval()` usage, `Math.random()` for security, raw SQL calls, `X-Powered-By` header leakage, hardcoded secret hints, weak crypto (`md5`/`sha1`), unguarded `process.exit` / `os.Exit` |
+| Infrastructure | Helm lint, Helm `secret.yaml` templates, Helm `values.yaml`, `Dockerfile` |
+| Dependencies | `pnpm audit` / `npm audit` JSON output, workspace `overrides` |
+| Git history | Last 30 commits, files changed in the last 10 commits |
+| GitHub API | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts (requires token + `security_events` scope) |
+
+**Report structure**
+
+The generated Markdown document follows a fixed structure:
+
+1. Metadata table — date, repo, commit, auditor, status
+2. Scope & Methodology
+3. Findings Summary — table with ID, Priority (P0–P2), CVSS Severity, OWASP 2021 category
+4. Per-finding sections — Root Cause · Impact Chain · Fix · Verification shell commands
+5. Open GitHub Issues & PRs — security-relevant items with risk assessment
+6. Remediation Status table & Verification Checklist
+7. Shift-left guardrails — maps each finding to an automated CI gate
+8. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm
+
+**Cost:** ~$0.50–$1.50 per run (Claude Opus input/output token counts are shown in the audit history table).
 
 ---
 

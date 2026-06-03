@@ -5,6 +5,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Audit tab — AI-powered DevSecOps report for any public GitHub repo (Claude Opus, static analysis, Markdown output); Anthropic API key configurable server-side or per-audit in the UI
+
 ## [0.2.0] - 2026-06-01
 
 ### Added

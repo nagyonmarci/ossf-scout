@@ -152,6 +152,9 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 	}
 
 	cloneURL := fmt.Sprintf("https://github.com/%s.git", repo)
+	if ghToken != "" {
+		cloneURL = fmt.Sprintf("https://x-access-token:%s@github.com/%s.git", ghToken, repo)
+	}
 	cloneCmd := exec.Command("git", "clone", "--depth=50", cloneURL, tmpDir)
 	cloneCmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if out, err := cloneCmd.CombinedOutput(); err != nil {
@@ -165,6 +168,11 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 
 	ref := shIn(tmpDir, "unknown", "git rev-parse --short HEAD")
 
+	zizmorCmd := "zizmor --no-online --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'"
+	if ghToken != "" {
+		zizmorCmd = fmt.Sprintf("zizmor --github-token %s --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'", ghToken)
+	}
+
 	ctx := &auditContext{
 		Meta: auditMeta{
 			Date: time.Now().UTC().Format(time.RFC3339),
@@ -174,8 +182,7 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 		CICD: auditCICD{
 			UnpinnedActions: shIn(tmpDir, "none",
 				"grep -rn 'uses:.*@v[0-9]' .github/workflows/ 2>/dev/null || echo 'none'"),
-			Zizmor: shIn(tmpDir, "zizmor not installed — skipped",
-				"zizmor --format json .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'"),
+			Zizmor: shIn(tmpDir, "zizmor not installed — skipped", zizmorCmd),
 			Actionlint: shIn(tmpDir, "actionlint not installed — skipped",
 				"actionlint -format '{{range $e := .}}{{$e.Filepath}}:{{$e.Line}}: [{{$e.Kind}}] {{$e.Message}}\n{{end}}' .github/workflows/*.yml 2>&1 | head -100 || echo 'actionlint not installed — skipped'"),
 			WorkflowList: shIn(tmpDir, "(none)",
@@ -232,8 +239,8 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 				"cat Dockerfile 2>/dev/null || echo '(not found)'"),
 		},
 		Dependencies: auditDeps{
-			PnpmAudit: shIn(tmpDir, "pnpm not available — skipped",
-				"pnpm audit --json 2>&1 | head -300 || npm audit --json 2>&1 | head -300 || echo 'no package manager available'"),
+			PnpmAudit: shIn(tmpDir, "no package manager available",
+				"npm audit --json 2>&1 | head -300 || pnpm audit --json 2>&1 | head -300 || echo 'no package manager available'"),
 			WorkspaceOverrides: shIn(tmpDir, "none",
 				"grep -A 40 '^overrides:' pnpm-workspace.yaml 2>/dev/null || echo 'none'"),
 		},

@@ -23,7 +23,7 @@ Available as a **CLI tool** or a **web server** with a browser UI and scan histo
 - **Open issues count** — from GitHub Search API (no extra token scopes)
 - **Notifications** — in-app toast + browser Notification API on scan completion
 - **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
-- **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, and generates a formal DevSecOps report; choose Opus 4 / Sonnet 4 / Haiku 4 or run for free without an API key (static data snapshot)
+- **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, generates a formal DevSecOps report; choose Anthropic (Opus 4 / Sonnet 4 / Haiku 4), a local **Ollama** model, or run for free as a static data snapshot
 
 ---
 
@@ -78,13 +78,30 @@ go run . -serve
 # Navigate to http://localhost:7878 → Audit tab
 ```
 
-Enter `owner/repo` (e.g. `directus/directus`) and click **Run Audit**. No API key is required — without one a free static data snapshot is generated. To get a full AI-synthesised report, provide an Anthropic API key (per-audit in the UI or server-wide via `ANTHROPIC_API_KEY`) and select a model:
+Enter `owner/repo` (e.g. `directus/directus`), choose a provider, and click **Run Audit**:
+
+| Provider | Cost | Setup |
+|----------|------|-------|
+| **Static snapshot** | Free | No key needed — returns structured raw data |
+| **Anthropic** | ~$0.02–$1.50 | API key via UI or `ANTHROPIC_API_KEY` env |
+| **Ollama** | Free (local) | Ollama running locally; set URL + model name |
+
+**Anthropic models:**
 
 | Model | Typical cost |
 |-------|-------------|
 | Opus 4 (most capable) | ~$0.50–$1.50 |
 | Sonnet 4 | ~$0.10–$0.30 |
 | Haiku 4 (fastest / cheapest) | ~$0.02–$0.05 |
+
+**Ollama setup:**
+
+```bash
+ollama serve
+ollama pull llama3.2   # or qwen2.5, deepseek-r1:8b, etc.
+```
+
+In the UI set the Ollama base URL. When running via Docker, use `http://host.docker.internal:11434` instead of `localhost`. The `OLLAMA_BASE_URL` env var sets the server-side default (already pre-configured in `docker-compose.yml`).
 
 The Markdown report appears in the browser when complete (~1–3 min for AI, ~30s for snapshot) and can be downloaded as a `.md` file.
 

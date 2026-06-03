@@ -27,13 +27,18 @@ function modelLabel(model: string): string {
   return MODELS.find((x) => x.id === model)?.label ?? (model || 'Snapshot');
 }
 
+const LS = {
+  get: (k: string, fallback: string) => localStorage.getItem(k) ?? fallback,
+  set: (k: string, v: string) => localStorage.setItem(k, v),
+};
+
 export default function AuditPage() {
   const navigate = useNavigate();
   const [audits, setAudits] = useState<Audit[]>([]);
   const [repo, setRepo] = useState('');
-  const [token, setToken] = useState('');
-  const [anthropicKey, setAnthropicKey] = useState('');
-  const [model, setModel] = useState(MODELS[0].id);
+  const [token, setToken] = useState(() => LS.get('audit.ghToken', ''));
+  const [anthropicKey, setAnthropicKey] = useState(() => LS.get('audit.anthropicKey', ''));
+  const [model, setModel] = useState(() => LS.get('audit.model', MODELS[0].id));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -113,7 +118,7 @@ export default function AuditPage() {
               className="input"
               placeholder="sk-ant-…"
               value={anthropicKey}
-              onChange={(e) => setAnthropicKey(e.target.value)}
+              onChange={(e) => { setAnthropicKey(e.target.value); LS.set('audit.anthropicKey', e.target.value); }}
               style={{ marginTop: 4 }}
             />
           </label>
@@ -127,7 +132,7 @@ export default function AuditPage() {
             <select
               className="input"
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => { setModel(e.target.value); LS.set('audit.model', e.target.value); }}
               disabled={!anthropicKey}
               style={{ marginTop: 4 }}
             >
@@ -148,7 +153,7 @@ export default function AuditPage() {
               className="input"
               placeholder="ghp_…"
               value={token}
-              onChange={(e) => setToken(e.target.value)}
+              onChange={(e) => { setToken(e.target.value); LS.set('audit.ghToken', e.target.value); }}
               style={{ marginTop: 4 }}
             />
           </label>

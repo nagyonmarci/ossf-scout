@@ -83,18 +83,20 @@ Enter `owner/repo` (e.g. `directus/directus`), choose a provider, and click **Ru
 | Provider | Cost | Setup |
 |----------|------|-------|
 | **Static snapshot** | Free | No key needed — returns structured raw data |
-| **Anthropic** | ~$0.02–$1.50 | API key via UI or `ANTHROPIC_API_KEY` env |
+| **Anthropic** | ~$0.03–$0.50 | API key via UI or `ANTHROPIC_API_KEY` env |
 | **Ollama** | Free (local) | Ollama running locally; set URL + model name |
 
 **Anthropic models:**
 
 | Model | Single-stage | Split mode (Haiku analyses sections) |
 |-------|-------------|--------------------------------------|
-| Opus 4 (most capable) | ~$1–$4 | ~$0.50–$1.50 |
-| Sonnet 4 | ~$0.20–$1.50 | ~$0.10–$0.60 |
-| Haiku 4 (fastest / cheapest) | ~$0.05–$0.20 | — |
+| Opus 4 (most capable) | ~$0.20–$0.50 | ~$0.10–$0.25 |
+| Sonnet 4 | ~$0.05–$0.15 | ~$0.03–$0.08 |
+| Haiku 4 (fastest / cheapest) | ~$0.01–$0.05 | — |
 
-Enable **Split generation** in the UI to have Haiku summarise each evidence section first; the selected model then synthesises the final report. Recommended for large monorepos where single-stage input tokens dominate cost.
+The tool sends **Markdown context** to the AI instead of raw JSON — the Zizmor SARIF output (which can be 40 000+ lines) is replaced with a compact findings table, reducing input tokens by ~90% compared to the JSON approach. All AI paths (single-stage, split section analysis, split synthesis) use this format.
+
+Enable **Split generation** in the UI to have Haiku summarise each evidence section first; the selected model then synthesises the final report. Recommended for large monorepos where per-section analysis improves finding quality.
 
 **Ollama setup:**
 
@@ -140,7 +142,7 @@ The generated Markdown document follows a fixed structure:
 9. Threat Model (STRIDE) — table covering Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege across auth flows, CI/CD, supply chain, secrets, and API inputs
 10. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm
 
-**Cost:** Free without an API key (static snapshot). With a key, single-stage: Opus 4 ~$1–$4, Sonnet 4 ~$0.20–$1.50, Haiku 4 ~$0.05–$0.20 per run. Split mode roughly halves the cost for large repos. Token counts and estimated cost are shown in the audit history table.
+**Cost:** Free without an API key (static snapshot). With a key: Sonnet 4 ~$0.05–$0.15 per run (single-stage). Token counts and estimated cost are shown in the audit history table.
 
 ---
 

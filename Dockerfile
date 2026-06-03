@@ -27,27 +27,45 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go install github.com/zricethezav/gitleaks/v8@v8.21.2 && \
     go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 
-# Stage 3: download binary tools (trivy, helm, zizmor)
-FROM alpine:3.22@sha256:310c62b5e7ca5b08167e4384c68db0fd2905dd9c7493756d356e893909057601 AS bintools
-RUN apk add --no-cache curl tar
+# Stage 3: download arch-aware binary tools
+FROM --platform=$BUILDPLATFORM debian:12-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb AS bintools
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends curl tar ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN curl -sfL https://github.com/aquasecurity/trivy/releases/download/v0.71.0/trivy_0.71.0_Linux-64bit.tar.gz \
+# trivy
+RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "ARM64" || echo "64bit") && \
+    curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v0.71.0/trivy_0.71.0_Linux-${ARCH}.tar.gz" \
     | tar xz -C /usr/local/bin trivy
 
-RUN curl -sfL https://get.helm.sh/helm-v4.2.0-linux-amd64.tar.gz \
-    | tar xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
+# helm
+RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
+    curl -sfL "https://get.helm.sh/helm-v4.2.0-linux-${ARCH}.tar.gz" \
+    | tar xz --strip-components=1 -C /usr/local/bin "linux-${ARCH}/helm"
 
-RUN curl -sfL https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-x86_64-unknown-linux-gnu.tar.gz \
+# zizmor
+RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x86_64") && \
+    curl -sfL "https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-${ARCH}-unknown-linux-gnu.tar.gz" \
     | tar xz -C /usr/local/bin zizmor
 
-RUN curl -sfL -o /usr/local/bin/kube-linter \
-    https://github.com/stackrox/kube-linter/releases/download/v0.8.3/kube-linter-linux && \
+# kube-linter
+RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "_arm64" || echo "") && \
+    curl -sfL -o /usr/local/bin/kube-linter \
+    "https://github.com/stackrox/kube-linter/releases/download/v0.8.3/kube-linter-linux${ARCH}" && \
     chmod +x /usr/local/bin/kube-linter
 
-# Stage 4: runtime — all tools bundled
-FROM alpine:3.22@sha256:310c62b5e7ca5b08167e4384c68db0fd2905dd9c7493756d356e893909057601
-RUN apk add --no-cache git python3 py3-pip
+# trufflehog
+RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
+    curl -sfL "https://github.com/trufflesecurity/trufflehog/releases/download/v3.95.5/trufflehog_3.95.5_linux_${ARCH}.tar.gz" \
+    | tar xz -C /usr/local/bin trufflehog
+
+# Stage 4: runtime — all tools bundled, debian for glibc compatibility
+FROM debian:12-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git python3 python3-pip nodejs npm ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip3 install --no-cache-dir --break-system-packages checkov==3.2.532
+RUN npm install -g pnpm@latest
 
 WORKDIR /app
 COPY --from=builder /app/ossf-scout .
@@ -57,7 +75,8 @@ COPY --from=builder /go/bin/actionlint   /usr/local/bin/actionlint
 COPY --from=bintools /usr/local/bin/trivy      /usr/local/bin/trivy
 COPY --from=bintools /usr/local/bin/helm       /usr/local/bin/helm
 COPY --from=bintools /usr/local/bin/zizmor     /usr/local/bin/zizmor
-COPY --from=bintools /usr/local/bin/kube-linter /usr/local/bin/kube-linter
+COPY --from=bintools /usr/local/bin/kube-linter  /usr/local/bin/kube-linter
+COPY --from=bintools /usr/local/bin/trufflehog   /usr/local/bin/trufflehog
 
 EXPOSE 7878
 CMD ["./ossf-scout", "-serve"]

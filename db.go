@@ -36,6 +36,7 @@ type auditRow struct {
 	Repo         string     `json:"repo"`
 	Status       string     `json:"status"`
 	Model        string     `json:"model"`
+	Provider     string     `json:"provider"`
 	CreatedAt    time.Time  `json:"created_at"`
 	CompletedAt  *time.Time `json:"completed_at"`
 	Report       *string    `json:"report"`
@@ -115,6 +116,7 @@ CREATE TABLE IF NOT EXISTS audits (
     repo          TEXT    NOT NULL,
     status        TEXT    NOT NULL DEFAULT 'pending',
     model         TEXT    NOT NULL DEFAULT '',
+    provider      TEXT    NOT NULL DEFAULT '',
     created_at    DATETIME NOT NULL,
     completed_at  DATETIME,
     report        TEXT,
@@ -134,6 +136,7 @@ CREATE TABLE IF NOT EXISTS audits (
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN keyword TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN single_repo TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN model TEXT NOT NULL DEFAULT ''`)
+	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN provider TEXT NOT NULL DEFAULT ''`)
 	// Mark any scans that were running when the server last died
 	_, _ = db.Exec(`UPDATE scans SET status='error', error_msg='server restarted' WHERE status='running'`)
 	return db, nil
@@ -264,10 +267,10 @@ func dbDeleteScan(db *sql.DB, id int64) error {
 	return err
 }
 
-func dbCreateAudit(db *sql.DB, id, repo, model string) error {
+func dbCreateAudit(db *sql.DB, id, repo, model, provider string) error {
 	_, err := db.Exec(
-		`INSERT INTO audits (id, repo, status, model, created_at) VALUES (?, ?, 'pending', ?, ?)`,
-		id, repo, model, time.Now().UTC(),
+		`INSERT INTO audits (id, repo, status, model, provider, created_at) VALUES (?, ?, 'pending', ?, ?, ?)`,
+		id, repo, model, provider, time.Now().UTC(),
 	)
 	return err
 }
@@ -295,7 +298,7 @@ func dbUpdateAuditError(db *sql.DB, id, errMsg string) error {
 
 func dbListAudits(db *sql.DB) ([]auditRow, error) {
 	rows, err := db.Query(
-		`SELECT id, repo, status, model, created_at, completed_at, error, input_tokens, output_tokens
+		`SELECT id, repo, status, model, provider, created_at, completed_at, error, input_tokens, output_tokens
 		 FROM audits ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -305,7 +308,7 @@ func dbListAudits(db *sql.DB) ([]auditRow, error) {
 	var out []auditRow
 	for rows.Next() {
 		var a auditRow
-		if err := rows.Scan(&a.ID, &a.Repo, &a.Status, &a.Model, &a.CreatedAt,
+		if err := rows.Scan(&a.ID, &a.Repo, &a.Status, &a.Model, &a.Provider, &a.CreatedAt,
 			&a.CompletedAt, &a.Error, &a.InputTokens, &a.OutputTokens); err != nil {
 			return nil, err
 		}
@@ -317,9 +320,9 @@ func dbListAudits(db *sql.DB) ([]auditRow, error) {
 func dbGetAudit(db *sql.DB, id string) (*auditRow, error) {
 	var a auditRow
 	err := db.QueryRow(
-		`SELECT id, repo, status, model, created_at, completed_at, report, error, input_tokens, output_tokens
+		`SELECT id, repo, status, model, provider, created_at, completed_at, report, error, input_tokens, output_tokens
 		 FROM audits WHERE id=?`, id,
-	).Scan(&a.ID, &a.Repo, &a.Status, &a.Model, &a.CreatedAt,
+	).Scan(&a.ID, &a.Repo, &a.Status, &a.Model, &a.Provider, &a.CreatedAt,
 		&a.CompletedAt, &a.Report, &a.Error, &a.InputTokens, &a.OutputTokens)
 	if err != nil {
 		return nil, err

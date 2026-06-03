@@ -491,6 +491,72 @@ type claudeResponse struct {
 
 const defaultModel = "claude-opus-4-8"
 
+// ── Ollama API ────────────────────────────────────────────────────────────────
+
+type ollamaMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type ollamaRequest struct {
+	Model    string          `json:"model"`
+	Messages []ollamaMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
+}
+
+type ollamaResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage"`
+	Error *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+	} `json:"error,omitempty"`
+}
+
+func generateOllamaReport(ctx *auditContext, ollamaURL, model string) (report string, inputTokens, outputTokens int, err error) {
+	if ollamaURL == "" {
+		ollamaURL = "http://localhost:11434"
+	}
+	payload := ollamaRequest{
+		Model:  model,
+		Stream: false,
+		Messages: []ollamaMessage{
+			{Role: "system", Content: auditSystemPrompt},
+			{Role: "user", Content: buildUserPrompt(ctx)},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", ollamaURL+"/v1/chat/completions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 15 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, 0, fmt.Errorf("ollama request failed: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	var or_ ollamaResponse
+	if err := json.NewDecoder(resp.Body).Decode(&or_); err != nil {
+		return "", 0, 0, fmt.Errorf("ollama decode failed: %w", err)
+	}
+	if or_.Error != nil {
+		return "", 0, 0, fmt.Errorf("ollama error %s: %s", or_.Error.Type, or_.Error.Message)
+	}
+	if len(or_.Choices) == 0 || or_.Choices[0].Message.Content == "" {
+		return "", 0, 0, fmt.Errorf("ollama returned empty content")
+	}
+
+	return or_.Choices[0].Message.Content, or_.Usage.PromptTokens, or_.Usage.CompletionTokens, nil
+}
+
 // generateTemplateReport formats the collected context as a structured Markdown
 // snapshot without any AI synthesis. Used when no Anthropic API key is available.
 func generateTemplateReport(ctx *auditContext) string {
@@ -935,7 +1001,7 @@ func generateReport(ctx *auditContext, apiKey, model string) (report string, inp
 
 // ── Runner ────────────────────────────────────────────────────────────────────
 
-func runAudit(db *sql.DB, id, repo, ghToken, anthropicKey, model string) {
+func runAudit(db *sql.DB, id, repo, ghToken, provider, anthropicKey, ollamaURL, model string) {
 	_ = dbUpdateAuditRunning(db, id)
 
 	auditCtx, tmpDir, err := collectContext(repo, ghToken)
@@ -945,15 +1011,22 @@ func runAudit(db *sql.DB, id, repo, ghToken, anthropicKey, model string) {
 	}
 	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
-	if anthropicKey != "" {
-		report, inputTokens, outputTokens, err := generateReport(auditCtx, anthropicKey, model)
-		if err != nil {
-			_ = dbUpdateAuditError(db, id, fmt.Sprintf("generate failed: %v", err))
-			return
-		}
-		_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)
-	} else {
-		report := generateTemplateReport(auditCtx)
-		_ = dbUpdateAuditDone(db, id, report, 0, 0)
+	var report string
+	var inputTokens, outputTokens int
+
+	switch provider {
+	case "anthropic":
+		report, inputTokens, outputTokens, err = generateReport(auditCtx, anthropicKey, model)
+	case "ollama":
+		report, inputTokens, outputTokens, err = generateOllamaReport(auditCtx, ollamaURL, model)
+	default:
+		_ = dbUpdateAuditDone(db, id, generateTemplateReport(auditCtx), 0, 0)
+		return
 	}
+
+	if err != nil {
+		_ = dbUpdateAuditError(db, id, fmt.Sprintf("generate failed: %v", err))
+		return
+	}
+	_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)
 }

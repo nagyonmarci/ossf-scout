@@ -1652,32 +1652,41 @@ func callClaude(systemPrompt, userPrompt, apiKey, model string, maxTokens int) (
 		},
 	}
 
-	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
-	req.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
-
+	bodyBytes, _ := json.Marshal(payload)
 	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", 0, 0, fmt.Errorf("claude API request failed: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck
 
-	var cr claudeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
-		return "", 0, 0, fmt.Errorf("claude API decode failed: %w", err)
-	}
-	if cr.Error != nil {
-		return "", 0, 0, fmt.Errorf("claude API error %s: %s", cr.Error.Type, cr.Error.Message)
-	}
-	if len(cr.Content) == 0 {
-		return "", 0, 0, fmt.Errorf("claude API returned empty content")
-	}
+	for attempt := 0; attempt < 2; attempt++ {
+		req, _ := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(bodyBytes))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("x-api-key", apiKey)
+		req.Header.Set("anthropic-version", "2023-06-01")
+		req.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
 
-	return cr.Content[0].Text, cr.Usage.InputTokens, cr.Usage.OutputTokens, nil
+		resp, rerr := client.Do(req)
+		if rerr != nil {
+			return "", 0, 0, fmt.Errorf("claude API request failed: %w", rerr)
+		}
+
+		var cr claudeResponse
+		decErr := json.NewDecoder(resp.Body).Decode(&cr)
+		resp.Body.Close() //nolint:errcheck
+		if decErr != nil {
+			return "", 0, 0, fmt.Errorf("claude API decode failed: %w", decErr)
+		}
+
+		if cr.Error != nil {
+			if cr.Error.Type == "rate_limit_error" && attempt == 0 {
+				time.Sleep(65 * time.Second)
+				continue
+			}
+			return "", 0, 0, fmt.Errorf("claude API error %s: %s", cr.Error.Type, cr.Error.Message)
+		}
+		if len(cr.Content) == 0 {
+			return "", 0, 0, fmt.Errorf("claude API returned empty content")
+		}
+		return cr.Content[0].Text, cr.Usage.InputTokens, cr.Usage.OutputTokens, nil
+	}
+	return "", 0, 0, fmt.Errorf("claude API rate limit not resolved after retry")
 }
 
 func generateReport(ctx *auditContext, apiKey, model string) (report string, inputTokens, outputTokens int, err error) {

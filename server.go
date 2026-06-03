@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"embed"
 
@@ -37,6 +38,7 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("POST /api/audits/{id}/generate", handleGenerateAudit(db))
 	mux.HandleFunc("GET /api/audits", handleListAudits(db))
 	mux.HandleFunc("GET /api/audits/{id}", handleGetAudit(db))
+	mux.HandleFunc("GET /api/audits/{id}/context.md", handleDownloadAuditContext(db))
 	mux.HandleFunc("DELETE /api/audits/{id}", handleDeleteAudit(db))
 
 	sub, err := fs.Sub(staticFiles, "frontend/dist")
@@ -338,6 +340,29 @@ func handleGetAudit(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, a)
+	}
+}
+
+func handleDownloadAuditContext(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		contextJSON, err := dbGetAuditContext(db, id)
+		if err != nil || contextJSON == nil {
+			http.Error(w, "context not found", http.StatusNotFound)
+			return
+		}
+		var ctx auditContext
+		if err := json.Unmarshal([]byte(*contextJSON), &ctx); err != nil {
+			http.Error(w, "invalid context", http.StatusInternalServerError)
+			return
+		}
+		md := buildContextMarkdown(&ctx)
+		filename := fmt.Sprintf("context-%s-%s.md",
+			strings.ReplaceAll(ctx.Meta.Repo, "/", "-"),
+			ctx.Meta.Date[:10])
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+		fmt.Fprint(w, md)
 	}
 }
 

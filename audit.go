@@ -101,10 +101,15 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 	}
 
 	cloneURL := fmt.Sprintf("https://github.com/%s.git", repo)
-	cloneCmd := exec.Command("git", "clone", "--depth=50", "--quiet", cloneURL, tmpDir)
+	cloneCmd := exec.Command("git", "clone", "--depth=50", cloneURL, tmpDir)
+	cloneCmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if out, err := cloneCmd.CombinedOutput(); err != nil {
 		os.RemoveAll(tmpDir) //nolint:errcheck
-		return nil, "", fmt.Errorf("git clone failed: %s", strings.TrimSpace(string(out)))
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return nil, "", fmt.Errorf("git clone failed: %s", msg)
 	}
 
 	ref := shIn(tmpDir, "unknown", "git rev-parse --short HEAD")

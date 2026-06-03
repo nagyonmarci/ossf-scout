@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, Audit, AuditStatus } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
@@ -40,8 +40,9 @@ const LS = {
 
 export default function AuditPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [audits, setAudits] = useState<Audit[]>([]);
-  const [repo, setRepo] = useState('');
+  const [repo, setRepo] = useState(() => searchParams.get('repo') ?? '');
   const [token, setToken] = useState(() => LS.get('audit.ghToken', ''));
   const [provider, setProvider] = useState(() => LS.get('audit.provider', ''));
   const [anthropicKey, setAnthropicKey] = useState(() => LS.get('audit.anthropicKey', ''));

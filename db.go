@@ -296,6 +296,14 @@ func dbUpdateAuditError(db *sql.DB, id, errMsg string) error {
 	return err
 }
 
+func dbUpdateAuditErrorWithReport(db *sql.DB, id, errMsg, report string) error {
+	_, err := db.Exec(
+		`UPDATE audits SET status='error', completed_at=?, error=?, report=? WHERE id=?`,
+		time.Now().UTC(), errMsg, report, id,
+	)
+	return err
+}
+
 func dbListAudits(db *sql.DB) ([]auditRow, error) {
 	rows, err := db.Query(
 		`SELECT id, repo, status, model, provider, created_at, completed_at, error, input_tokens, output_tokens

@@ -1025,7 +1025,10 @@ func runAudit(db *sql.DB, id, repo, ghToken, provider, anthropicKey, ollamaURL, 
 	}
 
 	if err != nil {
-		_ = dbUpdateAuditError(db, id, fmt.Sprintf("generate failed: %v", err))
+		// Save the static snapshot as fallback so the user has downloadable data
+		_ = dbUpdateAuditErrorWithReport(db, id,
+			fmt.Sprintf("generate failed: %v", err),
+			generateTemplateReport(auditCtx))
 		return
 	}
 	_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)

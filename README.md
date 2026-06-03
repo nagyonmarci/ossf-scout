@@ -24,6 +24,7 @@ Available as a **CLI tool** or a **web server** with a browser UI and scan histo
 - **Notifications** — in-app toast + browser Notification API on scan completion
 - **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
 - **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, generates a formal DevSecOps report; choose Anthropic (Opus 4 / Sonnet 4 / Haiku 4), a local **Ollama** model, or run for free as a static data snapshot
+- **Ground-truth claim verification** — after generation, every concrete claim (action pin SHA, `file:line`, `#PR`, CVSS vector and severity band) is checked against the collected evidence; the CVSS v3.1 base score is recomputed from the vector and the band label verified; unverifiable claims are listed in an appendix and the report is marked **DRAFT** until resolved
 
 ---
 
@@ -80,19 +81,19 @@ go run . -serve
 
 Enter `owner/repo` (e.g. `directus/directus`), choose a provider, and click **Run Audit**:
 
-| Provider | Cost | Setup |
-|----------|------|-------|
-| **Static snapshot** | Free | No key needed — returns structured raw data |
-| **Anthropic** | ~$0.03–$0.50 | API key via UI or `ANTHROPIC_API_KEY` env |
-| **Ollama** | Free (local) | Ollama running locally; set URL + model name |
+| Provider            | Cost         | Setup                                        |
+| ------------------- | ------------ | -------------------------------------------- |
+| **Static snapshot** | Free         | No key needed — returns structured raw data  |
+| **Anthropic**       | ~$0.03–$0.50 | API key via UI or `ANTHROPIC_API_KEY` env    |
+| **Ollama**          | Free (local) | Ollama running locally; set URL + model name |
 
 **Anthropic models:**
 
-| Model | Single-stage | Split mode (Haiku analyses sections) |
-|-------|-------------|--------------------------------------|
-| Opus 4 (most capable) | ~$0.20–$0.50 | ~$0.10–$0.25 |
-| Sonnet 4 | ~$0.05–$0.15 | ~$0.03–$0.08 |
-| Haiku 4 (fastest / cheapest) | ~$0.01–$0.05 | — |
+| Model                        | Single-stage | Split mode (Haiku analyses sections) |
+| ---------------------------- | ------------ | ------------------------------------ |
+| Opus 4 (most capable)        | ~$0.20–$0.50 | ~$0.10–$0.25                         |
+| Sonnet 4                     | ~$0.05–$0.15 | ~$0.03–$0.08                         |
+| Haiku 4 (fastest / cheapest) | ~$0.01–$0.05 | —                                    |
 
 The tool sends **Markdown context** to the AI instead of raw JSON — the Zizmor SARIF output (which can be 40 000+ lines) is replaced with a compact findings table, reducing input tokens by ~90% compared to the JSON approach. All AI paths (single-stage, split section analysis, split synthesis) use this format.
 
@@ -113,21 +114,37 @@ A **Download AI context** button is available for every audit (including static 
 
 **What it collects**
 
-| Category | Checks |
-|----------|--------|
-| CI/CD | Unpinned GitHub Actions, `zizmor` workflow analysis, `actionlint` workflow linting, workflow file list |
-| Code | `eval()`, `Math.random()`, raw SQL, `X-Powered-By`, hardcoded secrets, weak crypto, `process.exit`/`os.Exit`, SQL injection (`knex.raw`/`whereRaw`), SSRF (`fetch`/`axios`/`got`), path traversal, XXE, deserialization, rate limiting, CORS config |
-| Key files | Entry point (first 150 lines), auth middleware, permission system, security config (`helmet`/`cors`/`session`) |
-| Infrastructure | `helm lint`, Helm secret templates + values, `Dockerfile` |
-| Dependencies | `pnpm audit` / `npm audit` JSON, workspace `overrides` |
-| Git history | Last 30 commits, files changed in the last 10 commits |
-| GitHub API | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts, branch protection rules (requires token) |
-| Secrets | `gitleaks`, `trufflehog`, private key headers, `.env` file contents, AWS/JWT/GH token regex patterns |
-| IaC | Terraform file list, `checkov`, `trivy config`, Kubernetes manifest list, `kube-linter` |
-| Policy as Code | OPA `.rego` files, Kyverno `ClusterPolicy`/`Policy` YAMLs, Falco rule detection |
-| SLSA / Supply Chain | Provenance / SBOM files, cosign keys, SLSA GitHub Generator workflow usage, signed commit check |
+| Category            | Checks                                                                                                                                                                                                                                              |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CI/CD               | Unpinned GitHub Actions, resolved action SHAs (`git ls-remote`, up to 60 actions), `zizmor` workflow analysis, `actionlint` workflow linting, workflow file list                                                                                    |
+| Code                | `eval()`, `Math.random()`, raw SQL, `X-Powered-By`, hardcoded secrets, weak crypto, `process.exit`/`os.Exit`, SQL injection (`knex.raw`/`whereRaw`), SSRF (`fetch`/`axios`/`got`), path traversal, XXE, deserialization, rate limiting, CORS config |
+| Key files           | Entry point (first 150 lines), auth middleware, permission system, security config (`helmet`/`cors`/`session`)                                                                                                                                      |
+| Infrastructure      | `helm lint`, Helm secret templates + values, `Dockerfile`                                                                                                                                                                                           |
+| Dependencies        | `pnpm audit` / `npm audit` JSON, workspace `overrides`                                                                                                                                                                                              |
+| Git history         | Last 30 commits, files changed in the last 10 commits                                                                                                                                                                                               |
+| GitHub API          | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts, branch protection rules (requires token)                                                                                                                                       |
+| Secrets             | `gitleaks`, `trufflehog`, private key headers, `.env` file contents, AWS/JWT/GH token regex patterns                                                                                                                                                |
+| IaC                 | Terraform file list, `checkov`, `trivy config`, Kubernetes manifest list, `kube-linter`                                                                                                                                                             |
+| Policy as Code      | OPA `.rego` files, Kyverno `ClusterPolicy`/`Policy` YAMLs, Falco rule detection                                                                                                                                                                     |
+| SLSA / Supply Chain | Provenance / SBOM files, cosign keys, SLSA GitHub Generator workflow usage, signed commit check                                                                                                                                                     |
 
 All tools are **bundled in the Docker image** (amd64 + arm64) — no separate installation needed.
+
+**Ground-truth verification**
+
+After the AI generates the report, a post-processing pass checks every concrete claim against the evidence that was actually collected. Nothing here requires the live clone — it runs on the stored context.
+
+| Claim type                   | How it is verified                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Action pin SHA (`deadbeef…`) | Must appear in the `PinnedSuggestions` table (real `git ls-remote` output) — fabricated SHAs are flagged |
+| `file:line` reference        | Must appear verbatim in the collected grep output or key-file sections                                   |
+| `#PR` / `#issue` number      | Must appear in collected GitHub issues/PR data or recent commit messages                                 |
+| CVSS vector                  | Must parse as a valid CVSS v3.1 vector; base score recomputed using the official formula                 |
+| CVSS band label              | Recomputed score must match the stated band (Critical ≥ 9.0, High ≥ 7.0, Medium ≥ 4.0)                   |
+
+If any check fails, the finding is listed in the **Claim Verification** appendix and the report header is changed to `status: DRAFT`. A clean report shows `status: VERIFIED`.
+
+The severity rubric is also enforced at the prompt level: an unpinned action is rated **Medium** by default, rising to **High** only when the workflow has write permissions _and_ an attacker-influenced trigger (`pull_request_target`, `issue_comment`, `workflow_run` from a fork PR). A tag-pinning finding is never rated Critical or P0 on its own.
 
 **Report structure**
 
@@ -143,6 +160,7 @@ The generated Markdown document follows a fixed structure:
 8. Shift-left guardrails — maps each finding to an automated CI gate with a runnable GitHub Actions YAML snippet
 9. Threat Model (STRIDE) — table covering Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege across auth flows, CI/CD, supply chain, secrets, and API inputs
 10. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm
+11. Claim Verification — every SHA-40, `file:line`, `#PR`, and CVSS vector in the report is checked against collected evidence; the CVSS v3.1 base score is recomputed and the band label verified; unverifiable claims are listed here and the report status is set to **DRAFT**
 
 **Cost:** Free without an API key (static snapshot). With a key: Sonnet 4 ~$0.05–$0.15 per run (single-stage). Token counts and estimated cost are shown in the audit history table.
 
@@ -150,42 +168,42 @@ The generated Markdown document follows a fixed structure:
 
 ## CLI Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-lang` | _(any)_ | Filter by language (`go`, `python`, `java`, …) |
-| `-topic` | _(any)_ | Filter by GitHub topic (`llm`, `kubernetes`, …) |
-| `-keyword` | _(any)_ | Filter by keyword in repo name or description |
-| `-single-repo` | _(none)_ | Score a specific repo directly (`owner/repo`) |
-| `-min-stars` | `500` | Minimum GitHub star count |
-| `-max-score` | `5.0` | Maximum OpenSSF score to include (0–10) |
-| `-min-maintained` | `0` | Minimum Maintained check score (0 = disabled) |
-| `-limit` | `100` | Max repos to fetch from GitHub search |
-| `-workers` | `5` | Concurrent Scorecard API queries |
-| `-checks` | _(security set)_ | Comma-separated check names to highlight |
-| `-json` | `false` | Output as JSON instead of a table |
-| `-token` | `$GITHUB_TOKEN` | GitHub personal access token |
-| `-cli-fallback` | `false` | Use local `scorecard` CLI for repos not in the Scorecard database |
-| `-serve` | `false` | Start web server mode |
-| `-port` | `7878` | Port for web server mode |
-| `-db` | `ossf-scout.db` | SQLite database path (server mode) |
+| Flag              | Default          | Description                                                       |
+| ----------------- | ---------------- | ----------------------------------------------------------------- |
+| `-lang`           | _(any)_          | Filter by language (`go`, `python`, `java`, …)                    |
+| `-topic`          | _(any)_          | Filter by GitHub topic (`llm`, `kubernetes`, …)                   |
+| `-keyword`        | _(any)_          | Filter by keyword in repo name or description                     |
+| `-single-repo`    | _(none)_         | Score a specific repo directly (`owner/repo`)                     |
+| `-min-stars`      | `500`            | Minimum GitHub star count                                         |
+| `-max-score`      | `5.0`            | Maximum OpenSSF score to include (0–10)                           |
+| `-min-maintained` | `0`              | Minimum Maintained check score (0 = disabled)                     |
+| `-limit`          | `100`            | Max repos to fetch from GitHub search                             |
+| `-workers`        | `5`              | Concurrent Scorecard API queries                                  |
+| `-checks`         | _(security set)_ | Comma-separated check names to highlight                          |
+| `-json`           | `false`          | Output as JSON instead of a table                                 |
+| `-token`          | `$GITHUB_TOKEN`  | GitHub personal access token                                      |
+| `-cli-fallback`   | `false`          | Use local `scorecard` CLI for repos not in the Scorecard database |
+| `-serve`          | `false`          | Start web server mode                                             |
+| `-port`           | `7878`           | Port for web server mode                                          |
+| `-db`             | `ossf-scout.db`  | SQLite database path (server mode)                                |
 
 ---
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `GITHUB_TOKEN` | GitHub PAT. Without it, GitHub limits unauthenticated requests to 60/hour. |
+| Variable            | Description                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `GITHUB_TOKEN`      | GitHub PAT. Without it, GitHub limits unauthenticated requests to 60/hour.                                          |
 | `ANTHROPIC_API_KEY` | Anthropic API key for the Audit tab. Can also be provided per-audit in the web UI (overrides the server-level key). |
 
 The token can also be provided per-scan in the web UI (overrides the server-level token).
 
 ### Token scopes
 
-| Mode | Required scopes |
-|------|----------------|
-| Default (REST API via `api.securityscorecards.dev`) | None — any valid token is enough to raise the rate limit |
-| `-cli-fallback` (scorecard CLI) | Classic PAT with **`public_repo`** scope — needed for the `Branch-Protection` check (GraphQL query) |
+| Mode                                                | Required scopes                                                                                     |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Default (REST API via `api.securityscorecards.dev`) | None — any valid token is enough to raise the rate limit                                            |
+| `-cli-fallback` (scorecard CLI)                     | Classic PAT with **`public_repo`** scope — needed for the `Branch-Protection` check (GraphQL query) |
 
 To create a classic PAT: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → tick **`public_repo`** under _repo_.
 
@@ -230,21 +248,21 @@ Below is a running log of what we found, what we fixed, and what moved the needl
 
 Right after the initial release, we ran ossf-scout against itself. The [full results](https://securityscorecards.dev/viewer/?uri=github.com/nagyonmarci/ossf-scout) showed several checks at zero:
 
-| Check | Score | Reason |
-|-------|-------|--------|
-| Binary-Artifacts | 10 | ✓ |
-| Dangerous-Workflow | 10 | ✓ |
-| Dependency-Update-Tool | 10 | ✓ (Dependabot enabled) |
-| SAST | 10 | ✓ (CodeQL via GitHub Actions) |
-| Token-Permissions | 10 | ✓ |
-| Vulnerabilities | 9 | 1 open CVE |
-| Pinned-Dependencies | 6 | Dockerfile base images not pinned by digest |
-| Branch-Protection | **0** | No rules on `main` at all |
-| Code-Review | **0** | No PRs reviewed (solo project) |
-| License | **0** | No LICENSE file detected |
-| Security-Policy | **0** | No SECURITY.md |
-| Maintained | **0** | Repo < 90 days old (auto-0 by design) |
-| Fuzzing | **0** | No fuzz tests |
+| Check                  | Score | Reason                                      |
+| ---------------------- | ----- | ------------------------------------------- |
+| Binary-Artifacts       | 10    | ✓                                           |
+| Dangerous-Workflow     | 10    | ✓                                           |
+| Dependency-Update-Tool | 10    | ✓ (Dependabot enabled)                      |
+| SAST                   | 10    | ✓ (CodeQL via GitHub Actions)               |
+| Token-Permissions      | 10    | ✓                                           |
+| Vulnerabilities        | 9     | 1 open CVE                                  |
+| Pinned-Dependencies    | 6     | Dockerfile base images not pinned by digest |
+| Branch-Protection      | **0** | No rules on `main` at all                   |
+| Code-Review            | **0** | No PRs reviewed (solo project)              |
+| License                | **0** | No LICENSE file detected                    |
+| Security-Policy        | **0** | No SECURITY.md                              |
+| Maintained             | **0** | Repo < 90 days old (auto-0 by design)       |
+| Fuzzing                | **0** | No fuzz tests                               |
 
 Two problems were immediately visible beyond the check scores: the `Scorecard` CI workflow itself was **failing on every push** due to two incorrect action SHAs, so results weren't being published at all — and `main` had zero branch protection.
 
@@ -255,6 +273,7 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 **Problem:** The `ossf/scorecard-action` step used SHA `ff5dd892...` which did not correspond to its claimed `v2.4.0` tag. Separately, the `github/codeql-action/upload-sarif` step used SHA `4d6150cc...` which the Scorecard API's workflow-verification rejected as an "imposter commit" — it does not belong to that action.
 
 **Fix:** Corrected both SHAs to the verified commits for their respective tags:
+
 - `ossf/scorecard-action@v2.4.0` → `62b2cac7...`
 - `github/codeql-action/upload-sarif@v3.28.14` → `fc7e4a0f...`
 
@@ -267,6 +286,7 @@ Two problems were immediately visible beyond the check scores: the `Scorecard` C
 **Problem:** `main` had no branch protection rules. Anyone with write access could force-push or delete the branch, and no status checks were required before merging. This alone costs 3–8 points on the Branch-Protection check depending on tier.
 
 **Fix:** Enabled branch protection with:
+
 - Force-push **blocked**
 - Branch deletion **blocked**
 - Required status check: **`build`** (must pass before merge)
@@ -354,13 +374,13 @@ Two measured jumps after fixing the CI workflows and enabling branch protection:
 
 **Fix:** Combined bump in a single commit:
 
-| Package | Before | After |
-|---------|--------|-------|
-| `react` + `react-dom` | 18.3.1 | 19.2.6 |
-| `@types/react` + `@types/react-dom` | 18.x | 19.x |
-| `vite` | 6.0.7 | 8.0.16 |
-| `@vitejs/plugin-react` | 4.3.4 | 6.0.2 |
-| `typescript` | 5.6.3 | 6.0.3 |
+| Package                             | Before | After  |
+| ----------------------------------- | ------ | ------ |
+| `react` + `react-dom`               | 18.3.1 | 19.2.6 |
+| `@types/react` + `@types/react-dom` | 18.x   | 19.x   |
+| `vite`                              | 6.0.7  | 8.0.16 |
+| `@vitejs/plugin-react`              | 4.3.4  | 6.0.2  |
+| `typescript`                        | 5.6.3  | 6.0.3  |
 
 One code fix required: TypeScript 6 introduced `TS2882` for CSS side-effect imports — fixed by adding the standard Vite `src/vite-env.d.ts` (`/// <reference types="vite/client" />`).
 
@@ -415,6 +435,7 @@ Both ran 900k+ executions in 5 seconds each with no crashes found.
 **Why:** The Scorecard CII-Best-Practices check: in-progress badge = 2 points, passing badge = 5 points. Registered at bestpractices.dev (project ID: 13066).
 
 **Work done to close gaps:**
+
 - Added `CONTRIBUTING.md` — contribution process documented
 - Added `CHANGELOG.md` — release notes in Keep a Changelog format
 - Added unit tests (`workers_test.go`, `trending_test.go`) — 7% statement coverage, CI-verified
@@ -422,7 +443,7 @@ Both ran 900k+ executions in 5 seconds each with no crashes found.
 - Badge added to README
 
 **Self-attestation checklist** (to fill in on bestpractices.dev):
-license (Met), description (Met), interact/issues (Met), contribution_requirements (Met), report_tracker (Met), english (Met), maintained (Met), version_semver/tags (Met), build (Met), test_invocation (Met), warnings/go vet (Met), crypto_* (N/A), delivery_mitm (Met), static_analysis/CodeQL (Met), dynamic_analysis/fuzzing (Met)
+license (Met), description (Met), interact/issues (Met), contribution*requirements (Met), report_tracker (Met), english (Met), maintained (Met), version_semver/tags (Met), build (Met), test_invocation (Met), warnings/go vet (Met), crypto*\* (N/A), delivery_mitm (Met), static_analysis/CodeQL (Met), dynamic_analysis/fuzzing (Met)
 
 **Result (expected):** CII-Best-Practices: 0 → **2** (in-progress) → **5** (passing after self-attestation).
 

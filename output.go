@@ -10,7 +10,7 @@ import (
 func printTable(results []result) {
 	fmt.Printf("\n%-50s %6s %8s  %-40s  %s\n",
 		"REPOSITORY", "STARS", "SCORE", "WEAK CHECKS", "SCORECARD URL")
-	fmt.Println(strings.Repeat("─", 160))
+	fmt.Println(strings.Repeat("─", tableWidth))
 	for _, r := range results {
 		score := fmt.Sprintf("%.1f", r.Score)
 		if r.Score == -1 {

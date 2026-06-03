@@ -60,6 +60,14 @@ type scanResultRow struct {
 	RepoURL      string   `json:"repo_url"`
 }
 
+const (
+	scanColumns = `id, created_at, finished_at, status, error_msg,
+	        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword, single_repo,
+	        total_repos, result_count`
+	resultColumns = `id, scan_id, repo, stars, open_issues, score, language, description,
+	        weak_checks, scorecard_url, repo_url`
+)
+
 const schema = `
 CREATE TABLE IF NOT EXISTS scans (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,10 +212,7 @@ func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
 
 func dbListScans(db *sql.DB) ([]scanRow, error) {
 	rows, err := db.Query(
-		`SELECT id, created_at, finished_at, status, error_msg,
-		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword, single_repo,
-		        total_repos, result_count
-		 FROM scans ORDER BY id DESC`,
+		`SELECT ` + scanColumns + ` FROM scans ORDER BY id DESC`,
 	)
 	if err != nil {
 		return nil, err
@@ -218,10 +223,7 @@ func dbListScans(db *sql.DB) ([]scanRow, error) {
 
 func dbGetScan(db *sql.DB, id int64) (*scanRow, error) {
 	rows, err := db.Query(
-		`SELECT id, created_at, finished_at, status, error_msg,
-		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword, single_repo,
-		        total_repos, result_count
-		 FROM scans WHERE id=?`, id,
+		`SELECT `+scanColumns+` FROM scans WHERE id=?`, id,
 	)
 	if err != nil {
 		return nil, err
@@ -236,9 +238,7 @@ func dbGetScan(db *sql.DB, id int64) (*scanRow, error) {
 
 func dbGetResults(db *sql.DB, scanID int64) ([]scanResultRow, error) {
 	rows, err := db.Query(
-		`SELECT id, scan_id, repo, stars, open_issues, score, language, description,
-		        weak_checks, scorecard_url, repo_url
-		 FROM scan_results WHERE scan_id=? ORDER BY score ASC`,
+		`SELECT `+resultColumns+` FROM scan_results WHERE scan_id=? ORDER BY score ASC`,
 		scanID,
 	)
 	if err != nil {

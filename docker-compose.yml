@@ -10,4 +10,6 @@ services:
       - ./data:/app/data
     environment:
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     command: ["./ossf-scout", "-serve", "-port", "7878", "-db", "/app/data/ossf-scout.db"]

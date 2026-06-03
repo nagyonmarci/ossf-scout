@@ -101,9 +101,9 @@ ollama serve
 ollama pull llama3.2   # or qwen2.5, deepseek-r1:8b, etc.
 ```
 
-In the UI set the Ollama base URL. When running via Docker, use `http://host.docker.internal:11434` instead of `localhost`. The `OLLAMA_BASE_URL` env var sets the server-side default (already pre-configured in `docker-compose.yml`).
+In the UI set the Ollama base URL. When running via Docker, leave the URL field empty — the server default (`host.docker.internal:11434`) is pre-configured in `docker-compose.yml`. For native use set it to `http://localhost:11434`. If the model's context window is too small, the tool automatically retries with a compacted context.
 
-The Markdown report appears in the browser when complete (~1–3 min for AI, ~30s for snapshot) and can be downloaded as a `.md` file.
+The Markdown report appears in the browser when complete (~1–3 min for AI, ~30s for snapshot) and can be downloaded as a `.md` file. If AI generation fails, the static snapshot is saved as a fallback — a **Run with AI** button on the detail page lets you re-run the same repo with a different provider.
 
 **What it collects**
 

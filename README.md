@@ -109,6 +109,8 @@ In the UI set the Ollama base URL. When running via Docker, leave the URL field 
 
 The Markdown report appears in the browser when complete (~1–3 min for AI, ~30s for snapshot) and can be downloaded as a `.md` file. If AI generation fails, the static snapshot is saved as a fallback — a **Run with AI** button on the detail page lets you re-run the same repo with a different provider.
 
+A **Download AI context** button is available for every audit (including static snapshots) once the repo has been cloned and analysed. It downloads the compact Markdown that would be sent to the AI — useful for pasting into any LLM manually or for inspecting exactly what evidence was collected.
+
 **What it collects**
 
 | Category | Checks |

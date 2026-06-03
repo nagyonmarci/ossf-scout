@@ -65,7 +65,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git python3 python3-pip nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install --no-cache-dir --break-system-packages checkov==3.2.532
-RUN npm install -g pnpm@latest
+RUN npm install -g pnpm@8
 
 WORKDIR /app
 COPY --from=builder /app/ossf-scout .

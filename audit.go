@@ -520,6 +520,34 @@ type ollamaResponse struct {
 	} `json:"error,omitempty"`
 }
 
+// truncateField caps s at maxBytes and appends a note if truncated.
+func truncateField(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	return s[:maxBytes] + "\n... [truncated for Ollama context length]"
+}
+
+// compactForOllama returns a shallow copy of ctx with verbose tool outputs
+// truncated so the total JSON fits within typical Ollama context windows.
+func compactForOllama(ctx *auditContext) *auditContext {
+	c := *ctx
+	c.CICD.WorkflowContents = truncateField(ctx.CICD.WorkflowContents, 8_000)
+	c.CICD.Zizmor = truncateField(ctx.CICD.Zizmor, 3_000)
+	c.KeyFiles.AuthMiddleware = truncateField(ctx.KeyFiles.AuthMiddleware, 5_000)
+	c.KeyFiles.PermissionSystem = truncateField(ctx.KeyFiles.PermissionSystem, 3_000)
+	c.KeyFiles.StartupValidation = truncateField(ctx.KeyFiles.StartupValidation, 5_000)
+	c.KeyFiles.ErrorHandler = truncateField(ctx.KeyFiles.ErrorHandler, 3_000)
+	c.KeyFiles.HelmetConfig = truncateField(ctx.KeyFiles.HelmetConfig, 3_000)
+	c.Dependencies.PnpmAudit = truncateField(ctx.Dependencies.PnpmAudit, 3_000)
+	c.Secrets.Gitleaks = truncateField(ctx.Secrets.Gitleaks, 2_000)
+	c.Secrets.TruffleHog = truncateField(ctx.Secrets.TruffleHog, 2_000)
+	c.IaC.Checkov = truncateField(ctx.IaC.Checkov, 4_000)
+	c.IaC.Trivy = truncateField(ctx.IaC.Trivy, 3_000)
+	c.IaC.KubeLinter = truncateField(ctx.IaC.KubeLinter, 2_000)
+	return &c
+}
+
 func generateOllamaReport(ctx *auditContext, ollamaURL, model string) (report string, inputTokens, outputTokens int, err error) {
 	if ollamaURL == "" {
 		ollamaURL = "http://localhost:11434"
@@ -529,7 +557,7 @@ func generateOllamaReport(ctx *auditContext, ollamaURL, model string) (report st
 		Stream: false,
 		Messages: []ollamaMessage{
 			{Role: "system", Content: auditSystemPrompt},
-			{Role: "user", Content: buildUserPrompt(ctx)},
+			{Role: "user", Content: buildUserPrompt(compactForOllama(ctx))},
 		},
 	}
 	body, _ := json.Marshal(payload)

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -23,11 +25,14 @@ type auditMeta struct {
 }
 
 type auditCICD struct {
-	UnpinnedActions  string `json:"unpinnedActions"`
-	Zizmor           string `json:"zizmor"`
-	Actionlint       string `json:"actionlint"`
-	WorkflowList     string `json:"workflowList"`
-	WorkflowContents string `json:"workflowContents"`
+	UnpinnedActions string `json:"unpinnedActions"`
+	// PinnedSuggestions maps each unpinned action to its resolved commit SHA so the
+	// report writer (and the verifier) use ground-truth SHAs instead of invented ones.
+	PinnedSuggestions string `json:"pinnedSuggestions"`
+	Zizmor            string `json:"zizmor"`
+	Actionlint        string `json:"actionlint"`
+	WorkflowList      string `json:"workflowList"`
+	WorkflowContents  string `json:"workflowContents"`
 }
 
 type auditCode struct {
@@ -67,6 +72,8 @@ type auditGit struct {
 type auditGitHub struct {
 	OpenIssues       interface{} `json:"openIssues"`
 	OpenPRs          interface{} `json:"openPRs"`
+	IssuesStatus     string      `json:"issuesStatus"`
+	PRsStatus        string      `json:"prsStatus"`
 	SecurityAlerts   string      `json:"securityAlerts"`
 	BranchProtection string      `json:"branchProtection"`
 }
@@ -149,6 +156,105 @@ func shIn(dir, fallback, script string) string {
 }
 
 // ── Collect ───────────────────────────────────────────────────────────────────
+
+// usesLineRe parses a `grep -rn` line of an unpinned action use:
+//
+//	.github/workflows/ci.yml:42:      uses: actions/checkout@v4
+var usesLineRe = regexp.MustCompile(`^(\S+?):(\d+):.*\buses:\s*['"]?([\w.-]+/[\w./-]+)@(v[0-9][^\s'"#]*)`)
+
+func dedupeStrings(in []string) []string {
+	seen := map[string]bool{}
+	out := in[:0]
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// resolveTagSHA resolves owner/repo@tag to the commit SHA the tag points at,
+// dereferencing annotated tags. Returns "unresolved" on any failure.
+func resolveTagSHA(action, tag string) string {
+	parts := strings.Split(action, "/")
+	if len(parts) < 2 {
+		return "unresolved"
+	}
+	repo := parts[0] + "/" + parts[1]
+	cctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(cctx, "git", "ls-remote",
+		"https://github.com/"+repo+".git",
+		"refs/tags/"+tag, "refs/tags/"+tag+"^{}")
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	out, err := cmd.Output()
+	if err != nil {
+		return "unresolved"
+	}
+	var plain, deref string
+	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		f := strings.Fields(l)
+		if len(f) != 2 {
+			continue
+		}
+		if strings.HasSuffix(f[1], "^{}") {
+			deref = f[0]
+		} else {
+			plain = f[0]
+		}
+	}
+	if deref != "" {
+		return deref
+	}
+	if plain != "" {
+		return plain
+	}
+	return "unresolved"
+}
+
+// resolvePinnedActions turns the raw UnpinnedActions grep output into an
+// authoritative `action@tag -> SHA | locations` table. The resolved SHAs feed
+// both the report writer (real fix snippets) and the verifier (allow-set).
+func resolvePinnedActions(unpinned string) string {
+	t := strings.TrimSpace(unpinned)
+	if t == "" || t == "none" {
+		return "none"
+	}
+	type entry struct{ locs []string }
+	order := []string{}
+	seen := map[string]*entry{}
+	for _, line := range strings.Split(unpinned, "\n") {
+		m := usesLineRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		file, lineNo, action, tag := m[1], m[2], m[3], m[4]
+		key := action + "@" + tag
+		loc := file + ":" + lineNo
+		if e, ok := seen[key]; ok {
+			e.locs = append(e.locs, loc)
+			continue
+		}
+		seen[key] = &entry{locs: []string{loc}}
+		order = append(order, key)
+	}
+	if len(order) == 0 {
+		return "none"
+	}
+	const maxResolve = 60
+	var b strings.Builder
+	b.WriteString("# action@tag -> resolved commit SHA (authoritative; use in fixes) | used at\n")
+	for i, key := range order {
+		sha := "unresolved (resolve manually before citing)"
+		if i < maxResolve {
+			at := strings.SplitN(key, "@", 2)
+			sha = resolveTagSHA(at[0], at[1])
+		}
+		b.WriteString(fmt.Sprintf("%s -> %s | %s\n", key, sha, strings.Join(dedupeStrings(seen[key].locs), ", ")))
+	}
+	return b.String()
+}
 
 func collectContext(repo, ghToken string) (*auditContext, string, error) {
 	tmpDir, err := os.MkdirTemp("", "ossf-audit-*")
@@ -265,6 +371,8 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 		},
 	}
 
+	ctx.CICD.PinnedSuggestions = resolvePinnedActions(ctx.CICD.UnpinnedActions)
+
 	ctx.Secrets = auditSecrets{
 		Gitleaks: shIn(tmpDir, "gitleaks not installed — skipped",
 			"gitleaks detect --source . --no-git --report-format json 2>&1 | head -200 || echo 'gitleaks not installed — skipped'"),
@@ -338,8 +446,32 @@ func fetchGitHubContext(repo, ghToken string) auditGitHub {
 
 	base := "https://api.github.com/repos/" + repo
 
-	issues, _ := fetch(base + "/issues?state=open&per_page=50")
-	prs, _ := fetch(base + "/pulls?state=open&per_page=20")
+	// classify turns a decoded GitHub response into (data, status). A successful
+	// list endpoint returns a JSON array; a rate-limit or error returns an object
+	// with a "message" field. We keep data only when it is a genuine array, so the
+	// report writer never sees error JSON it could mistake for real issues/PRs.
+	classify := func(v interface{}, err error) (interface{}, string) {
+		if err != nil {
+			return nil, "unavailable: " + err.Error()
+		}
+		switch t := v.(type) {
+		case []interface{}:
+			return t, "ok"
+		case map[string]interface{}:
+			if msg, ok := t["message"].(string); ok {
+				if len(msg) > 120 {
+					msg = msg[:120]
+				}
+				return nil, "unavailable: " + msg
+			}
+		}
+		return nil, "unavailable: unexpected response"
+	}
+
+	issuesRaw, issuesErr := fetch(base + "/issues?state=open&per_page=50")
+	issues, issuesStatus := classify(issuesRaw, issuesErr)
+	prsRaw, prsErr := fetch(base + "/pulls?state=open&per_page=20")
+	prs, prsStatus := classify(prsRaw, prsErr)
 
 	alerts := "(no token or insufficient permissions)"
 	if ghToken != "" {
@@ -359,9 +491,32 @@ func fetchGitHubContext(repo, ghToken string) auditGitHub {
 	return auditGitHub{
 		OpenIssues:       issues,
 		OpenPRs:          prs,
+		IssuesStatus:     issuesStatus,
+		PRsStatus:        prsStatus,
 		SecurityAlerts:   alerts,
 		BranchProtection: string(bpJSON),
 	}
+}
+
+// ghListAvailable reports whether GitHub list data is genuine (not a rate-limit
+// or error). Legacy contexts saved before status tracking have an empty status
+// but may still hold a real array, so those are honoured too.
+func ghListAvailable(status string, data interface{}) bool {
+	if status == "ok" {
+		return true
+	}
+	if status == "" {
+		_, ok := data.([]interface{})
+		return ok
+	}
+	return false
+}
+
+func ghStatusLabel(status string) string {
+	if status == "" {
+		return "unavailable"
+	}
+	return status
 }
 
 // ── Prompts ───────────────────────────────────────────────────────────────────
@@ -387,7 +542,22 @@ Non-negotiable principles:
 8. OPEN ISSUES & PRS — surface any security-relevant open GitHub issues or PRs as a dedicated section. ` +
 	`Assess their risk and flag any that may introduce new vulnerabilities before merge.
 9. SHIFT-LEFT — close with a table: Finding | Manual check | Automated CI gate | CI YAML snippet. ` +
-	`The CI YAML snippet column must contain a runnable GitHub Actions step (≤10 lines) that implements the gate.`
+	`The CI YAML snippet column must contain a runnable GitHub Actions step (≤10 lines) that implements the gate.
+10. NO FABRICATION (most important) — every file:line reference, commit SHA, action pin SHA, ` +
+	`PR number (#NNN), and CVE you cite MUST appear verbatim in the Collected Context. ` +
+	`For action pin SHAs, copy them from the "Resolved pin SHAs (AUTHORITATIVE)" block — never invent one. ` +
+	`If a specific is not present in the context, write "(not captured)" instead. ` +
+	`Inventing a SHA, line number, PR, or CVE is the single worst error you can make and destroys the report.
+11. CVSS — for every finding state a full CVSS v3.1 vector string (e.g. CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N) ` +
+	`alongside the score, and use these exact severity bands: 0.0 None · 0.1–3.9 Low · 4.0–6.9 Medium · ` +
+	`7.0–8.9 High · 9.0–10.0 Critical. A score of 8.7 is HIGH, not Critical. The score must match the vector.
+12. SUPPLY-CHAIN SEVERITY RUBRIC — an unpinned GitHub Action is a hardening gap (OpenSSF Scorecard ` +
+	`Pinned-Dependencies), NOT inherently Critical/P0. Rate it Medium by default. Rate it High only with a ` +
+	`concrete escalation path: the workflow grants write permissions (contents/packages/id-token: write) or ` +
+	`handles secrets, AND runs on an attacker-influenced trigger (pull_request_target, issue_comment, workflow_run, ` +
+	`or pull_request from forks). A third-party action on a mutable tag in a read-only-token workflow triggered by ` +
+	`push or ordinary pull_request is Medium. Reserve Critical/P0 for demonstrated RCE, auth bypass, privilege ` +
+	`escalation, or secret disclosure — never for tag-pinning alone.`
 
 func buildUserPrompt(ctx *auditContext) string {
 	dateShort := ctx.Meta.Date[:10]
@@ -418,10 +588,10 @@ Produce the following sections in order. Do not omit any.
    - Impact Chain
    - Fix (code or config snippet where applicable)
    - Verification (shell commands)
-6. **Open GitHub Issues & PRs** — security-relevant items with risk assessment
+6. **Open GitHub Issues & PRs** — security-relevant items with risk assessment. If the GitHub context marks issues/PRs as unavailable or rate-limited, state that plainly and DO NOT cite any specific issue or PR numbers.
 7. **P2 Recommendations** — table: ID | Title | Effort (hours/days) | Risk Reduction (Low/Medium/High) | Notes
    Estimate effort as engineer-hours for a mid-level contributor. Risk reduction is the severity of the gap being closed.
-8. **Remediation Status table** — all findings with commit or PR reference where fixed
+8. **Remediation Status table** — list all findings; cite a commit or PR reference ONLY if it appears in the collected git log / GitHub evidence, otherwise write "not yet fixed (no commit in scanned history)". Never invent a fix reference.
 9. **Verification Checklist** — numbered list of copy-paste commands, one per finding
 10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate | CI YAML snippet
     The CI YAML snippet column must contain a runnable GitHub Actions step (≤10 lines) that implements the gate.
@@ -493,10 +663,10 @@ Produce the following sections in order. Do not omit any.
    - Impact Chain
    - Fix (code or config snippet where applicable)
    - Verification (shell commands)
-6. **Open GitHub Issues & PRs** — security-relevant items with risk assessment
+6. **Open GitHub Issues & PRs** — security-relevant items with risk assessment. If the GitHub context marks issues/PRs as unavailable or rate-limited, state that plainly and DO NOT cite any specific issue or PR numbers.
 7. **P2 Recommendations** — table: ID | Title | Effort (hours/days) | Risk Reduction (Low/Medium/High) | Notes
    Estimate effort as engineer-hours for a mid-level contributor. Risk reduction is the severity of the gap being closed.
-8. **Remediation Status table** — all findings with commit or PR reference where fixed
+8. **Remediation Status table** — list all findings; cite a commit or PR reference ONLY if it appears in the collected git log / GitHub evidence, otherwise write "not yet fixed (no commit in scanned history)". Never invent a fix reference.
 9. **Verification Checklist** — numbered list of copy-paste commands, one per finding
 10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate | CI YAML snippet
     The CI YAML snippet column must contain a runnable GitHub Actions step (≤10 lines) that implements the gate.
@@ -792,8 +962,16 @@ func buildAuditSummarySections(ctx *auditContext) []auditSummarySection {
 			w("## GitHub")
 			issuesJSON, _ := json.MarshalIndent(ctx.GitHub.OpenIssues, "", "  ")
 			prsJSON, _ := json.MarshalIndent(ctx.GitHub.OpenPRs, "", "  ")
-			w("### Open issues\n```json\n%s\n```", truncateField(string(issuesJSON), 20_000))
-			w("### Open PRs\n```json\n%s\n```", truncateField(string(prsJSON), 10_000))
+			if ghListAvailable(ctx.GitHub.IssuesStatus, ctx.GitHub.OpenIssues) {
+				w("### Open issues\n```json\n%s\n```", truncateField(string(issuesJSON), 20_000))
+			} else {
+				w("### Open issues\n_Data %s — do NOT cite specific issue numbers._", ghStatusLabel(ctx.GitHub.IssuesStatus))
+			}
+			if ghListAvailable(ctx.GitHub.PRsStatus, ctx.GitHub.OpenPRs) {
+				w("### Open PRs\n```json\n%s\n```", truncateField(string(prsJSON), 10_000))
+			} else {
+				w("### Open PRs\n_Data %s — do NOT cite specific PR numbers._", ghStatusLabel(ctx.GitHub.PRsStatus))
+			}
 			w("### Secret-scanning alerts\n```\n%s\n```", ctx.GitHub.SecurityAlerts)
 			w("### Branch protection\n```json\n%s\n```", ctx.GitHub.BranchProtection)
 		})},
@@ -983,6 +1161,11 @@ func buildContextMarkdown(ctx *auditContext) string {
 	w("%s", ctx.CICD.UnpinnedActions)
 	w("```")
 	w("")
+	w("### Resolved pin SHAs (AUTHORITATIVE — cite these exact SHAs in fixes; do not invent)")
+	w("```")
+	w("%s", ctx.CICD.PinnedSuggestions)
+	w("```")
+	w("")
 	w("### Actionlint")
 	w("```")
 	w("%s", ctx.CICD.Actionlint)
@@ -1138,13 +1321,21 @@ func buildContextMarkdown(ctx *auditContext) string {
 	issuesJSON, _ := json.MarshalIndent(ctx.GitHub.OpenIssues, "", "  ")
 	prsJSON, _ := json.MarshalIndent(ctx.GitHub.OpenPRs, "", "  ")
 	w("### Open issues")
-	w("```json")
-	w("%s", truncateField(string(issuesJSON), 20_000))
-	w("```")
+	if ghListAvailable(ctx.GitHub.IssuesStatus, ctx.GitHub.OpenIssues) {
+		w("```json")
+		w("%s", truncateField(string(issuesJSON), 20_000))
+		w("```")
+	} else {
+		w("_Data %s — do NOT cite specific issue numbers._", ghStatusLabel(ctx.GitHub.IssuesStatus))
+	}
 	w("### Open PRs")
-	w("```json")
-	w("%s", truncateField(string(prsJSON), 10_000))
-	w("```")
+	if ghListAvailable(ctx.GitHub.PRsStatus, ctx.GitHub.OpenPRs) {
+		w("```json")
+		w("%s", truncateField(string(prsJSON), 10_000))
+		w("```")
+	} else {
+		w("_Data %s — do NOT cite specific PR numbers._", ghStatusLabel(ctx.GitHub.PRsStatus))
+	}
 	w("### Secret-scanning alerts")
 	w("```")
 	w("%s", ctx.GitHub.SecurityAlerts)
@@ -1799,5 +1990,7 @@ func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, provider, a
 			generateTemplateReport(auditCtx))
 		return
 	}
+	// Ground every concrete claim against the collected evidence before saving.
+	report = verifyReport(report, auditCtx)
 	_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)
 }

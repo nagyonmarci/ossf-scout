@@ -225,6 +225,7 @@ type createAuditRequest struct {
 	Repo         string `json:"repo"`
 	GithubToken  string `json:"github_token"`
 	AnthropicKey string `json:"anthropic_key"`
+	Model        string `json:"model"`
 }
 
 func handleCreateAudit(db *sql.DB) http.HandlerFunc {
@@ -239,18 +240,19 @@ func handleCreateAudit(db *sql.DB) http.HandlerFunc {
 		if apiKey == "" {
 			apiKey = os.Getenv("ANTHROPIC_API_KEY")
 		}
-		if apiKey == "" {
-			http.Error(w, "Anthropic API key required — set ANTHROPIC_API_KEY on the server or provide it in the request", http.StatusServiceUnavailable)
-			return
+
+		model := req.Model
+		if model == "" && apiKey != "" {
+			model = defaultModel
 		}
 
 		id := uuid.New().String()
-		if err := dbCreateAudit(db, id, req.Repo); err != nil {
+		if err := dbCreateAudit(db, id, req.Repo, model); err != nil {
 			http.Error(w, "db error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		go runAudit(db, id, req.Repo, req.GithubToken, apiKey)
+		go runAudit(db, id, req.Repo, req.GithubToken, apiKey, model)
 
 		a, err := dbGetAudit(db, id)
 		if err != nil {

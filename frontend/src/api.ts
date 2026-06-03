@@ -77,6 +77,7 @@ export interface Audit {
   id: string;
   repo: string;
   status: AuditStatus;
+  model: string;
   created_at: string;
   completed_at: string | null;
   report: string | null;
@@ -89,6 +90,7 @@ export interface CreateAuditParams {
   repo: string;
   github_token?: string;
   anthropic_key?: string;
+  model?: string;
 }
 
 export const api = {

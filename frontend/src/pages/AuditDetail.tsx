@@ -71,10 +71,14 @@ export default function AuditDetail() {
                   {new Date(audit.completed_at).toLocaleString()}
                 </span>
               )}
-              {audit.input_tokens != null && (
+              <span className="meta-item">
+                <span className="meta-label">Mode:</span>
+                {audit.input_tokens ? audit.model || 'AI' : 'Static snapshot'}
+              </span>
+              {(audit.input_tokens ?? 0) > 0 && (
                 <span className="meta-item">
                   <span className="meta-label">Tokens in/out:</span>
-                  {audit.input_tokens.toLocaleString()} / {(audit.output_tokens ?? 0).toLocaleString()}
+                  {audit.input_tokens!.toLocaleString()} / {(audit.output_tokens ?? 0).toLocaleString()}
                 </span>
               )}
             </div>

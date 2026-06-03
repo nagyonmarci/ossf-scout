@@ -46,7 +46,7 @@ export default function AuditPage() {
   const [provider, setProvider] = useState(() => LS.get('audit.provider', ''));
   const [anthropicKey, setAnthropicKey] = useState(() => LS.get('audit.anthropicKey', ''));
   const [anthropicModel, setAnthropicModel] = useState(() => LS.get('audit.model', ANTHROPIC_MODELS[0].id));
-  const [ollamaURL, setOllamaURL] = useState(() => LS.get('audit.ollamaURL', 'http://localhost:11434'));
+  const [ollamaURL, setOllamaURL] = useState(() => LS.get('audit.ollamaURL', ''));
   const [ollamaModel, setOllamaModel] = useState(() => LS.get('audit.ollamaModel', ''));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +57,14 @@ export default function AuditPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Clear stale localhost default — server default (OLLAMA_BASE_URL) is more reliable
+  useEffect(() => {
+    if (localStorage.getItem('audit.ollamaURL') === 'http://localhost:11434') {
+      localStorage.removeItem('audit.ollamaURL');
+      setOllamaURL('');
+    }
+  }, []);
 
   useEffect(() => {
     const active = audits.some((a) => a.status === 'pending' || a.status === 'running');
@@ -175,7 +183,7 @@ export default function AuditPage() {
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>
                   Ollama base URL{' '}
                   <span style={{ fontWeight: 400 }}>
-                    (Docker: use <code>host.docker.internal</code> instead of <code>localhost</code>)
+                    (leave empty to use server default — Docker pre-configured to <code>host.docker.internal:11434</code>)
                   </span>
                 </span>
                 <input

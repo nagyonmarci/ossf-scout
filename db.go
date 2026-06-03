@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS audits (
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN topic TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN keyword TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE scans ADD COLUMN single_repo TEXT NOT NULL DEFAULT ''`)
+	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN model TEXT NOT NULL DEFAULT ''`)
 	// Mark any scans that were running when the server last died
 	_, _ = db.Exec(`UPDATE scans SET status='error', error_msg='server restarted' WHERE status='running'`)
 	return db, nil

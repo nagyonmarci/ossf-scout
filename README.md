@@ -98,6 +98,10 @@ The Markdown report appears in the browser when complete (~1–3 min for AI, ~30
 | Dependencies | `pnpm audit` / `npm audit` JSON output, workspace `overrides` |
 | Git history | Last 30 commits, files changed in the last 10 commits |
 | GitHub API | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts (requires token + `security_events` scope) |
+| Secrets | `gitleaks` (bundled in Docker), private key headers, `.env` file contents, AWS/JWT/GH token regex patterns |
+| IaC | Terraform file list, `checkov` (if installed), Kubernetes manifest list (`kind:`), `kube-linter` (if installed) |
+| Policy as Code | OPA `.rego` files, Kyverno `ClusterPolicy`/`Policy` YAMLs, Falco rule detection |
+| SLSA / Supply Chain | Provenance / SBOM files, cosign keys, SLSA GitHub Generator workflow usage, signed commit check |
 
 **Report structure**
 

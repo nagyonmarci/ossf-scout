@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import { api, Audit } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
 export default function AuditDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [audit, setAudit] = useState<Audit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const prevStatus = useRef<string | null>(null);
@@ -95,14 +96,25 @@ export default function AuditDetail() {
               </p>
             )}
             {audit.status === 'error' && <p className="error-msg">Error: {audit.error}</p>}
-            {audit.status === 'done' && (
-              <button className="btn btn-primary" onClick={downloadReport} style={{ marginTop: 8 }}>
-                Download .md
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
+                <button className="btn btn-primary" onClick={downloadReport}>
+                  Download .md
+                </button>
+              )}
+              {(audit.status === 'done' && (!audit.provider || audit.provider === '')) || audit.status === 'error' ? (
+                <button
+                  className="btn"
+                  style={{ background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)' }}
+                  onClick={() => navigate(`/audits?repo=${encodeURIComponent(audit!.repo)}`)}
+                >
+                  Run with AI
+                </button>
+              ) : null}
+            </div>
           </div>
 
-          {audit.status === 'done' && audit.report && (
+          {audit.report && (audit.status === 'done' || audit.status === 'error') && (
             <div className="card audit-report">
               <Markdown>{audit.report}</Markdown>
             </div>

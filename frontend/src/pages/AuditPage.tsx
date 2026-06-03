@@ -172,11 +172,16 @@ export default function AuditPage() {
           {provider === 'ollama' && (
             <>
               <label>
-                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Ollama base URL</span>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Ollama base URL{' '}
+                  <span style={{ fontWeight: 400 }}>
+                    (Docker: use <code>host.docker.internal</code> instead of <code>localhost</code>)
+                  </span>
+                </span>
                 <input
                   type="text"
                   className="input"
-                  placeholder="http://localhost:11434"
+                  placeholder="http://host.docker.internal:11434"
                   value={ollamaURL}
                   onChange={(e) => { setOllamaURL(e.target.value); LS.set('audit.ollamaURL', e.target.value); }}
                   style={{ marginTop: 4 }}

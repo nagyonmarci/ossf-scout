@@ -275,7 +275,7 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 		EnvFiles: shIn(tmpDir, "(none found)",
 			"find . -name '.env*' -not -path '*/node_modules/*' | head -5 | xargs grep -v '^#' 2>/dev/null | head -50 || echo '(none found)'"),
 		TokenPatterns: shIn(tmpDir, "none",
-			`grep -rEn "AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+" . | grep -v node_modules | grep -v '\.git' | head -20 || echo 'none'`),
+			`grep -rEn "AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+" . | grep -v node_modules | grep -v '\.git' | cut -c-300 | head -20 || echo 'none'`),
 	}
 
 	ctx.IaC = auditIaC{
@@ -760,7 +760,7 @@ func buildAuditSummarySections(ctx *auditContext) []auditSummarySection {
 			w("### TruffleHog\n```\n%s\n```", ctx.Secrets.TruffleHog)
 			w("### Private key headers\n```\n%s\n```", ctx.Secrets.PrivateKeyHeaders)
 			w("### .env files\n```\n%s\n```", ctx.Secrets.EnvFiles)
-			w("### Token patterns\n```\n%s\n```", ctx.Secrets.TokenPatterns)
+			w("### Token patterns\n```\n%s\n```", truncateField(ctx.Secrets.TokenPatterns, 3_000))
 		})},
 		{Name: "Infrastructure, containers, Kubernetes, and SLSA", Content: sectionMD(func(w func(string, ...any)) {
 			w("## Infrastructure")

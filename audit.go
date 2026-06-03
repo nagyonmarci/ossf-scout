@@ -386,7 +386,8 @@ Non-negotiable principles:
 	`State CVSS severity (Critical / High / Medium / Low / Informational) separately per finding.
 8. OPEN ISSUES & PRS — surface any security-relevant open GitHub issues or PRs as a dedicated section. ` +
 	`Assess their risk and flag any that may introduce new vulnerabilities before merge.
-9. SHIFT-LEFT — close with a table mapping each manual verification step to an automated CI guardrail.`
+9. SHIFT-LEFT — close with a table: Finding | Manual check | Automated CI gate | CI YAML snippet. ` +
+	`The CI YAML snippet column must contain a runnable GitHub Actions step (≤10 lines) that implements the gate.`
 
 func buildUserPrompt(ctx *auditContext) string {
 	dateShort := ctx.Meta.Date[:10]
@@ -418,10 +419,12 @@ Produce the following sections in order. Do not omit any.
    - Fix (code or config snippet where applicable)
    - Verification (shell commands)
 6. **Open GitHub Issues & PRs** — security-relevant items with risk assessment
-7. **P2 Recommendations** — backlog items not immediately critical
+7. **P2 Recommendations** — table: ID | Title | Effort (hours/days) | Risk Reduction (Low/Medium/High) | Notes
+   Estimate effort as engineer-hours for a mid-level contributor. Risk reduction is the severity of the gap being closed.
 8. **Remediation Status table** — all findings with commit or PR reference where fixed
 9. **Verification Checklist** — numbered list of copy-paste commands, one per finding
-10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate
+10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate | CI YAML snippet
+    The CI YAML snippet column must contain a runnable GitHub Actions step (≤10 lines) that implements the gate.
 11. **Appendix: Full Application Security Assessment** — one H3 subsection per category `+
 		`(SQL Injection, Authentication, Authorisation, Deserialization, SSRF, XXE, Path Traversal, `+
 		`Cryptography, Rate Limiting, CORS, Dependencies, HTTP Headers, Container, Kubernetes/Helm, `+
@@ -446,7 +449,11 @@ Produce the following sections in order. Do not omit any.
 		`For error handling: check keyFiles.errorHandler for stack trace or internal error details in production responses `+
 		`(res.json(err) / err.stack exposure without NODE_ENV guard). Flag as Medium. `+
 		`For HTTP security headers: use keyFiles.helmetConfig to assess CSP directives, HSTS enforcement, and `+
-		`X-Powered-By suppression with full context — distinguish deliberate upstream defaults from oversights.`,
+		`X-Powered-By suppression with full context — distinguish deliberate upstream defaults from oversights. `+
+		`12. **Threat Model (STRIDE)** — table: Threat | STRIDE category `+
+		`(Spoofing / Tampering / Repudiation / Information Disclosure / Denial of Service / Elevation of Privilege) | `+
+		`Affected component | Existing mitigation | Residual risk (High/Med/Low). `+
+		`Cover at least: authentication flows, CI/CD pipeline, supply-chain, secrets storage, API inputs.`,
 		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, string(ctxJSON))
 }
 
@@ -482,12 +489,16 @@ Produce the following sections in order. Do not omit any.
    - Fix (code or config snippet where applicable)
    - Verification (shell commands)
 6. **Open GitHub Issues & PRs** — security-relevant items with risk assessment
-7. **P2 Recommendations** — backlog items not immediately critical
+7. **P2 Recommendations** — table: ID | Title | Effort (hours/days) | Risk Reduction (Low/Medium/High) | Notes
+   Estimate effort as engineer-hours for a mid-level contributor. Risk reduction is the severity of the gap being closed.
 8. **Remediation Status table** — all findings with commit or PR reference where fixed
 9. **Verification Checklist** — numbered list of copy-paste commands, one per finding
-10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate
+10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate | CI YAML snippet
+    The CI YAML snippet column must contain a runnable GitHub Actions step (≤10 lines) that implements the gate.
 11. **Appendix: Full Application Security Assessment** — one H3 subsection per category.
-Each appendix subsection must start with the methodology note before listing observations.`,
+Each appendix subsection must start with the methodology note before listing observations.
+12. **Threat Model (STRIDE)** — table: Threat | STRIDE category (Spoofing / Tampering / Repudiation / Information Disclosure / Denial of Service / Elevation of Privilege) | Affected component | Existing mitigation | Residual risk (High/Med/Low).
+Cover at least: authentication flows, CI/CD pipeline, supply-chain, secrets storage, API inputs.`,
 		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, string(summaryJSON))
 }
 
@@ -1228,22 +1239,19 @@ func generateTemplateReport(ctx *auditContext) string {
 	return b.String()
 }
 
-func generateReport(ctx *auditContext, apiKey, model string) (report string, inputTokens, outputTokens int, err error) {
-	if model == "" {
-		model = defaultModel
-	}
+func callClaude(systemPrompt, userPrompt, apiKey, model string, maxTokens int) (text string, inputTokens, outputTokens int, err error) {
 	payload := claudeRequest{
 		Model:     model,
-		MaxTokens: 8192,
+		MaxTokens: maxTokens,
 		System: []claudeSystemBlock{
 			{
 				Type:         "text",
-				Text:         auditSystemPrompt,
+				Text:         systemPrompt,
 				CacheControl: &claudeCacheControl{Type: "ephemeral"},
 			},
 		},
 		Messages: []claudeMessage{
-			{Role: "user", Content: buildUserPrompt(ctx)},
+			{Role: "user", Content: userPrompt},
 		},
 	}
 
@@ -1273,6 +1281,61 @@ func generateReport(ctx *auditContext, apiKey, model string) (report string, inp
 	}
 
 	return cr.Content[0].Text, cr.Usage.InputTokens, cr.Usage.OutputTokens, nil
+}
+
+func generateReport(ctx *auditContext, apiKey, model string) (report string, inputTokens, outputTokens int, err error) {
+	if model == "" {
+		model = defaultModel
+	}
+	return callClaude(auditSystemPrompt, buildUserPrompt(ctx), apiKey, model, 8192)
+}
+
+func generateSplitClaudeReport(ctx *auditContext, apiKey, analysisModel, finalModel string) (report string, inputTokens, outputTokens int, err error) {
+	if finalModel == "" {
+		finalModel = defaultModel
+	}
+	if analysisModel == "" {
+		analysisModel = "claude-haiku-4-5-20251001"
+	}
+
+	sections := buildAuditSummarySections(ctx)
+	summaries := make([]auditSectionSummary, 0, len(sections))
+	for _, section := range sections {
+		sectionJSON, merr := json.Marshal(section.Content)
+		if merr != nil {
+			return "", inputTokens, outputTokens, fmt.Errorf("marshal %s section: %w", section.Name, merr)
+		}
+		prompt := fmt.Sprintf(`Summarize this DevSecOps audit evidence section for a later final report writer.
+
+Section: %s
+
+Rules:
+- Keep concrete file paths, tool outputs, commands, package names, workflow names, and API evidence.
+- Identify actionable findings, likely false positives, and clear "no issue found" categories.
+- Calibrate severity. Do not inflate weak evidence.
+- Output concise Markdown with headings: Evidence, Findings, No-Issue Notes, Open Questions.
+- Do not write the final report.
+
+Evidence:
+`+"```json\n%s\n```", section.Name, string(sectionJSON))
+
+		summary, in, out, serr := callClaude(auditSummarySystemPrompt, prompt, apiKey, analysisModel, 2048)
+		inputTokens += in
+		outputTokens += out
+		if serr != nil {
+			return "", inputTokens, outputTokens, fmt.Errorf("summarize %s: %w", section.Name, serr)
+		}
+		summaries = append(summaries, auditSectionSummary{
+			Section: section.Name,
+			Model:   analysisModel,
+			Summary: summary,
+		})
+	}
+
+	report, in, out, err := callClaude(auditSystemPrompt, buildSummarizedUserPrompt(ctx, summaries), apiKey, finalModel, 8192)
+	inputTokens += in
+	outputTokens += out
+	return report, inputTokens, outputTokens, err
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────────
@@ -1310,7 +1373,11 @@ func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, provider, a
 
 	switch provider {
 	case "anthropic":
-		report, inputTokens, outputTokens, err = generateReport(auditCtx, anthropicKey, model)
+		if splitGeneration {
+			report, inputTokens, outputTokens, err = generateSplitClaudeReport(auditCtx, anthropicKey, analysisModel, model)
+		} else {
+			report, inputTokens, outputTokens, err = generateReport(auditCtx, anthropicKey, model)
+		}
 	case "ollama":
 		if splitGeneration {
 			report, inputTokens, outputTokens, err = generateSplitOllamaReport(auditCtx, ollamaURL, analysisModel, model)

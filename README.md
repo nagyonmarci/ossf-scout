@@ -88,11 +88,13 @@ Enter `owner/repo` (e.g. `directus/directus`), choose a provider, and click **Ru
 
 **Anthropic models:**
 
-| Model | Typical cost |
-|-------|-------------|
-| Opus 4 (most capable) | ~$0.50–$1.50 |
-| Sonnet 4 | ~$0.10–$0.30 |
-| Haiku 4 (fastest / cheapest) | ~$0.02–$0.05 |
+| Model | Single-stage | Split mode (Haiku analyses sections) |
+|-------|-------------|--------------------------------------|
+| Opus 4 (most capable) | ~$1–$4 | ~$0.50–$1.50 |
+| Sonnet 4 | ~$0.20–$1.50 | ~$0.10–$0.60 |
+| Haiku 4 (fastest / cheapest) | ~$0.05–$0.20 | — |
+
+Enable **Split generation** in the UI to have Haiku summarise each evidence section first; the selected model then synthesises the final report. Recommended for large monorepos where single-stage input tokens dominate cost.
 
 **Ollama setup:**
 
@@ -133,10 +135,12 @@ The generated Markdown document follows a fixed structure:
 4. Per-finding sections — Root Cause · Impact Chain · Fix · Verification shell commands
 5. Open GitHub Issues & PRs — security-relevant items with risk assessment
 6. Remediation Status table & Verification Checklist
-7. Shift-left guardrails — maps each finding to an automated CI gate
-8. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm
+7. P2 Recommendations — table with Effort (hours/days) and Risk Reduction estimates
+8. Shift-left guardrails — maps each finding to an automated CI gate with a runnable GitHub Actions YAML snippet
+9. Threat Model (STRIDE) — table covering Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege across auth flows, CI/CD, supply chain, secrets, and API inputs
+10. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm
 
-**Cost:** Free without an API key (static snapshot). With a key: Opus 4 ~$0.50–$1.50, Sonnet 4 ~$0.10–$0.30, Haiku 4 ~$0.02–$0.05 per run. Token counts and estimated cost are shown in the audit history table.
+**Cost:** Free without an API key (static snapshot). With a key, single-stage: Opus 4 ~$1–$4, Sonnet 4 ~$0.20–$1.50, Haiku 4 ~$0.05–$0.20 per run. Split mode roughly halves the cost for large repos. Token counts and estimated cost are shown in the audit history table.
 
 ---
 

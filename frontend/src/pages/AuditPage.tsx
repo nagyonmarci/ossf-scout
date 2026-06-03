@@ -88,8 +88,8 @@ export default function AuditPage() {
         provider: provider || undefined,
         anthropic_key: provider === 'anthropic' ? (anthropicKey || undefined) : undefined,
         model: provider === 'anthropic' ? anthropicModel : provider === 'ollama' ? ollamaModel : undefined,
-        split_generation: provider === 'ollama' ? splitGeneration : undefined,
-        analysis_model: provider === 'ollama' && splitGeneration ? (analysisModel || undefined) : undefined,
+        split_generation: (provider === 'anthropic' || provider === 'ollama') ? splitGeneration || undefined : undefined,
+        analysis_model: splitGeneration ? (analysisModel || undefined) : undefined,
         ollama_url: provider === 'ollama' ? (ollamaURL || undefined) : undefined,
       });
       setRepo('');
@@ -165,7 +165,11 @@ export default function AuditPage() {
               <label>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>
                   Model{' '}
-                  {selectedAnthropicModel && <span style={{ fontWeight: 400 }}>{selectedAnthropicModel.hint}</span>}
+                  {selectedAnthropicModel && (
+                    <span style={{ fontWeight: 400 }}>
+                      {splitGeneration ? `Haiku analyzes sections → ${selectedAnthropicModel.label} synthesizes` : selectedAnthropicModel.hint}
+                    </span>
+                  )}
                 </span>
                 <select
                   className="input"
@@ -178,6 +182,35 @@ export default function AuditPage() {
                   ))}
                 </select>
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={splitGeneration}
+                  onChange={(e) => {
+                    setSplitGeneration(e.target.checked);
+                    LS.set('audit.splitGeneration', String(e.target.checked));
+                  }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Split generation — Haiku summarises sections, selected model writes final report (~60% cost reduction for large repos)
+                </span>
+              </label>
+              {splitGeneration && (
+                <label>
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                    Analysis model{' '}
+                    <span style={{ fontWeight: 400 }}>(optional — empty uses Haiku)</span>
+                  </span>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="claude-haiku-4-5-20251001"
+                    value={analysisModel}
+                    onChange={(e) => { setAnalysisModel(e.target.value); LS.set('audit.analysisModel', e.target.value); }}
+                    style={{ marginTop: 4 }}
+                  />
+                </label>
+              )}
             </>
           )}
 

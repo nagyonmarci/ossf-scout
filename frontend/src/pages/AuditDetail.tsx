@@ -152,6 +152,11 @@ export default function AuditDetail() {
                   Download .md
                 </button>
               )}
+              {audit.has_context && (
+                <a className="btn" href={`/api/audits/${audit.id}/context.md`} download>
+                  Download AI context
+                </a>
+              )}
               {canRunWithAI && (
                 audit.has_context ? (
                   <button

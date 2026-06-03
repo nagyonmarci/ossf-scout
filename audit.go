@@ -391,7 +391,7 @@ Non-negotiable principles:
 
 func buildUserPrompt(ctx *auditContext) string {
 	dateShort := ctx.Meta.Date[:10]
-	ctxJSON, _ := json.Marshal(ctx)
+	ctxMD := buildContextMarkdown(ctx)
 
 	return fmt.Sprintf(`Generate a complete DevSecOps audit report for the scan results below.
 
@@ -401,7 +401,7 @@ Scan date: %s
 
 ## Collected security context
 
-`+"```json\n%s\n```"+`
+`+"```\n%s\n```"+`
 
 ## Required document structure
 
@@ -454,7 +454,7 @@ Produce the following sections in order. Do not omit any.
 		`(Spoofing / Tampering / Repudiation / Information Disclosure / Denial of Service / Elevation of Privilege) | `+
 		`Affected component | Existing mitigation | Residual risk (High/Med/Low). `+
 		`Cover at least: authentication flows, CI/CD pipeline, supply-chain, secrets storage, API inputs.`,
-		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, string(ctxJSON))
+		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, ctxMD)
 }
 
 func buildSummarizedUserPrompt(ctx *auditContext, summaries []auditSectionSummary) string {
@@ -603,7 +603,7 @@ func truncateField(s string, maxBytes int) string {
 	if len(s) <= maxBytes {
 		return s
 	}
-	return s[:maxBytes] + "\n... [truncated for Ollama context length]"
+	return s[:maxBytes] + "\n... [truncated]"
 }
 
 // compactForOllama returns a shallow copy of ctx with verbose tool outputs
@@ -842,6 +842,329 @@ func readOllamaStream(resp *http.Response) (report string, inputTokens, outputTo
 		return "", 0, 0, fmt.Errorf("ollama returned empty content")
 	}
 	return b.String(), inputTokens, outputTokens, nil
+}
+
+// extractZizmortFindings parses a zizmor SARIF JSON and returns a compact Markdown
+// findings table. Non-parseable input (e.g. "zizmor not installed") is returned as-is.
+func extractZizmortFindings(sarifJSON string) string {
+	var sarif struct {
+		Runs []struct {
+			Results []struct {
+				RuleID    string `json:"ruleId"`
+				Level     string `json:"level"`
+				Message   struct{ Text string `json:"text"` } `json:"message"`
+				Locations []struct {
+					PhysicalLocation struct {
+						ArtifactLocation struct{ URI string `json:"uri"` } `json:"artifactLocation"`
+						Region           struct{ StartLine int `json:"startLine"` } `json:"region"`
+					} `json:"physicalLocation"`
+				} `json:"locations"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal([]byte(sarifJSON), &sarif); err != nil || len(sarif.Runs) == 0 {
+		return truncateField(sarifJSON, 3_000)
+	}
+	results := sarif.Runs[0].Results
+	if len(results) == 0 {
+		return "(no findings)"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "| Rule ID | Level | File | Line | Message |\n")
+	fmt.Fprintf(&b, "|---------|-------|------|------|---------|\n")
+	limit := 100
+	if len(results) < limit {
+		limit = len(results)
+	}
+	for _, r := range results[:limit] {
+		file, line := "", 0
+		if len(r.Locations) > 0 {
+			file = r.Locations[0].PhysicalLocation.ArtifactLocation.URI
+			line = r.Locations[0].PhysicalLocation.Region.StartLine
+		}
+		msg := strings.ReplaceAll(r.Message.Text, "\n", " ")
+		if len(msg) > 120 {
+			msg = msg[:120] + "…"
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %d | %s |\n", r.RuleID, r.Level, file, line, msg)
+	}
+	if len(sarif.Runs[0].Results) > 100 {
+		fmt.Fprintf(&b, "\n... and %d more findings (truncated at 100)\n", len(sarif.Runs[0].Results)-100)
+	}
+	return b.String()
+}
+
+// buildContextMarkdown converts an auditContext into a compact, human-readable Markdown
+// string for use as AI prompt context. Unlike generateTemplateReport (which is a verbose
+// static snapshot), this applies minimal truncation only where needed and replaces the
+// raw Zizmor SARIF JSON with an extracted findings table.
+func buildContextMarkdown(ctx *auditContext) string {
+	var b strings.Builder
+	w := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
+
+	w("## CI/CD")
+	w("")
+	w("### Unpinned GitHub Actions")
+	w("```")
+	w("%s", ctx.CICD.UnpinnedActions)
+	w("```")
+	w("")
+	w("### Actionlint")
+	w("```")
+	w("%s", ctx.CICD.Actionlint)
+	w("```")
+	w("")
+	w("### Workflow files")
+	w("```")
+	w("%s", ctx.CICD.WorkflowList)
+	w("```")
+	w("")
+	w("### Zizmor findings")
+	w("")
+	w("%s", extractZizmortFindings(ctx.CICD.Zizmor))
+	w("")
+	w("### Security workflow contents (codeql / trivy / scorecard triggers)")
+	w("```yaml")
+	w("%s", truncateField(ctx.CICD.WorkflowContents, 15_000))
+	w("```")
+	w("")
+	w("## Code Patterns")
+	w("")
+	w("### eval()")
+	w("```")
+	w("%s", ctx.Code.EvalUsage)
+	w("```")
+	w("### Math.random()")
+	w("```")
+	w("%s", ctx.Code.MathRandom)
+	w("```")
+	w("### Raw SQL")
+	w("```")
+	w("%s", ctx.Code.RawSqlCalls)
+	w("```")
+	w("### X-Powered-By")
+	w("```")
+	w("%s", ctx.Code.XPoweredByHeader)
+	w("```")
+	w("### Hardcoded secrets")
+	w("```")
+	w("%s", ctx.Code.HardcodedSecretHints)
+	w("```")
+	w("### Weak crypto (MD5/SHA1)")
+	w("```")
+	w("%s", ctx.Code.WeakCrypto)
+	w("```")
+	w("### process.exit / os.Exit")
+	w("```")
+	w("%s", ctx.Code.ProcessExitCalls)
+	w("```")
+	w("### SQL injection")
+	w("```")
+	w("%s", ctx.Code.SqlInjection)
+	w("```")
+	w("### SSRF")
+	w("```")
+	w("%s", ctx.Code.SSRF)
+	w("```")
+	w("### Path traversal")
+	w("```")
+	w("%s", ctx.Code.PathTraversal)
+	w("```")
+	w("### XXE")
+	w("```")
+	w("%s", ctx.Code.XXE)
+	w("```")
+	w("### Deserialization")
+	w("```")
+	w("%s", ctx.Code.Deserialization)
+	w("```")
+	w("### Rate limiting")
+	w("```")
+	w("%s", ctx.Code.RateLimiting)
+	w("```")
+	w("### CORS config")
+	w("```")
+	w("%s", ctx.Code.CORSConfig)
+	w("```")
+	w("")
+	w("## Key Security Files")
+	w("")
+	w("### Entry point")
+	w("```")
+	w("%s", ctx.KeyFiles.EntryPoint)
+	w("```")
+	w("### Auth middleware")
+	w("```")
+	w("%s", ctx.KeyFiles.AuthMiddleware)
+	w("```")
+	w("### Permission system")
+	w("```")
+	w("%s", ctx.KeyFiles.PermissionSystem)
+	w("```")
+	w("### Security config")
+	w("```")
+	w("%s", ctx.KeyFiles.SecurityConfig)
+	w("```")
+	w("### Startup validation")
+	w("```")
+	w("%s", ctx.KeyFiles.StartupValidation)
+	w("```")
+	w("### Error handler")
+	w("```")
+	w("%s", ctx.KeyFiles.ErrorHandler)
+	w("```")
+	w("### Helmet config")
+	w("```")
+	w("%s", ctx.KeyFiles.HelmetConfig)
+	w("```")
+	w("")
+	w("## Infrastructure")
+	w("")
+	w("### Dockerfile")
+	w("```dockerfile")
+	w("%s", ctx.Infra.Dockerfile)
+	w("```")
+	w("### Helm lint")
+	w("```")
+	w("%s", ctx.Infra.HelmLint)
+	w("```")
+	w("### Helm secret template")
+	w("```yaml")
+	w("%s", ctx.Infra.HelmSecretTemplate)
+	w("```")
+	w("### Helm values")
+	w("```yaml")
+	w("%s", ctx.Infra.HelmValues)
+	w("```")
+	w("")
+	w("## Dependencies")
+	w("")
+	w("### pnpm / npm audit")
+	w("```")
+	w("%s", ctx.Dependencies.PnpmAudit)
+	w("```")
+	w("### Workspace overrides")
+	w("```")
+	w("%s", ctx.Dependencies.WorkspaceOverrides)
+	w("```")
+	w("")
+	w("## Git History")
+	w("")
+	w("### Recent commits")
+	w("```")
+	w("%s", ctx.Git.RecentCommits)
+	w("```")
+	w("### Recently changed files")
+	w("```")
+	w("%s", ctx.Git.RecentlyChangedFiles)
+	w("```")
+	w("")
+	w("## GitHub")
+	w("")
+	issuesJSON, _ := json.MarshalIndent(ctx.GitHub.OpenIssues, "", "  ")
+	prsJSON, _ := json.MarshalIndent(ctx.GitHub.OpenPRs, "", "  ")
+	w("### Open issues")
+	w("```json")
+	w("%s", truncateField(string(issuesJSON), 20_000))
+	w("```")
+	w("### Open PRs")
+	w("```json")
+	w("%s", truncateField(string(prsJSON), 10_000))
+	w("```")
+	w("### Secret-scanning alerts")
+	w("```")
+	w("%s", ctx.GitHub.SecurityAlerts)
+	w("```")
+	w("### Branch protection (main)")
+	w("```json")
+	w("%s", ctx.GitHub.BranchProtection)
+	w("```")
+	w("")
+	w("## Secrets Scanning")
+	w("")
+	w("### Gitleaks")
+	w("```")
+	w("%s", ctx.Secrets.Gitleaks)
+	w("```")
+	w("### TruffleHog")
+	w("```")
+	w("%s", ctx.Secrets.TruffleHog)
+	w("```")
+	w("### Private key headers")
+	w("```")
+	w("%s", ctx.Secrets.PrivateKeyHeaders)
+	w("```")
+	w("### .env files")
+	w("```")
+	w("%s", ctx.Secrets.EnvFiles)
+	w("```")
+	w("### Token patterns (AWS/JWT/GH)")
+	w("```")
+	w("%s", ctx.Secrets.TokenPatterns)
+	w("```")
+	w("")
+	w("## Infrastructure as Code (IaC)")
+	w("")
+	w("### Terraform files")
+	w("```")
+	w("%s", ctx.IaC.TerraformFiles)
+	w("```")
+	w("### Checkov")
+	w("```")
+	w("%s", ctx.IaC.Checkov)
+	w("```")
+	w("### Trivy config")
+	w("```")
+	w("%s", ctx.IaC.Trivy)
+	w("```")
+	w("### Kubernetes manifests")
+	w("```")
+	w("%s", ctx.IaC.KubeManifests)
+	w("```")
+	w("### kube-linter")
+	w("```")
+	w("%s", ctx.IaC.KubeLinter)
+	w("```")
+	w("")
+	w("## Policy as Code")
+	w("")
+	w("### OPA (.rego files)")
+	w("```")
+	w("%s", ctx.Policy.OPAFiles)
+	w("```")
+	w("### Kyverno policies")
+	w("```")
+	w("%s", ctx.Policy.KyvernoFiles)
+	w("```")
+	w("### Falco rules")
+	w("```")
+	w("%s", ctx.Policy.FalcoRules)
+	w("```")
+	w("")
+	w("## SLSA / Supply Chain")
+	w("")
+	w("### Provenance files")
+	w("```")
+	w("%s", ctx.SLSA.ProvenanceFiles)
+	w("```")
+	w("### SBOM files")
+	w("```")
+	w("%s", ctx.SLSA.SBOMFiles)
+	w("```")
+	w("### Cosign / signing keys")
+	w("```")
+	w("%s", ctx.SLSA.CosignFiles)
+	w("```")
+	w("### SLSA / attestation workflow usage")
+	w("```")
+	w("%s", ctx.SLSA.SLSAWorkflow)
+	w("```")
+	w("### Signed commit (latest)")
+	w("```")
+	w("%s", ctx.SLSA.SignedCommit)
+	w("```")
+
+	return b.String()
 }
 
 // generateTemplateReport formats the collected context as a structured Markdown

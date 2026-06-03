@@ -552,12 +552,20 @@ func generateOllamaReport(ctx *auditContext, ollamaURL, model string) (report st
 	if ollamaURL == "" {
 		ollamaURL = "http://localhost:11434"
 	}
+	return generateOllamaReportWith(ctx, ollamaURL, model, false)
+}
+
+func generateOllamaReportWith(ctx *auditContext, ollamaURL, model string, compact bool) (report string, inputTokens, outputTokens int, err error) {
+	sendCtx := ctx
+	if compact {
+		sendCtx = compactForOllama(ctx)
+	}
 	payload := ollamaRequest{
 		Model:  model,
 		Stream: false,
 		Messages: []ollamaMessage{
 			{Role: "system", Content: auditSystemPrompt},
-			{Role: "user", Content: buildUserPrompt(compactForOllama(ctx))},
+			{Role: "user", Content: buildUserPrompt(sendCtx)},
 		},
 	}
 	body, _ := json.Marshal(payload)
@@ -576,7 +584,12 @@ func generateOllamaReport(ctx *auditContext, ollamaURL, model string) (report st
 		return "", 0, 0, fmt.Errorf("ollama decode failed: %w", err)
 	}
 	if or_.Error != nil {
-		return "", 0, 0, fmt.Errorf("ollama error %s: %s", or_.Error.Type, or_.Error.Message)
+		msg := or_.Error.Message
+		// Retry once with compacted context if the model reports a context length error
+		if !compact && strings.Contains(msg, "exceeds") && strings.Contains(msg, "context") {
+			return generateOllamaReportWith(ctx, ollamaURL, model, true)
+		}
+		return "", 0, 0, fmt.Errorf("ollama error %s: %s", or_.Error.Type, msg)
 	}
 	if len(or_.Choices) == 0 || or_.Choices[0].Message.Content == "" {
 		return "", 0, 0, fmt.Errorf("ollama returned empty content")

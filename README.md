@@ -92,16 +92,19 @@ The Markdown report appears in the browser when complete (~1–3 min for AI, ~30
 
 | Category | Checks |
 |----------|--------|
-| CI/CD | Unpinned GitHub Actions (`uses: action@vX` tags), `zizmor` workflow analysis (if installed), workflow file list |
-| Code | `eval()` usage, `Math.random()` for security, raw SQL calls, `X-Powered-By` header leakage, hardcoded secret hints, weak crypto (`md5`/`sha1`), unguarded `process.exit` / `os.Exit` |
-| Infrastructure | Helm lint, Helm `secret.yaml` templates, Helm `values.yaml`, `Dockerfile` |
-| Dependencies | `pnpm audit` / `npm audit` JSON output, workspace `overrides` |
+| CI/CD | Unpinned GitHub Actions, `zizmor` workflow analysis, `actionlint` workflow linting, workflow file list |
+| Code | `eval()`, `Math.random()`, raw SQL, `X-Powered-By`, hardcoded secrets, weak crypto, `process.exit`/`os.Exit`, SQL injection (`knex.raw`/`whereRaw`), SSRF (`fetch`/`axios`/`got`), path traversal, XXE, deserialization, rate limiting, CORS config |
+| Key files | Entry point (first 150 lines), auth middleware, permission system, security config (`helmet`/`cors`/`session`) |
+| Infrastructure | `helm lint`, Helm secret templates + values, `Dockerfile` |
+| Dependencies | `pnpm audit` / `npm audit` JSON, workspace `overrides` |
 | Git history | Last 30 commits, files changed in the last 10 commits |
 | GitHub API | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts (requires token + `security_events` scope) |
-| Secrets | `gitleaks` (bundled in Docker), private key headers, `.env` file contents, AWS/JWT/GH token regex patterns |
-| IaC | Terraform file list, `checkov` (if installed), Kubernetes manifest list (`kind:`), `kube-linter` (if installed) |
+| Secrets | `gitleaks`, private key headers, `.env` file contents, AWS/JWT/GH token regex patterns |
+| IaC | Terraform file list, `checkov`, `trivy config`, Kubernetes manifest list, `kube-linter` |
 | Policy as Code | OPA `.rego` files, Kyverno `ClusterPolicy`/`Policy` YAMLs, Falco rule detection |
 | SLSA / Supply Chain | Provenance / SBOM files, cosign keys, SLSA GitHub Generator workflow usage, signed commit check |
+
+All tools are **bundled in the Docker image** — no separate installation needed.
 
 **Report structure**
 

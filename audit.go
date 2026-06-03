@@ -701,9 +701,15 @@ type auditSummarySection struct {
 }
 
 func buildAuditSummarySections(ctx *auditContext) []auditSummarySection {
+	// Compact the CICD struct so the Zizmor SARIF JSON (can be 40k+ lines) is replaced
+	// with an extracted findings table before JSON-marshaling the section.
+	compactCICD := ctx.CICD
+	compactCICD.Zizmor = extractZizmortFindings(ctx.CICD.Zizmor)
+	compactCICD.WorkflowContents = truncateField(ctx.CICD.WorkflowContents, 15_000)
+
 	return []auditSummarySection{
 		{Name: "CI/CD and policy gates", Content: map[string]any{
-			"cicd": ctx.CICD,
+			"cicd": compactCICD,
 		}},
 		{Name: "Application code and key files", Content: map[string]any{
 			"code":     ctx.Code,

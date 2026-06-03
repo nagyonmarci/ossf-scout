@@ -459,7 +459,12 @@ Produce the following sections in order. Do not omit any.
 
 func buildSummarizedUserPrompt(ctx *auditContext, summaries []auditSectionSummary) string {
 	dateShort := ctx.Meta.Date[:10]
-	summaryJSON, _ := json.MarshalIndent(summaries, "", "  ")
+
+	var sb strings.Builder
+	for _, s := range summaries {
+		fmt.Fprintf(&sb, "### %s\n\n%s\n\n---\n\n", s.Section, s.Summary)
+	}
+	summaryMD := sb.String()
 
 	return fmt.Sprintf(`Generate a complete DevSecOps audit report for the scan results below.
 
@@ -471,7 +476,7 @@ Scan date: %s
 
 The raw audit context has already been reduced into focused evidence summaries. Treat these summaries as the source of truth. Preserve concrete file paths, commands, tool names, and finding evidence. Do not invent findings not supported by the evidence.
 
-`+"```json\n%s\n```"+`
+%s
 
 ## Required document structure
 
@@ -499,7 +504,7 @@ Produce the following sections in order. Do not omit any.
 Each appendix subsection must start with the methodology note before listing observations.
 12. **Threat Model (STRIDE)** — table: Threat | STRIDE category (Spoofing / Tampering / Repudiation / Information Disclosure / Denial of Service / Elevation of Privilege) | Affected component | Existing mitigation | Residual risk (High/Med/Low).
 Cover at least: authentication flows, CI/CD pipeline, supply-chain, secrets storage, API inputs.`,
-		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, string(summaryJSON))
+		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, summaryMD)
 }
 
 // ── Claude API ────────────────────────────────────────────────────────────────
@@ -644,13 +649,9 @@ func generateSplitOllamaReport(ctx *auditContext, ollamaURL, analysisModel, fina
 	sections := buildAuditSummarySections(ctx)
 	summaries := make([]auditSectionSummary, 0, len(sections))
 	for _, section := range sections {
-		sectionPrompt, merr := json.Marshal(section.Content)
-		if merr != nil {
-			return "", 0, 0, fmt.Errorf("marshal %s section: %w", section.Name, merr)
-		}
-		sectionEvidence := string(sectionPrompt)
-		if len(sectionEvidence) > ollamaMaxSummaryPromptChars {
-			sectionEvidence = sectionEvidence[:ollamaMaxSummaryPromptChars] + "\n\n[Section evidence truncated to fit the analysis model context window]"
+		evidence := section.Content
+		if len(evidence) > ollamaMaxSummaryPromptChars {
+			evidence = evidence[:ollamaMaxSummaryPromptChars] + "\n\n[Section evidence truncated to fit the analysis model context window]"
 		}
 		prompt := fmt.Sprintf(`Summarize this DevSecOps audit evidence section for a later final report writer.
 
@@ -664,7 +665,8 @@ Rules:
 - Do not write the final report.
 
 Evidence:
-`+"```json\n%s\n```", section.Name, sectionEvidence)
+
+%s`, section.Name, evidence)
 
 		summary, in, out, serr := generateOllamaChat(ollamaURL, analysisModel, auditSummarySystemPrompt, prompt)
 		inputTokens += in
@@ -697,38 +699,104 @@ const ollamaMaxSummaryPromptChars = 250_000
 
 type auditSummarySection struct {
 	Name    string
-	Content any
+	Content string // Markdown
+}
+
+func sectionMD(parts ...func(w func(string, ...any))) string {
+	var b strings.Builder
+	w := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
+	for _, part := range parts {
+		part(w)
+	}
+	return b.String()
 }
 
 func buildAuditSummarySections(ctx *auditContext) []auditSummarySection {
-	// Compact the CICD struct so the Zizmor SARIF JSON (can be 40k+ lines) is replaced
-	// with an extracted findings table before JSON-marshaling the section.
-	compactCICD := ctx.CICD
-	compactCICD.Zizmor = extractZizmortFindings(ctx.CICD.Zizmor)
-	compactCICD.WorkflowContents = truncateField(ctx.CICD.WorkflowContents, 15_000)
-
 	return []auditSummarySection{
-		{Name: "CI/CD and policy gates", Content: map[string]any{
-			"cicd": compactCICD,
-		}},
-		{Name: "Application code and key files", Content: map[string]any{
-			"code":     ctx.Code,
-			"keyFiles": ctx.KeyFiles,
-		}},
-		{Name: "Dependencies and secrets", Content: map[string]any{
-			"dependencies": ctx.Dependencies,
-			"secrets":      ctx.Secrets,
-		}},
-		{Name: "Infrastructure, containers, Kubernetes, and SLSA", Content: map[string]any{
-			"infrastructure": ctx.Infra,
-			"iac":            ctx.IaC,
-			"policy":         ctx.Policy,
-			"slsa":           ctx.SLSA,
-		}},
-		{Name: "Git and GitHub signals", Content: map[string]any{
-			"git":    ctx.Git,
-			"github": ctx.GitHub,
-		}},
+		{Name: "CI/CD and policy gates", Content: sectionMD(func(w func(string, ...any)) {
+			w("## CI/CD")
+			w("### Unpinned GitHub Actions")
+			w("```\n%s\n```", ctx.CICD.UnpinnedActions)
+			w("### Actionlint")
+			w("```\n%s\n```", ctx.CICD.Actionlint)
+			w("### Workflow files")
+			w("```\n%s\n```", ctx.CICD.WorkflowList)
+			w("### Zizmor findings")
+			w("%s", extractZizmortFindings(ctx.CICD.Zizmor))
+			w("### Security workflow contents")
+			w("```yaml\n%s\n```", truncateField(ctx.CICD.WorkflowContents, 15_000))
+		})},
+		{Name: "Application code and key files", Content: sectionMD(func(w func(string, ...any)) {
+			w("## Code Patterns")
+			w("### eval()\n```\n%s\n```", ctx.Code.EvalUsage)
+			w("### Math.random()\n```\n%s\n```", ctx.Code.MathRandom)
+			w("### Raw SQL\n```\n%s\n```", ctx.Code.RawSqlCalls)
+			w("### X-Powered-By\n```\n%s\n```", ctx.Code.XPoweredByHeader)
+			w("### Hardcoded secrets\n```\n%s\n```", ctx.Code.HardcodedSecretHints)
+			w("### Weak crypto\n```\n%s\n```", ctx.Code.WeakCrypto)
+			w("### process.exit/os.Exit\n```\n%s\n```", ctx.Code.ProcessExitCalls)
+			w("### SQL injection\n```\n%s\n```", ctx.Code.SqlInjection)
+			w("### SSRF\n```\n%s\n```", ctx.Code.SSRF)
+			w("### Path traversal\n```\n%s\n```", ctx.Code.PathTraversal)
+			w("### XXE\n```\n%s\n```", ctx.Code.XXE)
+			w("### Deserialization\n```\n%s\n```", ctx.Code.Deserialization)
+			w("### Rate limiting\n```\n%s\n```", ctx.Code.RateLimiting)
+			w("### CORS\n```\n%s\n```", ctx.Code.CORSConfig)
+			w("## Key Security Files")
+			w("### Entry point\n```\n%s\n```", ctx.KeyFiles.EntryPoint)
+			w("### Auth middleware\n```\n%s\n```", ctx.KeyFiles.AuthMiddleware)
+			w("### Permission system\n```\n%s\n```", ctx.KeyFiles.PermissionSystem)
+			w("### Security config\n```\n%s\n```", ctx.KeyFiles.SecurityConfig)
+			w("### Startup validation\n```\n%s\n```", ctx.KeyFiles.StartupValidation)
+			w("### Error handler\n```\n%s\n```", ctx.KeyFiles.ErrorHandler)
+			w("### Helmet config\n```\n%s\n```", ctx.KeyFiles.HelmetConfig)
+		})},
+		{Name: "Dependencies and secrets", Content: sectionMD(func(w func(string, ...any)) {
+			w("## Dependencies")
+			w("### pnpm / npm audit\n```\n%s\n```", ctx.Dependencies.PnpmAudit)
+			w("### Workspace overrides\n```\n%s\n```", ctx.Dependencies.WorkspaceOverrides)
+			w("## Secrets Scanning")
+			w("### Gitleaks\n```\n%s\n```", ctx.Secrets.Gitleaks)
+			w("### TruffleHog\n```\n%s\n```", ctx.Secrets.TruffleHog)
+			w("### Private key headers\n```\n%s\n```", ctx.Secrets.PrivateKeyHeaders)
+			w("### .env files\n```\n%s\n```", ctx.Secrets.EnvFiles)
+			w("### Token patterns\n```\n%s\n```", ctx.Secrets.TokenPatterns)
+		})},
+		{Name: "Infrastructure, containers, Kubernetes, and SLSA", Content: sectionMD(func(w func(string, ...any)) {
+			w("## Infrastructure")
+			w("### Dockerfile\n```dockerfile\n%s\n```", ctx.Infra.Dockerfile)
+			w("### Helm lint\n```\n%s\n```", ctx.Infra.HelmLint)
+			w("### Helm secret template\n```yaml\n%s\n```", ctx.Infra.HelmSecretTemplate)
+			w("### Helm values\n```yaml\n%s\n```", ctx.Infra.HelmValues)
+			w("## IaC")
+			w("### Terraform files\n```\n%s\n```", ctx.IaC.TerraformFiles)
+			w("### Checkov\n```\n%s\n```", ctx.IaC.Checkov)
+			w("### Trivy config\n```\n%s\n```", ctx.IaC.Trivy)
+			w("### Kubernetes manifests\n```\n%s\n```", ctx.IaC.KubeManifests)
+			w("### kube-linter\n```\n%s\n```", ctx.IaC.KubeLinter)
+			w("## Policy as Code")
+			w("### OPA\n```\n%s\n```", ctx.Policy.OPAFiles)
+			w("### Kyverno\n```\n%s\n```", ctx.Policy.KyvernoFiles)
+			w("### Falco\n```\n%s\n```", ctx.Policy.FalcoRules)
+			w("## SLSA / Supply Chain")
+			w("### Provenance files\n```\n%s\n```", ctx.SLSA.ProvenanceFiles)
+			w("### SBOM files\n```\n%s\n```", ctx.SLSA.SBOMFiles)
+			w("### Cosign keys\n```\n%s\n```", ctx.SLSA.CosignFiles)
+			w("### SLSA workflow\n```\n%s\n```", ctx.SLSA.SLSAWorkflow)
+			w("### Signed commit\n```\n%s\n```", ctx.SLSA.SignedCommit)
+		})},
+		{Name: "Git and GitHub signals", Content: sectionMD(func(w func(string, ...any)) {
+			w("## Git History")
+			w("### Recent commits\n```\n%s\n```", ctx.Git.RecentCommits)
+			w("### Recently changed files\n```\n%s\n```", ctx.Git.RecentlyChangedFiles)
+			w("## GitHub")
+			issuesJSON, _ := json.MarshalIndent(ctx.GitHub.OpenIssues, "", "  ")
+			prsJSON, _ := json.MarshalIndent(ctx.GitHub.OpenPRs, "", "  ")
+			w("### Open issues\n```json\n%s\n```", truncateField(string(issuesJSON), 20_000))
+			w("### Open PRs\n```json\n%s\n```", truncateField(string(prsJSON), 10_000))
+			w("### Secret-scanning alerts\n```\n%s\n```", ctx.GitHub.SecurityAlerts)
+			w("### Branch protection\n```json\n%s\n```", ctx.GitHub.BranchProtection)
+		})},
 	}
 }
 
@@ -1630,10 +1698,6 @@ func generateSplitClaudeReport(ctx *auditContext, apiKey, analysisModel, finalMo
 	sections := buildAuditSummarySections(ctx)
 	summaries := make([]auditSectionSummary, 0, len(sections))
 	for _, section := range sections {
-		sectionJSON, merr := json.Marshal(section.Content)
-		if merr != nil {
-			return "", inputTokens, outputTokens, fmt.Errorf("marshal %s section: %w", section.Name, merr)
-		}
 		prompt := fmt.Sprintf(`Summarize this DevSecOps audit evidence section for a later final report writer.
 
 Section: %s
@@ -1646,7 +1710,8 @@ Rules:
 - Do not write the final report.
 
 Evidence:
-`+"```json\n%s\n```", section.Name, string(sectionJSON))
+
+%s`, section.Name, section.Content)
 
 		summary, in, out, serr := callClaude(auditSummarySystemPrompt, prompt, apiKey, analysisModel, 2048)
 		inputTokens += in

@@ -3,15 +3,28 @@ import { useNavigate } from 'react-router-dom';
 import { api, Audit, AuditStatus } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
+const MODELS = [
+  { id: 'claude-opus-4-8',           label: 'Opus 4',   hint: '~$0.50–$1.50/run', inputRate: 15,   outputRate: 75  },
+  { id: 'claude-sonnet-4-6',         label: 'Sonnet 4', hint: '~$0.10–$0.30/run', inputRate: 3,    outputRate: 15  },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4',  hint: '~$0.02–$0.05/run', inputRate: 0.80, outputRate: 4   },
+];
+
 function formatDate(s: string) {
   return new Date(s).toLocaleString();
 }
 
-function costEstimate(inputTokens: number | null, outputTokens: number | null): string {
+function costEstimate(model: string, inputTokens: number | null, outputTokens: number | null): string {
   if (!inputTokens && !outputTokens) return '—';
-  const input = ((inputTokens ?? 0) / 1_000_000) * 15;
-  const output = ((outputTokens ?? 0) / 1_000_000) * 75;
-  return `~$${(input + output).toFixed(3)}`;
+  const m = MODELS.find((x) => x.id === model);
+  const inputRate  = m?.inputRate  ?? 15;
+  const outputRate = m?.outputRate ?? 75;
+  const cost = ((inputTokens ?? 0) / 1_000_000) * inputRate
+             + ((outputTokens ?? 0) / 1_000_000) * outputRate;
+  return `~$${cost.toFixed(3)}`;
+}
+
+function modelLabel(model: string): string {
+  return MODELS.find((x) => x.id === model)?.label ?? model || 'Snapshot';
 }
 
 export default function AuditPage() {
@@ -20,6 +33,7 @@ export default function AuditPage() {
   const [repo, setRepo] = useState('');
   const [token, setToken] = useState('');
   const [anthropicKey, setAnthropicKey] = useState('');
+  const [model, setModel] = useState(MODELS[0].id);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,9 +46,7 @@ export default function AuditPage() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     const active = audits.some((a) => a.status === 'pending' || a.status === 'running');
@@ -53,6 +65,7 @@ export default function AuditPage() {
         repo: repo.trim(),
         github_token: token || undefined,
         anthropic_key: anthropicKey || undefined,
+        model: anthropicKey ? model : undefined,
       });
       setRepo('');
       setToken('');
@@ -70,6 +83,8 @@ export default function AuditPage() {
     await api.deleteAudit(id);
     setAudits((prev) => prev.filter((a) => a.id !== id));
   }
+
+  const selectedModel = MODELS.find((m) => m.id === model);
 
   return (
     <div className="container">
@@ -91,7 +106,7 @@ export default function AuditPage() {
           <label>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>
               Anthropic API key{' '}
-              <span style={{ fontWeight: 400 }}>(optional if set on server via <code>ANTHROPIC_API_KEY</code>)</span>
+              <span style={{ fontWeight: 400 }}>(optional — without it a free static snapshot is generated)</span>
             </span>
             <input
               type="password"
@@ -101,6 +116,27 @@ export default function AuditPage() {
               onChange={(e) => setAnthropicKey(e.target.value)}
               style={{ marginTop: 4 }}
             />
+          </label>
+          <label style={{ opacity: anthropicKey ? 1 : 0.45 }}>
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+              Model{' '}
+              {selectedModel && anthropicKey && (
+                <span style={{ fontWeight: 400 }}>{selectedModel.hint}</span>
+              )}
+            </span>
+            <select
+              className="input"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              disabled={!anthropicKey}
+              style={{ marginTop: 4 }}
+            >
+              {MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} — {m.hint}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>
@@ -122,8 +158,8 @@ export default function AuditPage() {
           </button>
         </form>
         <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
-          Clones the repo, runs static analysis, calls Claude Opus. Typical cost: $0.50–$1.50 per run. Requires{' '}
-          <code>ANTHROPIC_API_KEY</code> to be set on the server.
+          Clones the repo and runs static analysis. With an Anthropic API key the selected model synthesises a full
+          DevSecOps report. Without a key a free raw data snapshot is generated.
         </p>
       </div>
 
@@ -140,22 +176,20 @@ export default function AuditPage() {
                   <th>Started</th>
                   <th>Completed</th>
                   <th>Status</th>
-                  <th>API Cost</th>
+                  <th>Model</th>
+                  <th>Cost</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {audits.map((a) => (
                   <tr key={a.id} className="scan-row" onClick={() => navigate(`/audits/${a.id}`)}>
-                    <td>
-                      <code>{a.repo}</code>
-                    </td>
+                    <td><code>{a.repo}</code></td>
                     <td>{formatDate(a.created_at)}</td>
                     <td>{a.completed_at ? formatDate(a.completed_at) : '—'}</td>
-                    <td>
-                      <StatusBadge status={a.status as AuditStatus} />
-                    </td>
-                    <td>{costEstimate(a.input_tokens, a.output_tokens)}</td>
+                    <td><StatusBadge status={a.status as AuditStatus} /></td>
+                    <td style={{ color: 'var(--muted)', fontSize: 12 }}>{modelLabel(a.model)}</td>
+                    <td>{costEstimate(a.model, a.input_tokens, a.output_tokens)}</td>
                     <td>
                       <button className="btn btn-danger" onClick={(e) => deleteAudit(e, a.id)}>
                         Delete

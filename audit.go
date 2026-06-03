@@ -315,9 +315,179 @@ type claudeResponse struct {
 	} `json:"error,omitempty"`
 }
 
-func generateReport(ctx *auditContext, apiKey string) (report string, inputTokens, outputTokens int, err error) {
+const defaultModel = "claude-opus-4-8"
+
+// generateTemplateReport formats the collected context as a structured Markdown
+// snapshot without any AI synthesis. Used when no Anthropic API key is available.
+func generateTemplateReport(ctx *auditContext) string {
+	var b strings.Builder
+	w := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
+
+	w("# Security Data Snapshot: %s", ctx.Meta.Repo)
+	w("")
+	w("**Date:** %s | **Commit:** %s | **Mode:** Static analysis only (no AI synthesis)", ctx.Meta.Date[:10], ctx.Meta.Ref)
+	w("")
+	w("---")
+	w("")
+	w("## CI/CD")
+	w("")
+	w("### Unpinned GitHub Actions (`uses: action@vX` tags)")
+	w("")
+	w("```")
+	w("%s", ctx.CICD.UnpinnedActions)
+	w("```")
+	w("")
+	w("### Workflow files")
+	w("")
+	w("```")
+	w("%s", ctx.CICD.WorkflowList)
+	w("```")
+	w("")
+	w("### Zizmor analysis")
+	w("")
+	w("```")
+	w("%s", ctx.CICD.Zizmor)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## Code Patterns")
+	w("")
+	w("### eval() usage")
+	w("")
+	w("```")
+	w("%s", ctx.Code.EvalUsage)
+	w("```")
+	w("")
+	w("### Math.random() usage")
+	w("")
+	w("```")
+	w("%s", ctx.Code.MathRandom)
+	w("```")
+	w("")
+	w("### Raw SQL calls")
+	w("")
+	w("```")
+	w("%s", ctx.Code.RawSqlCalls)
+	w("```")
+	w("")
+	w("### X-Powered-By header exposure")
+	w("")
+	w("```")
+	w("%s", ctx.Code.XPoweredByHeader)
+	w("```")
+	w("")
+	w("### Hardcoded secret hints")
+	w("")
+	w("```")
+	w("%s", ctx.Code.HardcodedSecretHints)
+	w("```")
+	w("")
+	w("### Weak crypto (MD5/SHA1)")
+	w("")
+	w("```")
+	w("%s", ctx.Code.WeakCrypto)
+	w("```")
+	w("")
+	w("### process.exit / os.Exit calls")
+	w("")
+	w("```")
+	w("%s", ctx.Code.ProcessExitCalls)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## Infrastructure")
+	w("")
+	w("### Dockerfile")
+	w("")
+	w("```dockerfile")
+	w("%s", ctx.Infra.Dockerfile)
+	w("```")
+	w("")
+	w("### Helm lint")
+	w("")
+	w("```")
+	w("%s", ctx.Infra.HelmLint)
+	w("```")
+	w("")
+	w("### Helm secret template")
+	w("")
+	w("```yaml")
+	w("%s", ctx.Infra.HelmSecretTemplate)
+	w("```")
+	w("")
+	w("### Helm values")
+	w("")
+	w("```yaml")
+	w("%s", ctx.Infra.HelmValues)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## Dependencies")
+	w("")
+	w("### pnpm / npm audit")
+	w("")
+	w("```")
+	w("%s", ctx.Dependencies.PnpmAudit)
+	w("```")
+	w("")
+	w("### Workspace overrides")
+	w("")
+	w("```")
+	w("%s", ctx.Dependencies.WorkspaceOverrides)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## Git History")
+	w("")
+	w("### Recent commits")
+	w("")
+	w("```")
+	w("%s", ctx.Git.RecentCommits)
+	w("```")
+	w("")
+	w("### Recently changed files (last 10 commits)")
+	w("")
+	w("```")
+	w("%s", ctx.Git.RecentlyChangedFiles)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## GitHub")
+	w("")
+
+	if issues, ok := ctx.GitHub.OpenIssues.([]interface{}); ok {
+		w("**Open issues:** %d", len(issues))
+	} else {
+		w("**Open issues:** (unavailable)")
+	}
+
+	if prs, ok := ctx.GitHub.OpenPRs.([]interface{}); ok {
+		w("**Open PRs:** %d", len(prs))
+	} else {
+		w("**Open PRs:** (unavailable)")
+	}
+
+	w("")
+	w("### Secret-scanning alerts")
+	w("")
+	w("```")
+	w("%s", ctx.GitHub.SecurityAlerts)
+	w("```")
+
+	return b.String()
+}
+
+func generateReport(ctx *auditContext, apiKey, model string) (report string, inputTokens, outputTokens int, err error) {
+	if model == "" {
+		model = defaultModel
+	}
 	payload := claudeRequest{
-		Model:     "claude-opus-4-8",
+		Model:     model,
 		MaxTokens: 8192,
 		System: []claudeSystemBlock{
 			{
@@ -361,7 +531,7 @@ func generateReport(ctx *auditContext, apiKey string) (report string, inputToken
 
 // ── Runner ────────────────────────────────────────────────────────────────────
 
-func runAudit(db *sql.DB, id, repo, ghToken, anthropicKey string) {
+func runAudit(db *sql.DB, id, repo, ghToken, anthropicKey, model string) {
 	_ = dbUpdateAuditRunning(db, id)
 
 	auditCtx, tmpDir, err := collectContext(repo, ghToken)
@@ -371,11 +541,15 @@ func runAudit(db *sql.DB, id, repo, ghToken, anthropicKey string) {
 	}
 	defer os.RemoveAll(tmpDir) //nolint:errcheck
 
-	report, inputTokens, outputTokens, err := generateReport(auditCtx, anthropicKey)
-	if err != nil {
-		_ = dbUpdateAuditError(db, id, fmt.Sprintf("generate failed: %v", err))
-		return
+	if anthropicKey != "" {
+		report, inputTokens, outputTokens, err := generateReport(auditCtx, anthropicKey, model)
+		if err != nil {
+			_ = dbUpdateAuditError(db, id, fmt.Sprintf("generate failed: %v", err))
+			return
+		}
+		_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)
+	} else {
+		report := generateTemplateReport(auditCtx)
+		_ = dbUpdateAuditDone(db, id, report, 0, 0)
 	}
-
-	_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)
 }

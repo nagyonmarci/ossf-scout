@@ -35,6 +35,7 @@ type auditRow struct {
 	ID           string     `json:"id"`
 	Repo         string     `json:"repo"`
 	Status       string     `json:"status"`
+	Model        string     `json:"model"`
 	CreatedAt    time.Time  `json:"created_at"`
 	CompletedAt  *time.Time `json:"completed_at"`
 	Report       *string    `json:"report"`
@@ -113,6 +114,7 @@ CREATE TABLE IF NOT EXISTS audits (
     id            TEXT    NOT NULL PRIMARY KEY,
     repo          TEXT    NOT NULL,
     status        TEXT    NOT NULL DEFAULT 'pending',
+    model         TEXT    NOT NULL DEFAULT '',
     created_at    DATETIME NOT NULL,
     completed_at  DATETIME,
     report        TEXT,
@@ -261,10 +263,10 @@ func dbDeleteScan(db *sql.DB, id int64) error {
 	return err
 }
 
-func dbCreateAudit(db *sql.DB, id, repo string) error {
+func dbCreateAudit(db *sql.DB, id, repo, model string) error {
 	_, err := db.Exec(
-		`INSERT INTO audits (id, repo, status, created_at) VALUES (?, ?, 'pending', ?)`,
-		id, repo, time.Now().UTC(),
+		`INSERT INTO audits (id, repo, status, model, created_at) VALUES (?, ?, 'pending', ?, ?)`,
+		id, repo, model, time.Now().UTC(),
 	)
 	return err
 }
@@ -292,7 +294,7 @@ func dbUpdateAuditError(db *sql.DB, id, errMsg string) error {
 
 func dbListAudits(db *sql.DB) ([]auditRow, error) {
 	rows, err := db.Query(
-		`SELECT id, repo, status, created_at, completed_at, error, input_tokens, output_tokens
+		`SELECT id, repo, status, model, created_at, completed_at, error, input_tokens, output_tokens
 		 FROM audits ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -302,7 +304,7 @@ func dbListAudits(db *sql.DB) ([]auditRow, error) {
 	var out []auditRow
 	for rows.Next() {
 		var a auditRow
-		if err := rows.Scan(&a.ID, &a.Repo, &a.Status, &a.CreatedAt,
+		if err := rows.Scan(&a.ID, &a.Repo, &a.Status, &a.Model, &a.CreatedAt,
 			&a.CompletedAt, &a.Error, &a.InputTokens, &a.OutputTokens); err != nil {
 			return nil, err
 		}
@@ -314,9 +316,9 @@ func dbListAudits(db *sql.DB) ([]auditRow, error) {
 func dbGetAudit(db *sql.DB, id string) (*auditRow, error) {
 	var a auditRow
 	err := db.QueryRow(
-		`SELECT id, repo, status, created_at, completed_at, report, error, input_tokens, output_tokens
+		`SELECT id, repo, status, model, created_at, completed_at, report, error, input_tokens, output_tokens
 		 FROM audits WHERE id=?`, id,
-	).Scan(&a.ID, &a.Repo, &a.Status, &a.CreatedAt,
+	).Scan(&a.ID, &a.Repo, &a.Status, &a.Model, &a.CreatedAt,
 		&a.CompletedAt, &a.Report, &a.Error, &a.InputTokens, &a.OutputTokens)
 	if err != nil {
 		return nil, err

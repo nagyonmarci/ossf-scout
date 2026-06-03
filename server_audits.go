@@ -153,7 +153,7 @@ func handleDownloadAuditContext(db *sql.DB) http.HandlerFunc {
 			ctx.Meta.Date[:10])
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-		fmt.Fprint(w, md)
+		_, _ = fmt.Fprint(w, md)
 	}
 }
 

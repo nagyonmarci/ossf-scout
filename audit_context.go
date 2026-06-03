@@ -247,7 +247,7 @@ func resolvePinnedActions(unpinned string) string {
 			at := strings.SplitN(key, "@", 2)
 			sha = resolveTagSHA(at[0], at[1])
 		}
-		b.WriteString(fmt.Sprintf("%s -> %s | %s\n", key, sha, strings.Join(dedupeStrings(seen[key].locs), ", ")))
+		fmt.Fprintf(&b, "%s -> %s | %s\n", key, sha, strings.Join(dedupeStrings(seen[key].locs), ", "))
 	}
 	return b.String()
 }

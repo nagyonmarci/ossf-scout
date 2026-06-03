@@ -226,10 +226,10 @@ func verifyReport(report string, ctx *auditContext) string {
 			status = "❌ unverified"
 			fails++
 		}
-		b.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
-			strings.ReplaceAll(r.claim, "|", "\\|"), r.kind, status, r.detail))
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s |\n",
+			strings.ReplaceAll(r.claim, "|", "\\|"), r.kind, status, r.detail)
 	}
-	b.WriteString(fmt.Sprintf("\n**Summary:** %d verified, %d unverified.\n", len(results)-fails, fails))
+	fmt.Fprintf(&b, "\n**Summary:** %d verified, %d unverified.\n", len(results)-fails, fails)
 
 	if fails == 0 {
 		return report + b.String()

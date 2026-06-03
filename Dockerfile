@@ -23,7 +23,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go install github.com/ossf/scorecard/v5@v5.5.0 && \
-    go install github.com/zricethezav/gitleaks/v8@v8.21.2
+    go install github.com/zricethezav/gitleaks/v8@v8.21.2 && \
+    go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 
 # Stage 3: minimal runtime
 FROM alpine:3.22@sha256:310c62b5e7ca5b08167e4384c68db0fd2905dd9c7493756d356e893909057601
@@ -32,5 +33,6 @@ WORKDIR /app
 COPY --from=builder /app/ossf-scout .
 COPY --from=builder /go/bin/scorecard /usr/local/bin/scorecard
 COPY --from=builder /go/bin/gitleaks /usr/local/bin/gitleaks
+COPY --from=builder /go/bin/actionlint /usr/local/bin/actionlint
 EXPOSE 7878
 CMD ["./ossf-scout", "-serve"]

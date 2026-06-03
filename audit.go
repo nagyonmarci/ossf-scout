@@ -24,6 +24,7 @@ type auditMeta struct {
 type auditCICD struct {
 	UnpinnedActions string `json:"unpinnedActions"`
 	Zizmor          string `json:"zizmor"`
+	Actionlint      string `json:"actionlint"`
 	WorkflowList    string `json:"workflowList"`
 }
 
@@ -35,6 +36,13 @@ type auditCode struct {
 	HardcodedSecretHints string `json:"hardcodedSecretHints"`
 	WeakCrypto           string `json:"weakCrypto"`
 	ProcessExitCalls     string `json:"processExitCalls"`
+	SqlInjection         string `json:"sqlInjection"`
+	SSRF                 string `json:"ssrf"`
+	PathTraversal        string `json:"pathTraversal"`
+	XXE                  string `json:"xxe"`
+	Deserialization      string `json:"deserialization"`
+	RateLimiting         string `json:"rateLimiting"`
+	CORSConfig           string `json:"corsConfig"`
 }
 
 type auditInfra struct {
@@ -70,8 +78,16 @@ type auditSecrets struct {
 type auditIaC struct {
 	TerraformFiles string `json:"terraformFiles"`
 	Checkov        string `json:"checkov"`
+	Trivy          string `json:"trivy"`
 	KubeManifests  string `json:"kubeManifests"`
 	KubeLinter     string `json:"kubeLinter"`
+}
+
+type auditKeyFiles struct {
+	EntryPoint       string `json:"entryPoint"`
+	AuthMiddleware   string `json:"authMiddleware"`
+	PermissionSystem string `json:"permissionSystem"`
+	SecurityConfig   string `json:"securityConfig"`
 }
 
 type auditPolicy struct {
@@ -89,17 +105,18 @@ type auditSLSA struct {
 }
 
 type auditContext struct {
-	Meta         auditMeta    `json:"meta"`
-	CICD         auditCICD    `json:"cicd"`
-	Code         auditCode    `json:"code"`
-	Infra        auditInfra   `json:"infra"`
-	Dependencies auditDeps    `json:"dependencies"`
-	Git          auditGit     `json:"git"`
-	GitHub       auditGitHub  `json:"github"`
-	Secrets      auditSecrets `json:"secrets"`
-	IaC          auditIaC     `json:"iac"`
-	Policy       auditPolicy  `json:"policy"`
-	SLSA         auditSLSA    `json:"slsa"`
+	Meta         auditMeta     `json:"meta"`
+	CICD         auditCICD     `json:"cicd"`
+	Code         auditCode     `json:"code"`
+	KeyFiles     auditKeyFiles `json:"keyFiles"`
+	Infra        auditInfra    `json:"infra"`
+	Dependencies auditDeps     `json:"dependencies"`
+	Git          auditGit      `json:"git"`
+	GitHub       auditGitHub   `json:"github"`
+	Secrets      auditSecrets  `json:"secrets"`
+	IaC          auditIaC      `json:"iac"`
+	Policy       auditPolicy   `json:"policy"`
+	SLSA         auditSLSA     `json:"slsa"`
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -157,6 +174,8 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 				"grep -rn 'uses:.*@v[0-9]' .github/workflows/ 2>/dev/null || echo 'none'"),
 			Zizmor: shIn(tmpDir, "zizmor not installed — skipped",
 				"zizmor --format json .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'"),
+			Actionlint: shIn(tmpDir, "actionlint not installed — skipped",
+				"actionlint -format '{{range $e := .}}{{$e.Filepath}}:{{$e.Line}}: [{{$e.Kind}}] {{$e.Message}}\n{{end}}' .github/workflows/*.yml 2>&1 | head -100 || echo 'actionlint not installed — skipped'"),
 			WorkflowList: shIn(tmpDir, "(none)",
 				"ls .github/workflows/ 2>/dev/null || echo '(none)'"),
 		},
@@ -175,6 +194,30 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 				"grep -rn 'createHash.*md5\\|createHash.*sha1\\|md5\\.New\\|sha1\\.New' --include='*.ts' --include='*.go' . | grep -v node_modules | head -20 || echo 'none'"),
 			ProcessExitCalls: shIn(tmpDir, "none",
 				"grep -rn 'process\\.exit\\|os\\.Exit' --include='*.ts' --include='*.go' . | grep -v node_modules | grep -v '\\.test\\.' | head -20 || echo 'none'"),
+			SqlInjection: shIn(tmpDir, "none",
+				"grep -rn 'knex\\.raw\\|whereRaw\\|sequelize\\.query\\|\\.db\\.query' --include='*.ts' . | grep -v node_modules | grep -v '\\.test\\.' | head -40 || echo 'none'"),
+			SSRF: shIn(tmpDir, "none",
+				"grep -rn 'fetch(\\|axios\\.get\\|axios\\.post\\|got(\\|http\\.get\\|https\\.get' --include='*.ts' --include='*.go' . | grep -v node_modules | grep -v '\\.test\\.' | head -40 || echo 'none'"),
+			PathTraversal: shIn(tmpDir, "none",
+				"grep -rn 'readFile\\|readFileSync\\|createReadStream\\|path\\.join' --include='*.ts' . | grep -v node_modules | grep -v '\\.test\\.' | head -30 || echo 'none'"),
+			XXE: shIn(tmpDir, "none",
+				"grep -rn 'xml2js\\|fast-xml-parser\\|DOMParser\\|XMLParser\\|parseString' --include='*.ts' . | grep -v node_modules | head -20 || echo 'none'"),
+			Deserialization: shIn(tmpDir, "none",
+				"grep -rn 'yaml\\.load\\|yaml\\.safeLoad\\|unserialize\\|JSON\\.parse(' --include='*.ts' . | grep -v node_modules | grep -v '\\.test\\.' | head -20 || echo 'none'"),
+			RateLimiting: shIn(tmpDir, "none",
+				"grep -rn 'rateLimit\\|express-rate-limit\\|rate_limit\\|rateLimiter' --include='*.ts' . | grep -v node_modules | head -20 || echo 'none'"),
+			CORSConfig: shIn(tmpDir, "none",
+				"grep -rn 'cors(' --include='*.ts' . | grep -v node_modules | head -10 || echo 'none'"),
+		},
+		KeyFiles: auditKeyFiles{
+			EntryPoint: shIn(tmpDir, "(not found)",
+				"for f in app.ts server.ts index.ts main.ts src/app.ts src/server.ts src/index.ts src/main.ts; do [ -f \"$f\" ] && head -150 \"$f\" && break; done 2>/dev/null || echo '(not found)'"),
+			AuthMiddleware: shIn(tmpDir, "(not found)",
+				"find . -not -path '*/node_modules/*' -not -path '*test*' -name '*.ts' | xargs grep -l 'authenticate\\|passport\\|jwt\\.verify\\|session' 2>/dev/null | head -2 | xargs -I{} sh -c 'echo \"=== {} ===\"; head -150 \"{}\"' 2>/dev/null || echo '(not found)'"),
+			PermissionSystem: shIn(tmpDir, "(not found)",
+				"find . -not -path '*/node_modules/*' -not -path '*test*' -name '*.ts' | xargs grep -l 'permission\\|authorize\\|rbac\\|\\bACL\\b' 2>/dev/null | head -2 | xargs -I{} sh -c 'echo \"=== {} ===\"; head -150 \"{}\"' 2>/dev/null || echo '(not found)'"),
+			SecurityConfig: shIn(tmpDir, "(not found)",
+				"grep -rn 'helmet\\|cors(\\|session(\\|cookieParser' --include='*.ts' . | grep -v node_modules | head -30 || echo '(not found)'"),
 		},
 		Infra: auditInfra{
 			HelmLint: shIn(tmpDir, "helm not installed — skipped",
@@ -216,6 +259,8 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 			"find . -name '*.tf' -not -path '*/node_modules/*' | head -20 || echo '(none found)'"),
 		Checkov: shIn(tmpDir, "checkov not installed — skipped",
 			"checkov -d . --quiet --compact --output json 2>&1 | head -300 || echo 'checkov not installed — skipped'"),
+		Trivy: shIn(tmpDir, "trivy not installed — skipped",
+			"trivy config . --format json --quiet 2>&1 | head -300 || echo 'trivy not installed — skipped'"),
 		KubeManifests: shIn(tmpDir, "(none found)",
 			"grep -rl 'kind:' --include='*.yaml' --include='*.yml' . | grep -v node_modules | head -20 || echo '(none found)'"),
 		KubeLinter: shIn(tmpDir, "kube-linter not installed — skipped",
@@ -351,11 +396,17 @@ Produce the following sections in order. Do not omit any.
 10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate
 11. **Appendix: Full Application Security Assessment** — one H3 subsection per category `+
 		`(SQL Injection, Authentication, Authorisation, Deserialization, SSRF, XXE, Path Traversal, `+
-		`Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm, `+
+		`Cryptography, Rate Limiting, CORS, Dependencies, HTTP Headers, Container, Kubernetes/Helm, `+
 		`Secrets / Credential Hygiene, IaC Security, Policy as Code, SLSA / Supply Chain). `+
 		`Each subsection must start with the methodology note before listing observations. `+
+		`For SQL Injection: use keyFiles.entryPoint and code.sqlInjection; ORM raw call with string concatenation = High. `+
+		`For Authentication: read keyFiles.authMiddleware carefully; missing jwt.verify or session fixation = Critical. `+
+		`For Authorisation: read keyFiles.permissionSystem; route handler without permission check = High. `+
+		`For SSRF: evaluate code.ssrf against keyFiles; user-controlled URL passed to fetch/axios/got = Critical. `+
+		`For Rate Limiting: if code.rateLimiting is empty or 'none', flag missing rate limiting as Medium/High on auth endpoints. `+
+		`For CORS: if code.corsConfig shows origin:'*' with credentials, flag as Medium. `+
 		`For Secrets: assess Gitleaks output or grep results, estimate false positive rate, list any confirmed leaks as Critical findings. `+
-		`For IaC: synthesise Checkov findings, flag unencrypted storage / overly-permissive IAM / missing network policies. `+
+		`For IaC: synthesise Checkov and Trivy findings, flag unencrypted storage / overly-permissive IAM / missing network policies. `+
 		`For Policy as Code: assess OPA/Kyverno coverage gaps — what admission controls are missing. `+
 		`For SLSA / Supply Chain: determine the current SLSA level (L0–L3) based on the evidence, `+
 		`state exactly what is needed to reach the next level, and flag any unsigned artifacts or missing provenance.`,
@@ -424,6 +475,12 @@ func generateTemplateReport(ctx *auditContext) string {
 	w("%s", ctx.CICD.UnpinnedActions)
 	w("```")
 	w("")
+	w("### Actionlint")
+	w("")
+	w("```")
+	w("%s", ctx.CICD.Actionlint)
+	w("```")
+	w("")
 	w("### Workflow files")
 	w("")
 	w("```")
@@ -480,6 +537,76 @@ func generateTemplateReport(ctx *auditContext) string {
 	w("")
 	w("```")
 	w("%s", ctx.Code.ProcessExitCalls)
+	w("```")
+	w("")
+	w("### SQL injection patterns")
+	w("")
+	w("```")
+	w("%s", ctx.Code.SqlInjection)
+	w("```")
+	w("")
+	w("### SSRF (fetch / axios / got)")
+	w("")
+	w("```")
+	w("%s", ctx.Code.SSRF)
+	w("```")
+	w("")
+	w("### Path traversal (readFile / path.join)")
+	w("")
+	w("```")
+	w("%s", ctx.Code.PathTraversal)
+	w("```")
+	w("")
+	w("### XXE (xml2js / DOMParser)")
+	w("")
+	w("```")
+	w("%s", ctx.Code.XXE)
+	w("```")
+	w("")
+	w("### Deserialization (yaml.load / JSON.parse)")
+	w("")
+	w("```")
+	w("%s", ctx.Code.Deserialization)
+	w("```")
+	w("")
+	w("### Rate limiting")
+	w("")
+	w("```")
+	w("%s", ctx.Code.RateLimiting)
+	w("```")
+	w("")
+	w("### CORS config")
+	w("")
+	w("```")
+	w("%s", ctx.Code.CORSConfig)
+	w("```")
+	w("")
+	w("---")
+	w("")
+	w("## Key Security Files")
+	w("")
+	w("### Entry point")
+	w("")
+	w("```typescript")
+	w("%s", ctx.KeyFiles.EntryPoint)
+	w("```")
+	w("")
+	w("### Auth middleware")
+	w("")
+	w("```typescript")
+	w("%s", ctx.KeyFiles.AuthMiddleware)
+	w("```")
+	w("")
+	w("### Permission system")
+	w("")
+	w("```typescript")
+	w("%s", ctx.KeyFiles.PermissionSystem)
+	w("```")
+	w("")
+	w("### Security config (helmet / cors / session)")
+	w("")
+	w("```")
+	w("%s", ctx.KeyFiles.SecurityConfig)
 	w("```")
 	w("")
 	w("---")
@@ -608,6 +735,12 @@ func generateTemplateReport(ctx *auditContext) string {
 	w("")
 	w("```")
 	w("%s", ctx.IaC.Checkov)
+	w("```")
+	w("")
+	w("### Trivy config")
+	w("")
+	w("```")
+	w("%s", ctx.IaC.Trivy)
 	w("```")
 	w("")
 	w("### Kubernetes manifests")

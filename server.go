@@ -10,6 +10,8 @@ import (
 	"strconv"
 
 	"embed"
+
+	"github.com/google/uuid"
 )
 
 //go:embed frontend/dist
@@ -30,6 +32,11 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("GET /api/scans/{id}/results", handleGetResults(db))
 	mux.HandleFunc("DELETE /api/scans/{id}", handleDeleteScan(db))
 	mux.HandleFunc("GET /api/trending", handleTrending(serverToken))
+
+	mux.HandleFunc("POST /api/audits", handleCreateAudit(db))
+	mux.HandleFunc("GET /api/audits", handleListAudits(db))
+	mux.HandleFunc("GET /api/audits/{id}", handleGetAudit(db))
+	mux.HandleFunc("DELETE /api/audits/{id}", handleDeleteAudit(db))
 
 	sub, err := fs.Sub(staticFiles, "frontend/dist")
 	if err != nil {
@@ -210,6 +217,85 @@ func parseScanID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// ── audit handlers ────────────────────────────────────────────────────────────
+
+type createAuditRequest struct {
+	Repo         string `json:"repo"`
+	GithubToken  string `json:"github_token"`
+	AnthropicKey string `json:"anthropic_key"`
+}
+
+func handleCreateAudit(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req createAuditRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Repo == "" {
+			http.Error(w, "invalid request body — repo is required", http.StatusBadRequest)
+			return
+		}
+
+		apiKey := req.AnthropicKey
+		if apiKey == "" {
+			apiKey = os.Getenv("ANTHROPIC_API_KEY")
+		}
+		if apiKey == "" {
+			http.Error(w, "Anthropic API key required — set ANTHROPIC_API_KEY on the server or provide it in the request", http.StatusServiceUnavailable)
+			return
+		}
+
+		id := uuid.New().String()
+		if err := dbCreateAudit(db, id, req.Repo); err != nil {
+			http.Error(w, "db error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		go runAudit(db, id, req.Repo, req.GithubToken, apiKey)
+
+		a, err := dbGetAudit(db, id)
+		if err != nil {
+			http.Error(w, "db error", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusCreated, a)
+	}
+}
+
+func handleListAudits(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		audits, err := dbListAudits(db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if audits == nil {
+			audits = []auditRow{}
+		}
+		writeJSON(w, http.StatusOK, audits)
+	}
+}
+
+func handleGetAudit(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		a, err := dbGetAudit(db, id)
+		if err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}
+}
+
+func handleDeleteAudit(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		if err := dbDeleteAudit(db, id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

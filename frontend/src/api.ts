@@ -69,12 +69,38 @@ export interface GetTrendingParams {
   token?: string;
 }
 
+// ── Audit ─────────────────────────────────────────────────────────────────────
+
+export type AuditStatus = 'pending' | 'running' | 'done' | 'error';
+
+export interface Audit {
+  id: string;
+  repo: string;
+  status: AuditStatus;
+  created_at: string;
+  completed_at: string | null;
+  report: string | null;
+  error: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+}
+
+export interface CreateAuditParams {
+  repo: string;
+  github_token?: string;
+  anthropic_key?: string;
+}
+
 export const api = {
   listScans: () => request<Scan[]>('GET', '/api/scans'),
   getScan: (id: number) => request<Scan>('GET', `/api/scans/${id}`),
   createScan: (params: CreateScanParams) => request<Scan>('POST', '/api/scans', params),
   deleteScan: (id: number) => request<void>('DELETE', `/api/scans/${id}`),
   getResults: (id: number) => request<ScanResult[]>('GET', `/api/scans/${id}/results`),
+  listAudits: () => request<Audit[]>('GET', '/api/audits'),
+  getAudit: (id: string) => request<Audit>('GET', `/api/audits/${id}`),
+  createAudit: (params: CreateAuditParams) => request<Audit>('POST', '/api/audits', params),
+  deleteAudit: (id: string) => request<void>('DELETE', `/api/audits/${id}`),
   getTrending: (params: GetTrendingParams) => {
     const q = new URLSearchParams()
     if (params.language) q.set('language', params.language)

@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -28,6 +29,18 @@ type scanRow struct {
 	SingleRepo    string `json:"single_repo"`
 	TotalRepos    *int   `json:"total_repos"`
 	ResultCount *int     `json:"result_count"`
+}
+
+type auditRow struct {
+	ID           string     `json:"id"`
+	Repo         string     `json:"repo"`
+	Status       string     `json:"status"`
+	CreatedAt    time.Time  `json:"created_at"`
+	CompletedAt  *time.Time `json:"completed_at"`
+	Report       *string    `json:"report"`
+	Error        *string    `json:"error"`
+	InputTokens  *int       `json:"input_tokens"`
+	OutputTokens *int       `json:"output_tokens"`
 }
 
 type scanResultRow struct {
@@ -94,6 +107,21 @@ func openDB(path string) (*sql.DB, error) {
 	}
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
+	}
+	const auditSchema = `
+CREATE TABLE IF NOT EXISTS audits (
+    id            TEXT    NOT NULL PRIMARY KEY,
+    repo          TEXT    NOT NULL,
+    status        TEXT    NOT NULL DEFAULT 'pending',
+    created_at    DATETIME NOT NULL,
+    completed_at  DATETIME,
+    report        TEXT,
+    error         TEXT,
+    input_tokens  INTEGER,
+    output_tokens INTEGER
+);`
+	if _, err := db.Exec(auditSchema); err != nil {
+		return nil, fmt.Errorf("create audits table: %w", err)
 	}
 	// Migrate: add columns for existing databases
 	_, _ = db.Exec(`ALTER TABLE scan_results ADD COLUMN open_issues INTEGER NOT NULL DEFAULT 0`)
@@ -230,6 +258,74 @@ func dbGetResults(db *sql.DB, scanID int64) ([]scanResultRow, error) {
 
 func dbDeleteScan(db *sql.DB, id int64) error {
 	_, err := db.Exec(`DELETE FROM scans WHERE id=?`, id)
+	return err
+}
+
+func dbCreateAudit(db *sql.DB, id, repo string) error {
+	_, err := db.Exec(
+		`INSERT INTO audits (id, repo, status, created_at) VALUES (?, ?, 'pending', ?)`,
+		id, repo, time.Now().UTC(),
+	)
+	return err
+}
+
+func dbUpdateAuditRunning(db *sql.DB, id string) error {
+	_, err := db.Exec(`UPDATE audits SET status='running' WHERE id=?`, id)
+	return err
+}
+
+func dbUpdateAuditDone(db *sql.DB, id, report string, inputTokens, outputTokens int) error {
+	_, err := db.Exec(
+		`UPDATE audits SET status='done', completed_at=?, report=?, input_tokens=?, output_tokens=? WHERE id=?`,
+		time.Now().UTC(), report, inputTokens, outputTokens, id,
+	)
+	return err
+}
+
+func dbUpdateAuditError(db *sql.DB, id, errMsg string) error {
+	_, err := db.Exec(
+		`UPDATE audits SET status='error', completed_at=?, error=? WHERE id=?`,
+		time.Now().UTC(), errMsg, id,
+	)
+	return err
+}
+
+func dbListAudits(db *sql.DB) ([]auditRow, error) {
+	rows, err := db.Query(
+		`SELECT id, repo, status, created_at, completed_at, error, input_tokens, output_tokens
+		 FROM audits ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	var out []auditRow
+	for rows.Next() {
+		var a auditRow
+		if err := rows.Scan(&a.ID, &a.Repo, &a.Status, &a.CreatedAt,
+			&a.CompletedAt, &a.Error, &a.InputTokens, &a.OutputTokens); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func dbGetAudit(db *sql.DB, id string) (*auditRow, error) {
+	var a auditRow
+	err := db.QueryRow(
+		`SELECT id, repo, status, created_at, completed_at, report, error, input_tokens, output_tokens
+		 FROM audits WHERE id=?`, id,
+	).Scan(&a.ID, &a.Repo, &a.Status, &a.CreatedAt,
+		&a.CompletedAt, &a.Report, &a.Error, &a.InputTokens, &a.OutputTokens)
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+func dbDeleteAudit(db *sql.DB, id string) error {
+	_, err := db.Exec(`DELETE FROM audits WHERE id=?`, id)
 	return err
 }
 

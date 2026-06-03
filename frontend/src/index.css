@@ -549,3 +549,40 @@ td.description {
   color: var(--red);
   font-size: 13px;
 }
+
+/* Audit report */
+.audit-report {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.audit-report h1,
+.audit-report h2,
+.audit-report h3 {
+  margin-top: 1.5rem;
+}
+.audit-report table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+.audit-report th,
+.audit-report td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.audit-report code {
+  background: var(--code-bg, #1e1e2e);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.audit-report pre {
+  background: var(--code-bg, #1e1e2e);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+/* Pending badge */
+.badge-pending { background: rgba(234,179,8,0.15); color: var(--yellow); }

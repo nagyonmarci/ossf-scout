@@ -1863,3 +1863,49 @@ Date:   Wed Jun 3 11:24:04 2026 -0500
     
     Co-authored-by: Alex Gaillard <alex@directus.io>
 ```
+
+---
+
+## Triage & threat model
+
+> Derived summary. Finding IDs (F-001…F-005) refer to the AI-synthesised report
+> [`directus-audit-report-ai.md`](directus-audit-report-ai.md), which turns the raw data above into
+> calibrated findings. Added here so this file is self-contained.
+
+### Effort / impact matrix
+
+| | **Low effort (≤ ½ day)** | **High effort (≥ 1 day)** |
+|---|---|---|
+| **High impact** | **Quick wins** — re-run with `GITHUB_TOKEN` + `pnpm audit` (R-4) | **Major projects** — SSRF egress allowlist helper (R-1 / F-001) |
+| **Low / med impact** | **Fill-ins** — pin actions to SHA (R-2 / F-002), digest-pin Docker (R-3 / F-003), add Scorecard + zizmor CI (R-5) | — |
+
+### Automated CI verification
+
+Drop into `.github/workflows/security-verify.yml` so remediations are checked on every push:
+
+```yaml
+jobs:
+  verify-remediations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@<sha>   # v4
+      - name: F-002 — actions must be SHA-pinned
+        run: '! grep -REn "uses: .*@v[0-9]" .github/workflows'
+      - name: F-003 — Docker base must be digest-pinned
+        run: '! grep -En "^FROM .*:[^@]*$" Dockerfile'
+      - name: F-001 — outbound fetch must go through the SSRF guard
+        run: 'grep -REn "assertPublic|isPublicAddress" api/src/services/files.ts'
+      - name: F-004 — X-Powered-By must not be set
+        run: '! grep -REn "setHeader..X-Powered-By" api/src'
+```
+
+### Threat model (STRIDE)
+
+| STRIDE category | Surface / vector | Relevant finding | Existing control (evidence) | Gap / recommendation |
+|-----------------|------------------|------------------|-----------------------------|----------------------|
+| **Spoofing** | OAuth client registration fetches a client-supplied metadata URL | F-001 (`cimd.ts:277`) | Session / refresh / OTP auth (`AuthenticationService`) | Validate client-metadata host; apply SSRF guard |
+| **Tampering** | CI supply chain — mutable action tags & floating Docker base | F-002, F-003 | CodeQL workflow present; non-root `USER node` | Pin actions to SHA; digest-pin base images |
+| **Repudiation** | Audit trail of who changed what | — | HEAD commit GPG-signed (`d358376`); Directus `activity`/`revisions` | Enforce signed commits via branch protection |
+| **Information disclosure** | SSRF to internal/metadata endpoints; software-version banner | F-001, F-004 | `IMPORT_IP_DENY_LIST` (weak default); `helmet` CSP/HSTS | Harden denylist + `assertPublic`; drop `X-Powered-By` |
+| **Denial of service** | Unauthenticated request floods | — | Global rate limiter (`rate-limiter-global.ts`, Redis/Memory, `Retry-After`) | Confirm limits tuned per route in production |
+| **Elevation of privilege** | Script execution via Flows `exec` operation | F-005 (`operations/exec/index.ts:49`) | isolated-vm sandbox + timeout; admin-only flow authoring | Keep flow-create restricted to trusted admin roles |

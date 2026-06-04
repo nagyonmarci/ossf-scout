@@ -40,6 +40,7 @@ const (
 	truncCheckov           = 4_000
 	truncTrivy             = 3_000
 	truncKubeLinter        = 2_000
+	truncSemgrep           = 5_000
 
 	// buildAuditSummarySections / buildContextMarkdown per-field limits
 	truncSummaryWorkflow = 15_000

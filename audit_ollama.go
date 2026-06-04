@@ -82,6 +82,7 @@ func compactForOllama(ctx *auditContext) *auditContext {
 	c.IaC.OSVScanner = truncateField(ctx.IaC.OSVScanner, truncCheckov)
 	c.IaC.Trivy = truncateField(ctx.IaC.Trivy, truncTrivy)
 	c.IaC.KubeLinter = truncateField(ctx.IaC.KubeLinter, truncKubeLinter)
+	c.Code.SemgrepFindings = truncateField(ctx.Code.SemgrepFindings, truncSemgrep)
 	return &c
 }
 

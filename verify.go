@@ -24,8 +24,9 @@ var (
 	reVector     = regexp.MustCompile(`CVSS:3\.[01]/[A-Za-z:/]+`)
 	reScoreBnd   = regexp.MustCompile(`(\d{1,2}\.\d)\s*\(?(Critical|High|Medium|Low|None)\)?`)
 	reCVE        = regexp.MustCompile(`CVE-\d{4}-\d{4,}`)
-	rePkgVersion = regexp.MustCompile(`\b([\w][\w.-]{1,60})@(\d+\.\d[\w.+\-]*)`)
-	reWorkflow   = regexp.MustCompile(`\.github/workflows/([\w.\-]+\.ya?ml)`)
+	rePkgVersion  = regexp.MustCompile(`\b([\w][\w.-]{1,60})@(\d+\.\d[\w.+\-]*)`)
+	reWorkflow    = regexp.MustCompile(`\.github/workflows/([\w.\-]+\.ya?ml)`)
+	reBranchClaim = regexp.MustCompile(`\bbranch[:\s]+([a-zA-Z0-9_.\-/]+)`)
 )
 
 func cvssBand(s float64) string {
@@ -239,6 +240,18 @@ func verifyReport(report string, ctx *auditContext) string {
 			add("pkg@version", full, true, "found in dependency evidence")
 		} else {
 			add("pkg@version", full, false, "not found in npm/osv-scanner evidence")
+		}
+	}
+
+	// 9. Branch name claims — check against collected DefaultBranch.
+	if ctx.GitHub.DefaultBranch != "" {
+		for _, m := range reBranchClaim.FindAllStringSubmatch(report, -1) {
+			claimed := m[1]
+			if claimed == ctx.GitHub.DefaultBranch || claimed == "main" || claimed == "master" {
+				continue // common/expected
+			}
+			add("branch name", claimed, false,
+				fmt.Sprintf("claimed branch %q not recognised (default: %s)", claimed, ctx.GitHub.DefaultBranch))
 		}
 	}
 

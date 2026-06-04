@@ -47,6 +47,7 @@ type auditCode struct {
 	Deserialization      string `json:"deserialization"`
 	RateLimiting         string `json:"rateLimiting"`
 	CORSConfig           string `json:"corsConfig"`
+	SemgrepFindings      string `json:"semgrepFindings"`
 }
 
 type auditInfra struct {
@@ -75,6 +76,7 @@ type auditGitHub struct {
 	BranchProtection string      `json:"branchProtection"`
 	DependabotAlerts string      `json:"dependabotAlerts"`
 	ReleaseHistory   string      `json:"releaseHistory"`
+	DefaultBranch    string      `json:"defaultBranch"`
 }
 
 type auditSecrets struct {
@@ -344,6 +346,8 @@ func collectContext(repo, ghToken string, opts collectOptions) (*auditContext, s
 				"grep -rn 'rateLimit\\|express-rate-limit\\|rate_limit\\|rateLimiter' --include='*.ts' . | grep -v node_modules | head -20 || echo 'none'"),
 			CORSConfig: shIn(tmpDir, "none",
 				"grep -rn 'cors(' --include='*.ts' . | grep -v node_modules | head -10 || echo 'none'"),
+			SemgrepFindings: shIn(tmpDir, "semgrep not installed — skipped",
+				"semgrep --config=auto --json --timeout 60 --quiet . 2>&1 | head -500 || echo 'semgrep not installed — skipped'"),
 		},
 		KeyFiles: auditKeyFiles{
 			EntryPoint: shIn(tmpDir, "(not found)",
@@ -525,7 +529,16 @@ func fetchGitHubContext(repo, ghToken string) auditGitHub {
 		}
 	}
 
-	bp, _ := fetch(base + "/branches/main/protection")
+	defaultBranch := "main"
+	if metaRaw, err := fetch(base); err == nil {
+		if metaMap, ok := metaRaw.(map[string]interface{}); ok {
+			if db, ok := metaMap["default_branch"].(string); ok && db != "" {
+				defaultBranch = db
+			}
+		}
+	}
+
+	bp, _ := fetch(base + "/branches/" + defaultBranch + "/protection")
 	bpJSON, _ := json.Marshal(bp)
 
 	// Dependabot alerts — requires token with security_events scope
@@ -550,6 +563,7 @@ func fetchGitHubContext(repo, ghToken string) auditGitHub {
 		BranchProtection: string(bpJSON),
 		DependabotAlerts: depAlertsStr,
 		ReleaseHistory:   string(relJSON),
+		DefaultBranch:    defaultBranch,
 	}
 }
 

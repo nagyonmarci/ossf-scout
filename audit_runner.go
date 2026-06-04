@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -24,20 +25,35 @@ type auditParams struct {
 	SplitGeneration bool
 }
 
+// gitAuthEnv returns an environment for git subprocesses that authenticates to
+// GitHub using the provided token without embedding it in command arguments.
+// The token is injected as an HTTP Authorization header via git config env vars,
+// keeping it out of exec.Command args and avoiding CWE-78 taint paths.
+func gitAuthEnv(ghToken string) []string {
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if ghToken == "" {
+		return env
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + ghToken))
+	return append(env,
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=http.extraHeader",
+		"GIT_CONFIG_VALUE_0=Authorization: Basic "+encoded,
+	)
+}
+
 // getRepoHeadSHA resolves the current HEAD commit SHA for a GitHub repo via git ls-remote.
 func getRepoHeadSHA(repo, ghToken string) string {
 	owner, repoName, ok := splitValidRepo(repo)
 	if !ok {
 		return ""
 	}
+	// Build URL without credentials; auth is injected via GIT_CONFIG env vars instead.
 	repoURL := "https://github.com/" + owner + "/" + repoName + ".git"
-	if ghToken != "" {
-		repoURL = "https://x-access-token:" + ghToken + "@github.com/" + owner + "/" + repoName + ".git"
-	}
 	cctx, cancel := context.WithTimeout(context.Background(), resolveTagTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, "git", "ls-remote", repoURL, "HEAD")
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = gitAuthEnv(ghToken)
 	out, err := cmd.Output()
 	if err != nil {
 		return ""

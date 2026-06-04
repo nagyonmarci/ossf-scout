@@ -266,12 +266,10 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 		return nil, "", fmt.Errorf("mktemp: %w", err)
 	}
 
+	// Build URL without credentials; auth is injected via GIT_CONFIG env vars instead.
 	cloneURL := fmt.Sprintf("https://github.com/%s/%s.git", owner, repoName)
-	if ghToken != "" {
-		cloneURL = fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", ghToken, owner, repoName)
-	}
 	cloneCmd := exec.Command("git", "clone", "--depth=50", cloneURL, tmpDir)
-	cloneCmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cloneCmd.Env = gitAuthEnv(ghToken)
 	if out, err := cloneCmd.CombinedOutput(); err != nil {
 		os.RemoveAll(tmpDir) //nolint:errcheck
 		msg := strings.TrimSpace(string(out))

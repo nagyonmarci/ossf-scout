@@ -5,6 +5,8 @@
 > Severity is calibrated per the OpenSSF supply-chain rubric; every `file:line`, commit, and PR
 > reference is copied verbatim from the collected context — items not captured are marked
 > *(not captured)* rather than invented.
+>
+> *Method: AI synthesis over static analysis + collected context — not a dynamic/runtime test.*
 
 ## 1. Metadata
 
@@ -56,8 +58,13 @@ client input:
 - `api/src/permissions/utils/fetch-dynamic-variable-data.ts:118` — `fetch(fields)`.
 
 **Root cause.** These are intentional outbound-fetch features, but the destination is influenced by
-the caller. Without an egress allowlist / IP-range denylist, an authenticated user can point the
-server at internal addresses (link-local `169.254.169.254`, RFC-1918 ranges, `localhost`).
+the caller and the existing denylist is incomplete. Directus does ship an `IMPORT_IP_DENY_LIST`
+control for the import-from-URL path, but its **default does not block the full RFC-1918 / link-local
+range** (e.g. cloud-metadata `169.254.169.254`, `localhost`), and the other outbound-fetch sites
+(OAuth CIMD `cimd.ts:277`, dynamic-variable resolution) are **not governed by it at all**. So an
+authenticated user can still point the server at internal addresses. *(The `IMPORT_IP_DENY_LIST`
+default is a documented Directus env control — not captured in the static evidence; verify the
+configured value in your deployment.)*
 
 **Impact chain.** Authenticated user (with file-create or OAuth-registration permission) → submits an
 internal URL → Directus fetches it server-side → response/metadata may be reflected → limited
@@ -76,7 +83,9 @@ async function assertPublic(url: string) {
     throw new Error('blocked: non-public address');
 }
 ```
-Apply before each `axios.get`/`fetch` above; keep the check on the resolved IP to defeat DNS rebinding.
+Apply before each `axios.get`/`fetch` above as **defense-in-depth** — covering the sites
+`IMPORT_IP_DENY_LIST` misses — and keep the check on the resolved IP to defeat DNS rebinding. Also
+harden the `IMPORT_IP_DENY_LIST` default to include the full RFC-1918 / link-local ranges.
 
 **Verification.**
 ```bash

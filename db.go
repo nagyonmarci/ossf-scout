@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -711,6 +712,90 @@ func scanRowsFromSQL(rows *sql.Rows) ([]scanRow, error) {
 			return nil, err
 		}
 		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// ── Portfolio stats ───────────────────────────────────────────────────────────
+
+type portfolioRepo struct {
+	Repo         string   `json:"repo"`
+	LatestScore  float64  `json:"latest_score"`
+	Stars        int      `json:"stars"`
+	WeakChecks   []string `json:"weak_checks"`
+	AuditCount   int      `json:"audit_count"`
+	LastAuditAt  string   `json:"last_audit_at"`
+	Provider     string   `json:"provider"`
+	Language     string   `json:"language"`
+}
+
+// dbGetPortfolio returns per-repo stats for the given repos (from scan_results
+// and audits tables). If repos is empty it returns the top 20 by audit count.
+func dbGetPortfolio(db *sql.DB, repos []string) ([]portfolioRepo, error) {
+	var rows *sql.Rows
+	var err error
+	if len(repos) == 0 {
+		rows, err = db.Query(`
+			SELECT r.repo,
+			       MAX(r.score) AS score,
+			       MAX(r.stars) AS stars,
+			       r.weak_checks,
+			       COUNT(DISTINCT a.id) AS audit_count,
+			       MAX(a.created_at) AS last_audit_at,
+			       MAX(a.provider) AS provider,
+			       r.language
+			FROM scan_results r
+			LEFT JOIN audits a ON a.repo = r.repo
+			GROUP BY r.repo
+			ORDER BY audit_count DESC, score ASC
+			LIMIT 20`)
+	} else {
+		placeholders := make([]string, len(repos))
+		args := make([]interface{}, len(repos))
+		for i, r := range repos {
+			placeholders[i] = "?"
+			args[i] = r
+		}
+		rows, err = db.Query(`
+			SELECT r.repo,
+			       MAX(r.score) AS score,
+			       MAX(r.stars) AS stars,
+			       r.weak_checks,
+			       COUNT(DISTINCT a.id) AS audit_count,
+			       MAX(a.created_at) AS last_audit_at,
+			       MAX(a.provider) AS provider,
+			       r.language
+			FROM scan_results r
+			LEFT JOIN audits a ON a.repo = r.repo
+			WHERE r.repo IN (`+strings.Join(placeholders, ",")+`)
+			GROUP BY r.repo
+			ORDER BY score ASC`, args...)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var out []portfolioRepo
+	for rows.Next() {
+		var p portfolioRepo
+		var weakRaw sql.NullString
+		var lastAudit sql.NullString
+		var provider sql.NullString
+		if err := rows.Scan(&p.Repo, &p.LatestScore, &p.Stars, &weakRaw,
+			&p.AuditCount, &lastAudit, &provider, &p.Language); err != nil {
+			return nil, err
+		}
+		if weakRaw.Valid && weakRaw.String != "" {
+			_ = json.Unmarshal([]byte(weakRaw.String), &p.WeakChecks)
+		}
+		if lastAudit.Valid {
+			p.LastAuditAt = lastAudit.String
+		}
+		if provider.Valid {
+			p.Provider = provider.String
+		}
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }

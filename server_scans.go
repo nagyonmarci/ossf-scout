@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -190,6 +191,32 @@ func handleGetIssuesPRs(db *sql.DB) http.HandlerFunc {
 		}
 		_ = dbStoreIssuesPRs(db, repo, dataJSON, summary)
 		writeJSON(w, http.StatusOK, map[string]string{"repo": repo, "summary": summary, "cached": "false"})
+	}
+}
+
+// ── Portfolio handler ─────────────────────────────────────────────────────────
+
+// handleGetPortfolio returns aggregated stats for multiple repos.
+// Query param: ?repos=owner/a,owner/b (optional — omit to get top 20 by activity)
+func handleGetPortfolio(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var repos []string
+		if raw := r.URL.Query().Get("repos"); raw != "" {
+			for _, r := range strings.Split(raw, ",") {
+				if trimmed := strings.TrimSpace(r); trimmed != "" {
+					repos = append(repos, trimmed)
+				}
+			}
+		}
+		data, err := dbGetPortfolio(db, repos)
+		if err != nil {
+			http.Error(w, "db error", http.StatusInternalServerError)
+			return
+		}
+		if data == nil {
+			data = []portfolioRepo{}
+		}
+		writeJSON(w, http.StatusOK, data)
 	}
 }
 

@@ -6,6 +6,7 @@ import TrendingPage from './pages/TrendingPage'
 import AuditPage from './pages/AuditPage'
 import AuditDetail from './pages/AuditDetail'
 import SchedulePage from './pages/SchedulePage'
+import PortfolioPage from './pages/PortfolioPage'
 
 function AppHeader() {
   return (
@@ -21,6 +22,7 @@ function AppHeader() {
             <NavLink to="/trending">Trending</NavLink>
             <NavLink to="/audits">Audit</NavLink>
             <NavLink to="/schedules">Schedules</NavLink>
+            <NavLink to="/portfolio">Portfolio</NavLink>
           </nav>
         </div>
       </div>
@@ -65,6 +67,7 @@ export default function App() {
           <Route path="/audits" element={<AuditPage />} />
           <Route path="/audits/:id" element={<AuditDetail />} />
           <Route path="/schedules" element={<SchedulePage />} />
+          <Route path="/portfolio" element={<PortfolioPage />} />
         </Route>
       </Routes>
       <BackToTop />

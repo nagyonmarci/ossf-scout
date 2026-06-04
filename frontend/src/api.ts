@@ -160,6 +160,17 @@ export interface CostStats {
   audit_count: number;
 }
 
+export interface PortfolioRepo {
+  repo: string;
+  latest_score: number;
+  stars: number;
+  weak_checks: string[];
+  audit_count: number;
+  last_audit_at: string;
+  provider: string;
+  language: string;
+}
+
 export const api = {
   listScans: () => request<Scan[]>('GET', '/api/scans'),
   getScan: (id: number) => request<Scan>('GET', `/api/scans/${id}`),
@@ -179,6 +190,8 @@ export const api = {
   getCostStats: (days?: number) => request<CostStats>('GET', `/api/stats/costs${days ? `?days=${days}` : ''}`),
   getIssuesPRs: (owner: string, repo: string, refresh?: boolean) =>
     request<{ repo: string; summary: string; cached: string }>('GET', `/api/issues-prs/${owner}/${repo}${refresh ? '?refresh=true' : ''}`),
+  getPortfolio: (repos?: string[]) =>
+    request<PortfolioRepo[]>('GET', `/api/stats/portfolio${repos?.length ? `?repos=${repos.join(',')}` : ''}`),
   getTrending: (params: GetTrendingParams) => {
     const q = new URLSearchParams()
     if (params.language) q.set('language', params.language)

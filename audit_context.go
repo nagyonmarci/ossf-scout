@@ -87,7 +87,7 @@ type auditSecrets struct {
 
 type auditIaC struct {
 	TerraformFiles string `json:"terraformFiles"`
-	Checkov        string `json:"checkov"`
+	OSVScanner     string `json:"osvScanner"`
 	Trivy          string `json:"trivy"`
 	KubeManifests  string `json:"kubeManifests"`
 	KubeLinter     string `json:"kubeLinter"`
@@ -401,13 +401,8 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 	ctx.IaC = auditIaC{
 		TerraformFiles: shIn(tmpDir, "(none found)",
 			"find . -name '*.tf' -not -path '*/node_modules/*' | head -20 || echo '(none found)'"),
-		Checkov: func() string {
-			if !runIaC {
-				return "skipped (no IaC files detected)"
-			}
-			return shIn(tmpDir, "checkov not installed — skipped",
-				"checkov -d . --quiet --compact --output json 2>&1 | head -300 || echo 'checkov not installed — skipped'")
-		}(),
+		OSVScanner: shIn(tmpDir, "osv-scanner not installed — skipped",
+			"osv-scanner --json . 2>&1 | head -400 || echo 'osv-scanner not installed — skipped'"),
 		Trivy: func() string {
 			if !runIaC {
 				return "skipped (no IaC files detected)"

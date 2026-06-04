@@ -96,7 +96,7 @@ Produce the following sections in order. Do not omit any.
 		`For Rate Limiting: if code.rateLimiting is empty or 'none', flag missing rate limiting as Medium/High on auth endpoints. `+
 		`For CORS: if code.corsConfig shows origin:'*' with credentials, flag as Medium. `+
 		`For Secrets: assess Gitleaks output or grep results, estimate false positive rate, list any confirmed leaks as Critical findings. `+
-		`For IaC: synthesise Checkov and Trivy findings, flag unencrypted storage / overly-permissive IAM / missing network policies. `+
+		`For IaC: synthesise OSV-Scanner and Trivy findings, flag unencrypted storage / overly-permissive IAM / missing network policies. `+
 		`For Policy as Code: assess OPA/Kyverno coverage gaps — what admission controls are missing. `+
 		`For SLSA / Supply Chain: determine the current SLSA level (L0–L3) based on the evidence, `+
 		`state exactly what is needed to reach the next level, and flag any unsigned artifacts or missing provenance. `+
@@ -261,7 +261,7 @@ func buildAuditSummarySections(ctx *auditContext) []auditSummarySection {
 			w("### Helm values\n```yaml\n%s\n```", ctx.Infra.HelmValues)
 			w("## IaC")
 			w("### Terraform files\n```\n%s\n```", ctx.IaC.TerraformFiles)
-			w("### Checkov\n```\n%s\n```", ctx.IaC.Checkov)
+			w("### OSV-Scanner\n```\n%s\n```", ctx.IaC.OSVScanner)
 			w("### Trivy config\n```\n%s\n```", ctx.IaC.Trivy)
 			w("### Kubernetes manifests\n```\n%s\n```", ctx.IaC.KubeManifests)
 			w("### kube-linter\n```\n%s\n```", ctx.IaC.KubeLinter)
@@ -593,9 +593,9 @@ func buildContextMarkdown(ctx *auditContext) string {
 	w("```")
 	w("%s", ctx.IaC.TerraformFiles)
 	w("```")
-	w("### Checkov")
+	w("### OSV-Scanner")
 	w("```")
-	w("%s", ctx.IaC.Checkov)
+	w("%s", ctx.IaC.OSVScanner)
 	w("```")
 	w("### Trivy config")
 	w("```")

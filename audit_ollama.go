@@ -78,7 +78,7 @@ func compactForOllama(ctx *auditContext) *auditContext {
 	c.Dependencies.PnpmAudit = truncateField(ctx.Dependencies.PnpmAudit, truncDepsAudit)
 	c.Secrets.Gitleaks = truncateField(ctx.Secrets.Gitleaks, truncGitleaks)
 	c.Secrets.TruffleHog = truncateField(ctx.Secrets.TruffleHog, truncTruffleHog)
-	c.IaC.Checkov = truncateField(ctx.IaC.Checkov, truncCheckov)
+	c.IaC.OSVScanner = truncateField(ctx.IaC.OSVScanner, truncCheckov)
 	c.IaC.Trivy = truncateField(ctx.IaC.Trivy, truncTrivy)
 	c.IaC.KubeLinter = truncateField(ctx.IaC.KubeLinter, truncKubeLinter)
 	return &c

@@ -26,6 +26,9 @@ type auditParams struct {
 
 // getRepoHeadSHA resolves the current HEAD commit SHA for a GitHub repo via git ls-remote.
 func getRepoHeadSHA(repo, ghToken string) string {
+	if validateRepo(repo) != nil {
+		return ""
+	}
 	repoURL := "https://github.com/" + repo + ".git"
 	if ghToken != "" {
 		repoURL = "https://x-access-token:" + ghToken + "@github.com/" + repo + ".git"

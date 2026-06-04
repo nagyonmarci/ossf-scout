@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -167,9 +168,12 @@ func generateOllamaReportWith(ctx *auditContext, ollamaURL, model string, compac
 }
 
 func generateOllamaChat(ollamaURL, model, systemPrompt, userPrompt string) (report string, inputTokens, outputTokens int, err error) {
-	if err := validateOllamaURL(ollamaURL); err != nil {
-		return "", 0, 0, err
+	base, parseErr := url.Parse(ollamaURL)
+	if parseErr != nil || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") {
+		return "", 0, 0, fmt.Errorf("invalid Ollama URL: must be http:// or https://")
 	}
+	endpoint := base.ResolveReference(&url.URL{Path: "/v1/chat/completions"})
+
 	payload := ollamaRequest{
 		Model:  model,
 		Stream: true,
@@ -179,7 +183,7 @@ func generateOllamaChat(ollamaURL, model, systemPrompt, userPrompt string) (repo
 		},
 	}
 	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", ollamaURL+"/v1/chat/completions", bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", endpoint.String(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 2 * time.Hour}

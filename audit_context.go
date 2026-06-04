@@ -256,6 +256,10 @@ func resolvePinnedActions(unpinned string) string {
 }
 
 func collectContext(repo, ghToken string) (*auditContext, string, error) {
+	if err := validateRepo(repo); err != nil {
+		return nil, "", err
+	}
+
 	tmpDir, err := os.MkdirTemp("", "ossf-audit-*")
 	if err != nil {
 		return nil, "", fmt.Errorf("mktemp: %w", err)

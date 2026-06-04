@@ -179,6 +179,11 @@ export default function AuditDetail() {
                   Download AI context
                 </a>
               )}
+              {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
+                <a className="btn" href={`/api/audits/${audit.id}/export.sarif`} download>
+                  Export SARIF
+                </a>
+              )}
               {canRunWithAI && (
                 audit.has_context ? (
                   <button

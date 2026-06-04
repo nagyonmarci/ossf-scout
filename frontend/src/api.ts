@@ -177,6 +177,8 @@ export const api = {
   deleteSchedule: (id: string) => request<void>('DELETE', `/api/schedules/${id}`),
   triggerSchedule: (id: string) => request<void>('POST', `/api/schedules/${id}/run`, {}),
   getCostStats: (days?: number) => request<CostStats>('GET', `/api/stats/costs${days ? `?days=${days}` : ''}`),
+  getIssuesPRs: (owner: string, repo: string, refresh?: boolean) =>
+    request<{ repo: string; summary: string; cached: string }>('GET', `/api/issues-prs/${owner}/${repo}${refresh ? '?refresh=true' : ''}`),
   getTrending: (params: GetTrendingParams) => {
     const q = new URLSearchParams()
     if (params.language) q.set('language', params.language)

@@ -295,6 +295,9 @@ func buildAuditSummarySections(ctx *auditContext) []auditSummarySection {
 			}
 			w("### Secret-scanning alerts\n```\n%s\n```", ctx.GitHub.SecurityAlerts)
 			w("### Branch protection\n```json\n%s\n```", ctx.GitHub.BranchProtection)
+			w("### Dependabot alerts\n```json\n%s\n```", truncateField(ctx.GitHub.DependabotAlerts, 4000))
+			w("### Release history (last 10)\n```json\n%s\n```", truncateField(ctx.GitHub.ReleaseHistory, 2000))
+			w("### CODEOWNERS\n```\n%s\n```", ctx.KeyFiles.CodeOwners)
 		})},
 	}
 }
@@ -478,6 +481,10 @@ func buildContextMarkdown(ctx *auditContext) string {
 	w("```")
 	w("%s", ctx.KeyFiles.HelmetConfig)
 	w("```")
+	w("### CODEOWNERS")
+	w("```")
+	w("%s", ctx.KeyFiles.CodeOwners)
+	w("```")
 	w("")
 	w("## Infrastructure")
 	w("")
@@ -547,6 +554,14 @@ func buildContextMarkdown(ctx *auditContext) string {
 	w("### Branch protection (main)")
 	w("```json")
 	w("%s", ctx.GitHub.BranchProtection)
+	w("```")
+	w("### Dependabot alerts")
+	w("```json")
+	w("%s", truncateField(ctx.GitHub.DependabotAlerts, 4000))
+	w("```")
+	w("### Release history (last 10)")
+	w("```json")
+	w("%s", truncateField(ctx.GitHub.ReleaseHistory, 2000))
 	w("```")
 	w("")
 	w("## Secrets Scanning")

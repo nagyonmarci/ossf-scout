@@ -175,6 +175,108 @@ func handleDownloadAuditContext(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+func handleExportAuditSARIF(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		audit, err := dbGetAudit(db, id)
+		if err != nil || audit == nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if audit.Report == nil || *audit.Report == "" {
+			http.Error(w, "no report available", http.StatusConflict)
+			return
+		}
+		sarif := buildSARIF(audit.Repo, *audit.Report)
+		filename := fmt.Sprintf("audit-%s.sarif", strings.ReplaceAll(audit.Repo, "/", "-"))
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+		writeJSON(w, http.StatusOK, sarif)
+	}
+}
+
+// buildSARIF converts a markdown audit report into a minimal SARIF 2.1.0 document
+// suitable for upload to GitHub Code Scanning.
+func buildSARIF(repo, reportMD string) map[string]any {
+	type sarifResult struct {
+		RuleID  string         `json:"ruleId"`
+		Level   string         `json:"level"`
+		Message map[string]any `json:"message"`
+		Locs    []any          `json:"locations,omitempty"`
+	}
+
+	var results []sarifResult
+	seen := map[string]bool{}
+
+	for _, line := range strings.Split(reportMD, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			continue
+		}
+		cols := strings.Split(line, "|")
+		// Filter separator rows and header rows
+		if len(cols) < 4 || strings.Contains(line, "---") {
+			continue
+		}
+		cells := make([]string, 0, len(cols))
+		for _, c := range cols {
+			cells = append(cells, strings.TrimSpace(c))
+		}
+		// Look for rows that have a non-empty first column and a severity-like second or third column
+		severity := ""
+		title := ""
+		for i, c := range cells {
+			cl := strings.ToLower(c)
+			if cl == "critical" || cl == "high" || cl == "medium" || cl == "low" || cl == "info" || cl == "informational" {
+				severity = cl
+				if i > 1 && cells[i-1] != "" {
+					title = cells[i-1]
+				} else if i < len(cells)-1 && cells[i+1] != "" {
+					title = cells[i+1]
+				}
+				break
+			}
+		}
+		if severity == "" || title == "" || seen[title] {
+			continue
+		}
+		seen[title] = true
+		level := "warning"
+		switch severity {
+		case "critical", "high":
+			level = "error"
+		case "low", "info", "informational":
+			level = "note"
+		}
+		ruleID := "ossf-scout/" + strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(title, " ", "-"), "/", "-"))
+		if len(ruleID) > 80 {
+			ruleID = ruleID[:80]
+		}
+		results = append(results, sarifResult{
+			RuleID:  ruleID,
+			Level:   level,
+			Message: map[string]any{"text": title},
+		})
+	}
+
+	return map[string]any{
+		"$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+		"version": "2.1.0",
+		"runs": []map[string]any{
+			{
+				"tool": map[string]any{
+					"driver": map[string]any{
+						"name":            "ossf-scout",
+						"informationUri":  "https://github.com/" + repo,
+						"semanticVersion": "1.0.0",
+					},
+				},
+				"results": results,
+			},
+		},
+	}
+}
+
 func handleDeleteAudit(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")

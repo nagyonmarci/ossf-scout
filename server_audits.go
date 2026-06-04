@@ -50,10 +50,10 @@ func buildAuditParams(req createAuditRequest) auditParams {
 		p.GeminiKey = os.Getenv("GEMINI_API_KEY")
 	}
 
-	p.OllamaURL = req.OllamaURL
-	if p.OllamaURL == "" {
-		p.OllamaURL = os.Getenv("OLLAMA_BASE_URL")
-	}
+	// Ollama base URL is always taken from the server environment variable.
+	// Accepting it from the request body would create an SSRF vector where
+	// any authenticated caller could redirect the server to arbitrary HTTP targets.
+	p.OllamaURL = os.Getenv("OLLAMA_BASE_URL")
 
 	if p.Model == "" {
 		switch p.Provider {

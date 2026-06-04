@@ -651,6 +651,36 @@ func dbAutoDetectSchedules(db *sql.DB) error {
 	return rows2.Err()
 }
 
+// ── Issues/PR index ──────────────────────────────────────────────────────────
+
+func dbStoreIssuesPRs(db *sql.DB, repo, dataJSON, summaryMD string) error {
+	_, err := db.Exec(
+		`INSERT INTO repo_issues_prs (repo, data_json, summary_md) VALUES (?, ?, ?)`,
+		repo, dataJSON, summaryMD,
+	)
+	return err
+}
+
+// dbGetRecentIssuesPRsSummary returns the most recent summary_md for repo
+// if fetched within maxAge, otherwise nil.
+func dbGetRecentIssuesPRsSummary(db *sql.DB, repo string, maxAge time.Duration) (*string, error) {
+	cutoff := time.Now().UTC().Add(-maxAge)
+	var summary string
+	err := db.QueryRow(
+		`SELECT summary_md FROM repo_issues_prs
+		 WHERE repo=? AND fetched_at >= ? AND summary_md IS NOT NULL
+		 ORDER BY fetched_at DESC LIMIT 1`,
+		repo, cutoff.Format(time.RFC3339),
+	).Scan(&summary)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &summary, nil
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1

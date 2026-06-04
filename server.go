@@ -21,6 +21,10 @@ func startServer(port int, dbPath string, serverToken string) {
 
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"user": currentUser(r)})
+	})
+
 	mux.HandleFunc("POST /api/scans", handleCreateScan(db, serverToken))
 	mux.HandleFunc("GET /api/scans", handleListScans(db))
 	mux.HandleFunc("GET /api/scans/{id}", handleGetScan(db))
@@ -42,6 +46,9 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("POST /api/schedules/{id}/run", handleTriggerSchedule(db))
 
 	mux.HandleFunc("GET /api/stats/costs", handleGetCostStats(db))
+	mux.HandleFunc("GET /api/issues-prs/{owner}/{repo}", handleGetIssuesPRs(db))
+
+	mux.HandleFunc("POST /api/webhooks/github", handleGitHubWebhook(db))
 
 	startScheduler(db)
 
@@ -63,7 +70,7 @@ func startServer(port int, dbPath string, serverToken string) {
 
 	addr := fmt.Sprintf(":%d", port)
 	fmt.Fprintf(os.Stderr, "ossf-scout web UI running at http://localhost%s\n", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, authMiddleware(mux)); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		os.Exit(1)
 	}

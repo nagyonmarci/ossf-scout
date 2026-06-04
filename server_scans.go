@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 // ── Scan handlers ─────────────────────────────────────────────────────────────
@@ -156,6 +157,39 @@ func handleDeleteScan(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// ── Issues/PR index handler ───────────────────────────────────────────────────
+
+// handleGetIssuesPRs returns a cached or freshly fetched issues/PR summary
+// for a given repo. Add ?refresh=true to force a re-fetch.
+func handleGetIssuesPRs(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		owner := r.PathValue("owner")
+		repoName := r.PathValue("repo")
+		if owner == "" || repoName == "" {
+			http.Error(w, "owner and repo path params required", http.StatusBadRequest)
+			return
+		}
+		repo := owner + "/" + repoName
+		refresh := r.URL.Query().Get("refresh") == "true"
+		ghToken := os.Getenv("GITHUB_TOKEN")
+
+		if !refresh {
+			if summary, err := dbGetRecentIssuesPRsSummary(db, repo, 24*time.Hour); err == nil && summary != nil {
+				writeJSON(w, http.StatusOK, map[string]string{"repo": repo, "summary": *summary, "cached": "true"})
+				return
+			}
+		}
+
+		summary, dataJSON, err := fetchIssuesPRsSummary(repo, ghToken)
+		if err != nil {
+			http.Error(w, "fetch failed: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		_ = dbStoreIssuesPRs(db, repo, dataJSON, summary)
+		writeJSON(w, http.StatusOK, map[string]string{"repo": repo, "summary": summary, "cached": "false"})
 	}
 }
 

@@ -526,8 +526,10 @@ func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, p auditPara
 		_ = dbUpdateAuditErrorWithReport(db, id,
 			fmt.Sprintf("generate failed: %v", err),
 			generateTemplateReport(auditCtx))
+		notifyWebhook(auditCtx.Meta.Repo, "error", id)
 		return
 	}
 	report = verifyReport(report, auditCtx)
 	_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)
+	notifyWebhook(auditCtx.Meta.Repo, "done", id)
 }

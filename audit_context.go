@@ -73,6 +73,8 @@ type auditGitHub struct {
 	PRsStatus        string      `json:"prsStatus"`
 	SecurityAlerts   string      `json:"securityAlerts"`
 	BranchProtection string      `json:"branchProtection"`
+	DependabotAlerts string      `json:"dependabotAlerts"`
+	ReleaseHistory   string      `json:"releaseHistory"`
 }
 
 type auditSecrets struct {
@@ -99,6 +101,7 @@ type auditKeyFiles struct {
 	StartupValidation string `json:"startupValidation"`
 	ErrorHandler      string `json:"errorHandler"`
 	HelmetConfig      string `json:"helmetConfig"`
+	CodeOwners        string `json:"codeOwners"`
 }
 
 type auditPolicy struct {
@@ -275,6 +278,13 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 
 	ref := shIn(tmpDir, "unknown", "git rev-parse --short HEAD")
 
+	// Detect IaC presence to skip expensive tools on non-IaC repos
+	hasDockerfile := shIn(tmpDir, "", "test -f Dockerfile && echo 1") == "1"
+	hasTerraform  := shIn(tmpDir, "", "find . -maxdepth 5 -name '*.tf' -not -path '*/node_modules/*' | head -1") != ""
+	hasHelmChart  := shIn(tmpDir, "", "find . -maxdepth 6 -name 'Chart.yaml' | head -1") != ""
+	hasK8s        := shIn(tmpDir, "", "find . -name '*.yaml' -not -path '*/node_modules/*' | xargs grep -l 'kind:' 2>/dev/null | head -1") != ""
+	runIaC        := hasDockerfile || hasTerraform || hasHelmChart || hasK8s
+
 	zizmorCmd := "zizmor --no-online --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'"
 	if ghToken != "" {
 		zizmorCmd = fmt.Sprintf("zizmor --github-token %s --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'", ghToken)
@@ -342,10 +352,16 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 				"find . -not -path '*/node_modules/*' -not -path '*test*' -name '*.ts' | xargs grep -l 'error.*handler\\|ErrorHandler\\|err.*Request.*Response' 2>/dev/null | head -2 | xargs -I{} sh -c 'echo \"=== {} ===\"; head -150 \"{}\"' 2>/dev/null || echo '(not found)'"),
 			HelmetConfig: shIn(tmpDir, "(not found)",
 				"find . -not -path '*/node_modules/*' -not -path '*test*' -name '*.ts' | xargs grep -l 'helmet(' 2>/dev/null | head -2 | xargs -I{} sh -c 'echo \"=== {} ===\"; grep -n -A 40 \"helmet(\" \"{}\"' 2>/dev/null || echo '(not found)'"),
+			CodeOwners: shIn(tmpDir, "(not found)",
+				"cat CODEOWNERS .github/CODEOWNERS docs/CODEOWNERS 2>/dev/null | head -80 || echo '(not found)'"),
 		},
 		Infra: auditInfra{
-			HelmLint: shIn(tmpDir, "helm not installed — skipped",
-				"helm lint helm/*/ 2>&1 || echo 'no helm chart or helm not installed'"),
+			HelmLint: func() string {
+				if !hasHelmChart {
+					return "skipped (no Helm chart detected)"
+				}
+				return shIn(tmpDir, "helm not installed — skipped", "helm lint helm/*/ 2>&1 || echo 'no helm chart or helm not installed'")
+			}(),
 			HelmSecretTemplate: shIn(tmpDir, "(not found)",
 				"find . -path '*/helm/*/templates/secret.yaml' | head -1 | xargs cat 2>/dev/null || echo '(not found)'"),
 			HelmValues: shIn(tmpDir, "(not found)",
@@ -385,14 +401,29 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 	ctx.IaC = auditIaC{
 		TerraformFiles: shIn(tmpDir, "(none found)",
 			"find . -name '*.tf' -not -path '*/node_modules/*' | head -20 || echo '(none found)'"),
-		Checkov: shIn(tmpDir, "checkov not installed — skipped",
-			"checkov -d . --quiet --compact --output json 2>&1 | head -300 || echo 'checkov not installed — skipped'"),
-		Trivy: shIn(tmpDir, "trivy not installed — skipped",
-			"trivy config . --format json --quiet 2>&1 | head -300 || echo 'trivy not installed — skipped'"),
+		Checkov: func() string {
+			if !runIaC {
+				return "skipped (no IaC files detected)"
+			}
+			return shIn(tmpDir, "checkov not installed — skipped",
+				"checkov -d . --quiet --compact --output json 2>&1 | head -300 || echo 'checkov not installed — skipped'")
+		}(),
+		Trivy: func() string {
+			if !runIaC {
+				return "skipped (no IaC files detected)"
+			}
+			return shIn(tmpDir, "trivy not installed — skipped",
+				"trivy config . --format json --quiet 2>&1 | head -300 || echo 'trivy not installed — skipped'")
+		}(),
 		KubeManifests: shIn(tmpDir, "(none found)",
 			"grep -rl 'kind:' --include='*.yaml' --include='*.yml' . | grep -v node_modules | head -20 || echo '(none found)'"),
-		KubeLinter: shIn(tmpDir, "kube-linter not installed — skipped",
-			"kube-linter lint . 2>&1 | head -100 || echo 'kube-linter not installed — skipped'"),
+		KubeLinter: func() string {
+			if !hasK8s {
+				return "skipped (no Kubernetes manifests detected)"
+			}
+			return shIn(tmpDir, "kube-linter not installed — skipped",
+				"kube-linter lint . 2>&1 | head -100 || echo 'kube-linter not installed — skipped'")
+		}(),
 	}
 
 	ctx.Policy = auditPolicy{
@@ -484,6 +515,19 @@ func fetchGitHubContext(repo, ghToken string) auditGitHub {
 	bp, _ := fetch(base + "/branches/main/protection")
 	bpJSON, _ := json.Marshal(bp)
 
+	// Dependabot alerts — requires token with security_events scope
+	depAlertsStr := "(no token or insufficient permissions)"
+	if ghToken != "" {
+		depRaw, _ := fetch(base + "/dependabot/alerts?state=open&per_page=20")
+		if depJSON, merr := json.Marshal(depRaw); merr == nil {
+			depAlertsStr = string(depJSON)
+		}
+	}
+
+	// Recent releases — helps assess security patch cadence
+	relRaw, _ := fetch(base + "/releases?per_page=8")
+	relJSON, _ := json.Marshal(relRaw)
+
 	return auditGitHub{
 		OpenIssues:       issues,
 		OpenPRs:          prs,
@@ -491,6 +535,8 @@ func fetchGitHubContext(repo, ghToken string) auditGitHub {
 		PRsStatus:        prsStatus,
 		SecurityAlerts:   alerts,
 		BranchProtection: string(bpJSON),
+		DependabotAlerts: depAlertsStr,
+		ReleaseHistory:   string(relJSON),
 	}
 }
 

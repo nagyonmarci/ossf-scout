@@ -4,11 +4,23 @@ import Markdown from 'react-markdown';
 import { api, Audit } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
-const ANTHROPIC_MODELS = [
-  { id: 'claude-opus-4-8',           label: 'Opus 4'   },
-  { id: 'claude-sonnet-4-6',         label: 'Sonnet 4' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4'  },
-];
+const ALL_MODELS: Record<string, { id: string; label: string }[]> = {
+  anthropic: [
+    { id: 'claude-opus-4-8',           label: 'Opus 4'   },
+    { id: 'claude-sonnet-4-6',         label: 'Sonnet 4' },
+    { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4'  },
+  ],
+  openai: [
+    { id: 'gpt-4o',      label: 'GPT-4o'      },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+    { id: 'o3-mini',     label: 'o3-mini'     },
+  ],
+  gemini: [
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { id: 'gemini-1.5-pro',   label: 'Gemini 1.5 Pro'   },
+    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash'  },
+  ],
+};
 
 const LS = {
   get: (k: string, fallback: string) => localStorage.getItem(k) ?? fallback,
@@ -26,7 +38,9 @@ export default function AuditDetail() {
   const [showGenForm, setShowGenForm] = useState(false);
   const [genProvider, setGenProvider] = useState(() => LS.get('audit.provider', 'ollama'));
   const [genApiKey, setGenApiKey] = useState(() => LS.get('audit.anthropicKey', ''));
-  const [genModel, setGenModel] = useState(() => LS.get('audit.model', ANTHROPIC_MODELS[0].id));
+  const [genOpenAIKey, setGenOpenAIKey] = useState(() => LS.get('audit.openaiKey', ''));
+  const [genGeminiKey, setGenGeminiKey] = useState(() => LS.get('audit.geminiKey', ''));
+  const [genModel, setGenModel] = useState(() => LS.get('audit.model', ALL_MODELS.anthropic[0].id));
   const [genOllamaURL, setGenOllamaURL] = useState(() => LS.get('audit.ollamaURL', ''));
   const [genOllamaModel, setGenOllamaModel] = useState(() => LS.get('audit.ollamaModel', ''));
   const [genSplitGeneration, setGenSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'false') === 'true');
@@ -74,11 +88,15 @@ export default function AuditDetail() {
       await api.generateAudit(audit.id, {
         provider: genProvider || undefined,
         anthropic_key: genProvider === 'anthropic' ? genApiKey || undefined : undefined,
+        openai_key:    genProvider === 'openai'    ? genOpenAIKey || undefined : undefined,
+        gemini_key:    genProvider === 'gemini'    ? genGeminiKey || undefined : undefined,
         model: genProvider === 'anthropic' ? genModel || undefined
-             : genProvider === 'ollama'     ? genOllamaModel || undefined
+             : genProvider === 'openai'    ? genModel || undefined
+             : genProvider === 'gemini'    ? genModel || undefined
+             : genProvider === 'ollama'    ? genOllamaModel || undefined
              : undefined,
-        split_generation: genProvider === 'ollama' ? genSplitGeneration : undefined,
-        analysis_model: genProvider === 'ollama' && genSplitGeneration ? genAnalysisModel || undefined : undefined,
+        split_generation: (genProvider === 'anthropic' || genProvider === 'ollama') ? genSplitGeneration : undefined,
+        analysis_model: genSplitGeneration ? genAnalysisModel || undefined : undefined,
         ollama_url: genProvider === 'ollama' ? genOllamaURL || undefined : undefined,
       });
       setShowGenForm(false);
@@ -128,6 +146,10 @@ export default function AuditDetail() {
                   ? `Ollama · ${audit.model || '?'}`
                   : audit.provider === 'anthropic'
                   ? audit.model || 'Anthropic'
+                  : audit.provider === 'openai'
+                  ? audit.model || 'OpenAI'
+                  : audit.provider === 'gemini'
+                  ? audit.model || 'Gemini'
                   : 'Static snapshot'}
               </span>
               {(audit.input_tokens ?? 0) > 0 && (
@@ -183,35 +205,57 @@ export default function AuditDetail() {
                 <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)' }}>
                   Re-generates the report using saved context — no re-cloning needed.
                 </p>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                  {(['ollama', 'anthropic', ''] as const).map(p => (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                  {(['ollama', 'anthropic', 'openai', 'gemini', ''] as const).map(p => (
                     <button
                       key={p}
                       className={`btn${genProvider === p ? ' btn-primary' : ''}`}
                       style={{ padding: '4px 12px', fontSize: 13, background: genProvider === p ? undefined : 'transparent', border: '1px solid var(--border)', color: genProvider === p ? undefined : 'var(--muted)' }}
                       onClick={() => { setGenProvider(p); LS.set('audit.provider', p); }}
                     >
-                      {p === '' ? 'Static snapshot' : p === 'anthropic' ? 'Anthropic' : 'Ollama'}
+                      {p === '' ? 'Snapshot' : p === 'anthropic' ? 'Anthropic' : p === 'openai' ? 'OpenAI' : p === 'gemini' ? 'Gemini' : 'Ollama'}
                     </button>
                   ))}
                 </div>
                 {genProvider === 'anthropic' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
-                    <input
-                      type="password"
-                      className="input"
-                      placeholder="Anthropic API key"
-                      value={genApiKey}
-                      onChange={e => { setGenApiKey(e.target.value); LS.set('audit.anthropicKey', e.target.value); }}
-                    />
-                    <select
-                      className="input"
-                      value={genModel}
-                      onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}
-                    >
-                      {ANTHROPIC_MODELS.map(m => (
-                        <option key={m.id} value={m.id}>{m.label}</option>
-                      ))}
+                    <input type="password" className="input" placeholder="Anthropic API key" value={genApiKey}
+                      onChange={e => { setGenApiKey(e.target.value); LS.set('audit.anthropicKey', e.target.value); }} />
+                    <select className="input" value={genModel}
+                      onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}>
+                      {ALL_MODELS.anthropic.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={genSplitGeneration}
+                        onChange={e => { setGenSplitGeneration(e.target.checked); LS.set('audit.splitGeneration', String(e.target.checked)); }}
+                      />
+                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>Split generation into section summaries before the final report</span>
+                    </label>
+                    {genSplitGeneration && (
+                      <input type="text" className="input" placeholder="Analysis model (optional — empty uses final model)"
+                        value={genAnalysisModel} onChange={e => { setGenAnalysisModel(e.target.value); LS.set('audit.analysisModel', e.target.value); }} />
+                    )}
+                  </div>
+                )}
+                {genProvider === 'openai' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+                    <input type="password" className="input" placeholder="OpenAI API key" value={genOpenAIKey}
+                      onChange={e => { setGenOpenAIKey(e.target.value); LS.set('audit.openaiKey', e.target.value); }} />
+                    <select className="input" value={genModel}
+                      onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}>
+                      {ALL_MODELS.openai.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                  </div>
+                )}
+                {genProvider === 'gemini' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+                    <input type="password" className="input" placeholder="Gemini API key" value={genGeminiKey}
+                      onChange={e => { setGenGeminiKey(e.target.value); LS.set('audit.geminiKey', e.target.value); }} />
+                    <select className="input" value={genModel}
+                      onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}>
+                      {ALL_MODELS.gemini.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                     </select>
                   </div>
                 )}

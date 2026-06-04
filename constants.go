@@ -57,3 +57,31 @@ const gitHubAPIVersion = "2022-11-28"
 
 // Ollama
 const defaultOllamaURL = "http://localhost:11434"
+
+// OpenAI / Gemini provider defaults
+const (
+	defaultOpenAIModel = "gpt-4o"
+	defaultGeminiModel = "gemini-2.0-flash"
+)
+
+// OpenAI / Gemini API endpoints
+const (
+	openAIEndpoint    = "https://api.openai.com/v1/chat/completions"
+	geminiEndpointFmt = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s"
+)
+
+// modelPrices maps model name → [input $/1M tokens, output $/1M tokens]
+var modelPrices = map[string][2]float64{
+	"claude-opus-4-8":           {15.0, 75.0},
+	"claude-sonnet-4-6":         {3.0, 15.0},
+	"claude-haiku-4-5-20251001": {0.80, 4.0},
+	"gpt-4o":                    {2.5, 10.0},
+	"gpt-4o-mini":               {0.15, 0.60},
+	"o3-mini":                   {1.10, 4.40},
+	"gemini-2.0-flash":          {0.10, 0.40},
+	"gemini-1.5-pro":            {1.25, 5.0},
+	"gemini-1.5-flash":          {0.075, 0.30},
+}
+
+// Scheduler
+const defaultScheduleIntervalH = 168 // 1 week in hours

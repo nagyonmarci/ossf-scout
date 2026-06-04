@@ -147,6 +147,44 @@ CREATE TABLE IF NOT EXISTS audits (
 	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN model TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN provider TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN context_json TEXT`)
+	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN head_sha TEXT NOT NULL DEFAULT ''`)
+
+	const scheduleSchema = `
+CREATE TABLE IF NOT EXISTS audit_schedules (
+    id                TEXT PRIMARY KEY,
+    repo              TEXT NOT NULL,
+    interval_h        INTEGER NOT NULL DEFAULT 168,
+    provider          TEXT NOT NULL DEFAULT '',
+    model             TEXT NOT NULL DEFAULT '',
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    time_window_start INTEGER NOT NULL DEFAULT -1,
+    time_window_end   INTEGER NOT NULL DEFAULT -1,
+    cli_fallback      INTEGER NOT NULL DEFAULT 1,
+    auto_detected     INTEGER NOT NULL DEFAULT 0,
+    detect_reason     TEXT NOT NULL DEFAULT '',
+    last_run_at       DATETIME,
+    next_run_at       DATETIME NOT NULL,
+    created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_schedules_next_run ON audit_schedules(next_run_at);
+CREATE INDEX IF NOT EXISTS idx_schedules_repo ON audit_schedules(repo);`
+	if _, err := db.Exec(scheduleSchema); err != nil {
+		return nil, fmt.Errorf("create audit_schedules table: %w", err)
+	}
+
+	const issuePRsSchema = `
+CREATE TABLE IF NOT EXISTS repo_issues_prs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo       TEXT NOT NULL,
+    fetched_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    data_json  TEXT NOT NULL,
+    summary_md TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_repo_issues_prs_repo ON repo_issues_prs(repo);`
+	if _, err := db.Exec(issuePRsSchema); err != nil {
+		return nil, fmt.Errorf("create repo_issues_prs table: %w", err)
+	}
+
 	// Mark any scans that were running when the server last died
 	_, _ = db.Exec(`UPDATE scans SET status='error', error_msg='server restarted' WHERE status='running'`)
 	return db, nil
@@ -371,6 +409,263 @@ func dbGetAudit(db *sql.DB, id string) (*auditRow, error) {
 func dbDeleteAudit(db *sql.DB, id string) error {
 	_, err := db.Exec(`DELETE FROM audits WHERE id=?`, id)
 	return err
+}
+
+// ── SHA-cache ────────────────────────────────────────────────────────────────
+
+func dbUpdateAuditHeadSHA(db *sql.DB, id, sha string) error {
+	_, err := db.Exec(`UPDATE audits SET head_sha=? WHERE id=?`, sha, id)
+	return err
+}
+
+// dbFindRecentContext returns context_json for the most recent completed audit
+// of the same repo+SHA within maxAge, or nil if none found.
+func dbFindRecentContext(db *sql.DB, repo, sha string, maxAge time.Duration) (*string, error) {
+	if sha == "" {
+		return nil, nil
+	}
+	cutoff := time.Now().UTC().Add(-maxAge)
+	var ctx string
+	err := db.QueryRow(
+		`SELECT context_json FROM audits
+		 WHERE repo=? AND head_sha=? AND context_json IS NOT NULL
+		   AND created_at >= ?
+		 ORDER BY created_at DESC LIMIT 1`,
+		repo, sha, cutoff.Format(time.RFC3339),
+	).Scan(&ctx)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &ctx, nil
+}
+
+// ── Cost stats ───────────────────────────────────────────────────────────────
+
+type costStats struct {
+	TotalUSD      float64            `json:"total_usd"`
+	ByModel       map[string]float64 `json:"by_model"`
+	InputTokens   int                `json:"total_input_tokens"`
+	OutputTokens  int                `json:"total_output_tokens"`
+	AuditCount    int                `json:"audit_count"`
+}
+
+func dbGetCostStats(db *sql.DB, days int) (costStats, error) {
+	cutoff := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+	rows, err := db.Query(
+		`SELECT model, COALESCE(input_tokens,0), COALESCE(output_tokens,0)
+		 FROM audits
+		 WHERE status='done' AND created_at >= ?`, cutoff,
+	)
+	if err != nil {
+		return costStats{}, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	s := costStats{ByModel: make(map[string]float64)}
+	for rows.Next() {
+		var model string
+		var in, out int
+		if err := rows.Scan(&model, &in, &out); err != nil {
+			return costStats{}, err
+		}
+		s.InputTokens += in
+		s.OutputTokens += out
+		s.AuditCount++
+		if prices, ok := modelPrices[model]; ok {
+			cost := float64(in)/1_000_000*prices[0] + float64(out)/1_000_000*prices[1]
+			s.ByModel[model] += cost
+			s.TotalUSD += cost
+		}
+	}
+	return s, rows.Err()
+}
+
+// ── Schedules ────────────────────────────────────────────────────────────────
+
+type scheduleRow struct {
+	ID              string     `json:"id"`
+	Repo            string     `json:"repo"`
+	IntervalH       int        `json:"interval_h"`
+	Provider        string     `json:"provider"`
+	Model           string     `json:"model"`
+	Enabled         bool       `json:"enabled"`
+	TimeWindowStart int        `json:"time_window_start"`
+	TimeWindowEnd   int        `json:"time_window_end"`
+	CliFallback     bool       `json:"cli_fallback"`
+	AutoDetected    bool       `json:"auto_detected"`
+	DetectReason    string     `json:"detect_reason,omitempty"`
+	LastRunAt       *time.Time `json:"last_run_at"`
+	NextRunAt       time.Time  `json:"next_run_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+}
+
+const scheduleColumns = `id, repo, interval_h, provider, model, enabled,
+	time_window_start, time_window_end, cli_fallback, auto_detected, detect_reason,
+	last_run_at, next_run_at, created_at`
+
+func scheduleRowsFromSQL(rows *sql.Rows) ([]scheduleRow, error) {
+	var out []scheduleRow
+	for rows.Next() {
+		var s scheduleRow
+		var enabled, cliFallback, autoDetected int
+		if err := rows.Scan(
+			&s.ID, &s.Repo, &s.IntervalH, &s.Provider, &s.Model, &enabled,
+			&s.TimeWindowStart, &s.TimeWindowEnd, &cliFallback, &autoDetected, &s.DetectReason,
+			&s.LastRunAt, &s.NextRunAt, &s.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		s.Enabled = enabled != 0
+		s.CliFallback = cliFallback != 0
+		s.AutoDetected = autoDetected != 0
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func dbListSchedules(db *sql.DB) ([]scheduleRow, error) {
+	rows, err := db.Query(`SELECT ` + scheduleColumns + ` FROM audit_schedules ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return scheduleRowsFromSQL(rows)
+}
+
+func dbListDueSchedules(db *sql.DB, now time.Time) ([]scheduleRow, error) {
+	rows, err := db.Query(
+		`SELECT `+scheduleColumns+` FROM audit_schedules
+		 WHERE enabled=1 AND next_run_at <= ?`,
+		now.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return scheduleRowsFromSQL(rows)
+}
+
+func dbCreateSchedule(db *sql.DB, id, repo string, intervalH int, provider, model string, timeWindowStart, timeWindowEnd int, cliFallback, autoDetected bool, detectReason string) error {
+	nextRun := time.Now().UTC().Add(time.Duration(intervalH) * time.Hour)
+	_, err := db.Exec(
+		`INSERT OR IGNORE INTO audit_schedules
+		 (id, repo, interval_h, provider, model, time_window_start, time_window_end, cli_fallback, auto_detected, detect_reason, next_run_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, repo, intervalH, provider, model, timeWindowStart, timeWindowEnd,
+		boolToInt(cliFallback), boolToInt(autoDetected), detectReason,
+		nextRun.Format(time.RFC3339),
+	)
+	return err
+}
+
+func dbUpdateSchedule(db *sql.DB, id string, intervalH int, provider, model string, enabled bool, timeWindowStart, timeWindowEnd int) error {
+	_, err := db.Exec(
+		`UPDATE audit_schedules SET interval_h=?, provider=?, model=?, enabled=?, time_window_start=?, time_window_end=? WHERE id=?`,
+		intervalH, provider, model, boolToInt(enabled), timeWindowStart, timeWindowEnd, id,
+	)
+	return err
+}
+
+func dbUpdateScheduleLastRun(db *sql.DB, id string, now time.Time, nextRun time.Time) error {
+	_, err := db.Exec(
+		`UPDATE audit_schedules SET last_run_at=?, next_run_at=? WHERE id=?`,
+		now.UTC().Format(time.RFC3339), nextRun.UTC().Format(time.RFC3339), id,
+	)
+	return err
+}
+
+func dbDeleteSchedule(db *sql.DB, id string) error {
+	_, err := db.Exec(`DELETE FROM audit_schedules WHERE id=?`, id)
+	return err
+}
+
+func dbTriggerScheduleNow(db *sql.DB, id string) error {
+	_, err := db.Exec(`UPDATE audit_schedules SET next_run_at=? WHERE id=?`,
+		time.Now().UTC().Add(-time.Second).Format(time.RFC3339), id)
+	return err
+}
+
+// dbAutoDetectSchedules creates schedule suggestions for repos that warrant monitoring.
+// Rule 1: scan_results with score < 5.0 AND stars > 500 → enabled=1, weekly
+// Rule 2: repos with 3+ audits in 90 days → enabled=0 suggestion
+func dbAutoDetectSchedules(db *sql.DB) error {
+	// Rule 1: high-star, low-score repos from scan_results
+	rows, err := db.Query(
+		`SELECT DISTINCT repo FROM scan_results
+		 WHERE score < 5.0 AND stars > 500
+		   AND repo NOT IN (SELECT repo FROM audit_schedules)
+		 LIMIT 50`,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close() //nolint:errcheck
+	var repos []string
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return err
+		}
+		repos = append(repos, r)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, repo := range repos {
+		id := repo // deterministic ID to avoid duplicates across restarts
+		reason := "high-star repo with low Scorecard score (auto-detected)"
+		if err := dbCreateSchedule(db, "auto-"+hashStr(id), repo,
+			defaultScheduleIntervalH, "", "", -1, -1, true, true, reason); err != nil {
+			continue
+		}
+	}
+
+	// Rule 2: repos audited 3+ times in 90 days → suggest (enabled=0)
+	cutoff := time.Now().UTC().AddDate(0, 0, -90).Format(time.RFC3339)
+	rows2, err := db.Query(
+		`SELECT repo, COUNT(*) as cnt FROM audits
+		 WHERE created_at >= ?
+		   AND repo NOT IN (SELECT repo FROM audit_schedules)
+		 GROUP BY repo HAVING cnt >= 3 LIMIT 20`, cutoff,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows2.Close() //nolint:errcheck
+	for rows2.Next() {
+		var repo string
+		var cnt int
+		if err := rows2.Scan(&repo, &cnt); err != nil {
+			return err
+		}
+		reason := fmt.Sprintf("audited %d times in the last 90 days (suggested)", cnt)
+		sid := "suggest-" + hashStr(repo)
+		_ = dbCreateSchedule(db, sid, repo, defaultScheduleIntervalH, "", "", -1, -1, false, true, reason)
+		// disable the suggestion
+		_, _ = db.Exec(`UPDATE audit_schedules SET enabled=0 WHERE id=?`, sid)
+	}
+	return rows2.Err()
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// hashStr returns a short deterministic hex string for use as ID suffix.
+func hashStr(s string) string {
+	h := uint32(2166136261)
+	for i := 0; i < len(s); i++ {
+		h ^= uint32(s[i])
+		h *= 16777619
+	}
+	return fmt.Sprintf("%08x", h)
 }
 
 func scanRowsFromSQL(rows *sql.Rows) ([]scanRow, error) {

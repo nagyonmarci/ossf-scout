@@ -35,6 +35,16 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("GET /api/audits/{id}/context.md", handleDownloadAuditContext(db))
 	mux.HandleFunc("DELETE /api/audits/{id}", handleDeleteAudit(db))
 
+	mux.HandleFunc("GET /api/schedules", handleListSchedules(db))
+	mux.HandleFunc("POST /api/schedules", handleCreateSchedule(db))
+	mux.HandleFunc("PUT /api/schedules/{id}", handleUpdateSchedule(db))
+	mux.HandleFunc("DELETE /api/schedules/{id}", handleDeleteSchedule(db))
+	mux.HandleFunc("POST /api/schedules/{id}/run", handleTriggerSchedule(db))
+
+	mux.HandleFunc("GET /api/stats/costs", handleGetCostStats(db))
+
+	startScheduler(db)
+
 	sub, err := fs.Sub(staticFiles, "frontend/dist")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load embedded frontend: %v\n", err)

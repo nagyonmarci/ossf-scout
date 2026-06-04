@@ -1,12 +1,57 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 )
+
+// auditParams bundles all provider-specific parameters for an audit run.
+type auditParams struct {
+	Provider        string
+	AnthropicKey    string
+	OpenAIKey       string
+	GeminiKey       string
+	OllamaURL       string
+	Model           string
+	AnalysisModel   string
+	SplitGeneration bool
+}
+
+// computeAuditCost returns the estimated USD cost for a given model and token counts.
+func computeAuditCost(model string, inputTokens, outputTokens int) float64 {
+	prices, ok := modelPrices[model]
+	if !ok {
+		return 0
+	}
+	return float64(inputTokens)/1_000_000*prices[0] + float64(outputTokens)/1_000_000*prices[1]
+}
+
+// getRepoHeadSHA resolves the current HEAD commit SHA for a GitHub repo via git ls-remote.
+func getRepoHeadSHA(repo, ghToken string) string {
+	repoURL := "https://github.com/" + repo + ".git"
+	if ghToken != "" {
+		repoURL = "https://x-access-token:" + ghToken + "@github.com/" + repo + ".git"
+	}
+	cctx, cancel := context.WithTimeout(context.Background(), resolveTagTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(cctx, "git", "ls-remote", repoURL, "HEAD")
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) < 1 {
+		return ""
+	}
+	return fields[0]
+}
 
 // ── Template report (static snapshot, no AI) ──────────────────────────────────
 
@@ -403,12 +448,21 @@ func generateTemplateReport(ctx *auditContext) string {
 	return b.String()
 }
 
-// ── Audit orchestration ─────────────────────────────────────────────────────
+// ── Audit orchestration ───────────────────────────────────────────────────────
 
-// ── Runner ────────────────────────────────────────────────────────────────────
-
-func runAudit(db *sql.DB, id, repo, ghToken, provider, anthropicKey, ollamaURL, model, analysisModel string, splitGeneration bool) {
+func runAudit(db *sql.DB, id, repo, ghToken string, p auditParams) {
 	_ = dbUpdateAuditRunning(db, id)
+
+	// SHA-cache: resolve head SHA and check for a recent identical context.
+	headSHA := getRepoHeadSHA(repo, ghToken)
+	if headSHA != "" {
+		_ = dbUpdateAuditHeadSHA(db, id, headSHA)
+		if cached, cerr := dbFindRecentContext(db, repo, headSHA, 24*time.Hour); cerr == nil && cached != nil {
+			_ = dbUpdateAuditContext(db, id, *cached)
+			runAuditGenerate(db, id, mustUnmarshalContext(*cached), p)
+			return
+		}
+	}
 
 	auditCtx, tmpDir, err := collectContext(repo, ghToken)
 	if err != nil {
@@ -421,35 +475,47 @@ func runAudit(db *sql.DB, id, repo, ghToken, provider, anthropicKey, ollamaURL, 
 		_ = dbUpdateAuditContext(db, id, string(raw))
 	}
 
-	runAuditGenerate(db, id, auditCtx, provider, anthropicKey, ollamaURL, model, analysisModel, splitGeneration)
+	runAuditGenerate(db, id, auditCtx, p)
 }
 
-func runAuditFromContext(db *sql.DB, id, contextJSON, provider, anthropicKey, ollamaURL, model, analysisModel string, splitGeneration bool) {
-	var auditCtx auditContext
-	if err := json.Unmarshal([]byte(contextJSON), &auditCtx); err != nil {
-		_ = dbUpdateAuditError(db, id, "context unmarshal failed: "+err.Error())
+func runAuditFromContext(db *sql.DB, id, contextJSON string, p auditParams) {
+	auditCtx := mustUnmarshalContext(contextJSON)
+	if auditCtx == nil {
+		_ = dbUpdateAuditError(db, id, "context unmarshal failed")
 		return
 	}
-	runAuditGenerate(db, id, &auditCtx, provider, anthropicKey, ollamaURL, model, analysisModel, splitGeneration)
+	runAuditGenerate(db, id, auditCtx, p)
 }
 
-func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, provider, anthropicKey, ollamaURL, model, analysisModel string, splitGeneration bool) {
+func mustUnmarshalContext(contextJSON string) *auditContext {
+	var ctx auditContext
+	if err := json.Unmarshal([]byte(contextJSON), &ctx); err != nil {
+		return nil
+	}
+	return &ctx
+}
+
+func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, p auditParams) {
 	var report string
 	var inputTokens, outputTokens int
 	var err error
 
-	switch provider {
+	switch p.Provider {
 	case "anthropic":
-		if splitGeneration {
-			report, inputTokens, outputTokens, err = generateSplitClaudeReport(auditCtx, anthropicKey, analysisModel, model)
+		if p.SplitGeneration {
+			report, inputTokens, outputTokens, err = generateSplitClaudeReport(auditCtx, p.AnthropicKey, p.AnalysisModel, p.Model)
 		} else {
-			report, inputTokens, outputTokens, err = generateReport(auditCtx, anthropicKey, model)
+			report, inputTokens, outputTokens, err = generateReport(auditCtx, p.AnthropicKey, p.Model)
 		}
+	case "openai":
+		report, inputTokens, outputTokens, err = generateOpenAIReport(auditCtx, p.OpenAIKey, p.Model)
+	case "gemini":
+		report, inputTokens, outputTokens, err = generateGeminiReport(auditCtx, p.GeminiKey, p.Model)
 	case "ollama":
-		if splitGeneration {
-			report, inputTokens, outputTokens, err = generateSplitOllamaReport(auditCtx, ollamaURL, analysisModel, model)
+		if p.SplitGeneration {
+			report, inputTokens, outputTokens, err = generateSplitOllamaReport(auditCtx, p.OllamaURL, p.AnalysisModel, p.Model)
 		} else {
-			report, inputTokens, outputTokens, err = generateOllamaReport(auditCtx, ollamaURL, model)
+			report, inputTokens, outputTokens, err = generateOllamaReport(auditCtx, p.OllamaURL, p.Model)
 		}
 	default:
 		_ = dbUpdateAuditDone(db, id, generateTemplateReport(auditCtx), 0, 0)
@@ -457,13 +523,11 @@ func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, provider, a
 	}
 
 	if err != nil {
-		// Save the static snapshot as fallback so the user has downloadable data
 		_ = dbUpdateAuditErrorWithReport(db, id,
 			fmt.Sprintf("generate failed: %v", err),
 			generateTemplateReport(auditCtx))
 		return
 	}
-	// Ground every concrete claim against the collected evidence before saving.
 	report = verifyReport(report, auditCtx)
 	_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)
 }

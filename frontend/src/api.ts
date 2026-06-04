@@ -92,6 +92,8 @@ export interface CreateAuditParams {
   repo: string;
   github_token?: string;
   anthropic_key?: string;
+  openai_key?: string;
+  gemini_key?: string;
   model?: string;
   analysis_model?: string;
   split_generation?: boolean;
@@ -102,10 +104,60 @@ export interface CreateAuditParams {
 export interface GenerateAuditParams {
   provider?: string;
   anthropic_key?: string;
+  openai_key?: string;
+  gemini_key?: string;
   model?: string;
   analysis_model?: string;
   split_generation?: boolean;
   ollama_url?: string;
+}
+
+// ── Schedules ─────────────────────────────────────────────────────────────────
+
+export interface Schedule {
+  id: string;
+  repo: string;
+  interval_h: number;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  time_window_start: number;
+  time_window_end: number;
+  cli_fallback: boolean;
+  auto_detected: boolean;
+  detect_reason?: string;
+  last_run_at: string | null;
+  next_run_at: string;
+  created_at: string;
+}
+
+export interface CreateScheduleParams {
+  repo: string;
+  interval_h?: number;
+  provider?: string;
+  model?: string;
+  time_window_start?: number;
+  time_window_end?: number;
+  cli_fallback?: boolean;
+}
+
+export interface UpdateScheduleParams {
+  interval_h: number;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  time_window_start: number;
+  time_window_end: number;
+}
+
+// ── Cost stats ────────────────────────────────────────────────────────────────
+
+export interface CostStats {
+  total_usd: number;
+  by_model: Record<string, number>;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  audit_count: number;
 }
 
 export const api = {
@@ -119,6 +171,12 @@ export const api = {
   createAudit: (params: CreateAuditParams) => request<Audit>('POST', '/api/audits', params),
   generateAudit: (id: string, params: GenerateAuditParams) => request<Audit>('POST', `/api/audits/${id}/generate`, params),
   deleteAudit: (id: string) => request<void>('DELETE', `/api/audits/${id}`),
+  listSchedules: () => request<Schedule[]>('GET', '/api/schedules'),
+  createSchedule: (params: CreateScheduleParams) => request<Schedule>('POST', '/api/schedules', params),
+  updateSchedule: (id: string, params: UpdateScheduleParams) => request<void>('PUT', `/api/schedules/${id}`, params),
+  deleteSchedule: (id: string) => request<void>('DELETE', `/api/schedules/${id}`),
+  triggerSchedule: (id: string) => request<void>('POST', `/api/schedules/${id}/run`, {}),
+  getCostStats: (days?: number) => request<CostStats>('GET', `/api/stats/costs${days ? `?days=${days}` : ''}`),
   getTrending: (params: GetTrendingParams) => {
     const q = new URLSearchParams()
     if (params.language) q.set('language', params.language)

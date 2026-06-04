@@ -78,6 +78,10 @@ func handleCreateAudit(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "invalid request body — repo is required", http.StatusBadRequest)
 			return
 		}
+		if err := validateRepo(req.Repo); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
 		p := buildAuditParams(req)
 

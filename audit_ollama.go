@@ -167,6 +167,9 @@ func generateOllamaReportWith(ctx *auditContext, ollamaURL, model string, compac
 }
 
 func generateOllamaChat(ollamaURL, model, systemPrompt, userPrompt string) (report string, inputTokens, outputTokens int, err error) {
+	if err := validateOllamaURL(ollamaURL); err != nil {
+		return "", 0, 0, err
+	}
 	payload := ollamaRequest{
 		Model:  model,
 		Stream: true,

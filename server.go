@@ -25,15 +25,15 @@ func startServer(port int, dbPath string, serverToken string) {
 		writeJSON(w, http.StatusOK, map[string]string{"user": currentUser(r)})
 	})
 
-	mux.HandleFunc("POST /api/scans", handleCreateScan(db, serverToken))
+	mux.Handle("POST /api/scans", requireWrite(handleCreateScan(db, serverToken)))
 	mux.HandleFunc("GET /api/scans", handleListScans(db))
 	mux.HandleFunc("GET /api/scans/{id}", handleGetScan(db))
 	mux.HandleFunc("GET /api/scans/{id}/results", handleGetResults(db))
-	mux.HandleFunc("DELETE /api/scans/{id}", handleDeleteScan(db))
+	mux.Handle("DELETE /api/scans/{id}", requireAdmin(handleDeleteScan(db)))
 	mux.HandleFunc("GET /api/trending", handleTrending(serverToken))
 
-	mux.HandleFunc("POST /api/audits", handleCreateAudit(db))
-	mux.HandleFunc("POST /api/audits/{id}/generate", handleGenerateAudit(db))
+	mux.Handle("POST /api/audits", requireWrite(handleCreateAudit(db)))
+	mux.Handle("POST /api/audits/{id}/generate", requireWrite(handleGenerateAudit(db)))
 	mux.HandleFunc("POST /api/audits/{id}/extract-findings", handleExtractFindings(db))
 	mux.HandleFunc("POST /api/audits/{id}/compare", handleCompareAudit(db))
 	mux.HandleFunc("GET /api/audits", handleListAudits(db))
@@ -42,7 +42,7 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("GET /api/audits/{id}/supply-chain", handleSupplyChainGraph(db))
 	mux.HandleFunc("GET /api/audits/{id}/export.json", handleExportAuditJSON(db))
 	mux.HandleFunc("GET /api/audits/{id}/export.sarif", handleExportAuditSARIF(db))
-	mux.HandleFunc("DELETE /api/audits/{id}", handleDeleteAudit(db))
+	mux.Handle("DELETE /api/audits/{id}", requireAdmin(handleDeleteAudit(db)))
 
 	mux.HandleFunc("GET /api/schedules", handleListSchedules(db))
 	mux.HandleFunc("POST /api/schedules", handleCreateSchedule(db))

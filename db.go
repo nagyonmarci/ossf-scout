@@ -894,18 +894,6 @@ func dbCreateRemediationItem(db *sql.DB, id, auditID, repo, title, severity stri
 	return err
 }
 
-func dbUpdateRemediationStatus(db *sql.DB, id, status, notes string) error {
-	var resolvedAt interface{}
-	if status == "resolved" {
-		t := time.Now().UTC().Format(time.RFC3339)
-		resolvedAt = t
-	}
-	_, err := db.Exec(
-		`UPDATE remediation_items SET status=?, notes=?, resolved_at=? WHERE id=?`,
-		status, notes, resolvedAt, id)
-	return err
-}
-
 func dbUpdateRemediationItem(db *sql.DB, id, title, severity, status, notes, dueDate string) error {
 	var due interface{}
 	if dueDate != "" {

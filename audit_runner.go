@@ -24,15 +24,6 @@ type auditParams struct {
 	SplitGeneration bool
 }
 
-// computeAuditCost returns the estimated USD cost for a given model and token counts.
-func computeAuditCost(model string, inputTokens, outputTokens int) float64 {
-	prices, ok := modelPrices[model]
-	if !ok {
-		return 0
-	}
-	return float64(inputTokens)/1_000_000*prices[0] + float64(outputTokens)/1_000_000*prices[1]
-}
-
 // getRepoHeadSHA resolves the current HEAD commit SHA for a GitHub repo via git ls-remote.
 func getRepoHeadSHA(repo, ghToken string) string {
 	repoURL := "https://github.com/" + repo + ".git"

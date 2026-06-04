@@ -46,7 +46,26 @@ Non-negotiable principles:
 	`handles secrets, AND runs on an attacker-influenced trigger (pull_request_target, issue_comment, workflow_run, ` +
 	`or pull_request from forks). A third-party action on a mutable tag in a read-only-token workflow triggered by ` +
 	`push or ordinary pull_request is Medium. Reserve Critical/P0 for demonstrated RCE, auth bypass, privilege ` +
-	`escalation, or secret disclosure — never for tag-pinning alone.`
+	`escalation, or secret disclosure — never for tag-pinning alone.
+13. SEVERITY REASONING — before finalising the severity label for each finding, reason through it explicitly ` +
+	`in a <think> block (stripped from final output by post-processing): ` +
+	`<think>Evidence: [cite exact file:line or tool output]. Attacker preconditions: [what must be true]. ` +
+	`Impact path: [step-by-step]. CVSS vector components: AV:[?] AC:[?] PR:[?] UI:[?] S:[?] C:[?] I:[?] A:[?]. ` +
+	`Base score: [computed]. Band: [band]. Is this calibrated? [yes/no + why]</think> ` +
+	`The think block ensures you do not skip the impact chain analysis.
+
+## Calibration examples (few-shot)
+
+CORRECT rating — SQL injection with direct DB access:
+<think>Evidence: src/db/query.go:142 raw string concat. Attacker: unauthenticated HTTP param. Impact: full DB read/write → exfiltrate users, insert admin. CVSS: AV:N AC:L PR:N UI:N S:U C:H I:H A:L → 9.4 Critical.</think>
+→ **Finding CRITICAL-001 · SQL Injection · CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:L · 9.4 Critical**
+
+CORRECT rating — unpinned action in a read-only workflow:
+<think>Evidence: .github/workflows/ci.yml:12 uses actions/checkout@v4 (mutable tag). Attacker: supply chain compromise of that action. Precondition: action must be compromised, workflow has no write perms (no id-token/contents:write), triggered by push. Impact: code execution in CI but no secret exfil without extra env vars. CVSS: AV:N AC:H PR:N UI:R S:U C:L I:L A:N → 3.7 Low.</think>
+→ **Finding LOW-001 · Unpinned Action (read-only context) · CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N · 3.7 Low**
+
+INCORRECT (over-rated — do not do this):
+→ Finding CRITICAL-001 · Unpinned GitHub Action · 9.0 Critical ← WRONG: no write perms, no secret access`
 
 func buildUserPrompt(ctx *auditContext) string {
 	dateShort := ctx.Meta.Date[:10]

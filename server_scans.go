@@ -194,6 +194,82 @@ func handleGetIssuesPRs(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// ── Org repos handler ────────────────────────────────────────────────────────
+
+// orgRepoInfo is the subset of GitHub API repo data needed for the UI.
+type orgRepoInfo struct {
+	FullName    string `json:"full_name"`
+	Description string `json:"description"`
+	Stars       int    `json:"stargazers_count"`
+	Language    string `json:"language"`
+	Archived    bool   `json:"archived"`
+	Fork        bool   `json:"fork"`
+	HTMLURL     string `json:"html_url"`
+}
+
+// handleListOrgRepos fetches the public repos for a GitHub org and returns
+// them as lightweight JSON. Supports ?min_stars=N, ?exclude_forks=1,
+// ?exclude_archived=1 query params.
+func handleListOrgRepos() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		org := r.PathValue("org")
+		if org == "" {
+			http.Error(w, "org path param required", http.StatusBadRequest)
+			return
+		}
+		minStars, _ := strconv.Atoi(r.URL.Query().Get("min_stars"))
+		excludeForks := r.URL.Query().Get("exclude_forks") == "1"
+		excludeArchived := r.URL.Query().Get("exclude_archived") == "1"
+		ghToken := os.Getenv("GITHUB_TOKEN")
+
+		var all []orgRepoInfo
+		page := 1
+		for page <= 10 {
+			url := fmt.Sprintf("https://api.github.com/orgs/%s/repos?type=public&per_page=100&page=%d", org, page)
+			req, err := http.NewRequest("GET", url, nil)
+			if err != nil {
+				break
+			}
+			req.Header.Set("Accept", "application/vnd.github+json")
+			req.Header.Set("X-GitHub-Api-Version", gitHubAPIVersion)
+			if ghToken != "" {
+				req.Header.Set("Authorization", "Bearer "+ghToken)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				http.Error(w, "github request failed: "+err.Error(), http.StatusBadGateway)
+				return
+			}
+			var batch []orgRepoInfo
+			if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
+				_ = resp.Body.Close()
+				break
+			}
+			_ = resp.Body.Close()
+			if len(batch) == 0 {
+				break
+			}
+			for _, repo := range batch {
+				if excludeForks && repo.Fork {
+					continue
+				}
+				if excludeArchived && repo.Archived {
+					continue
+				}
+				if minStars > 0 && repo.Stars < minStars {
+					continue
+				}
+				all = append(all, repo)
+			}
+			page++
+		}
+		if all == nil {
+			all = []orgRepoInfo{}
+		}
+		writeJSON(w, http.StatusOK, all)
+	}
+}
+
 // ── Score trend handler ───────────────────────────────────────────────────────
 
 // handleGetScoreTrend returns score history for a repo.

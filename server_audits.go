@@ -126,6 +126,161 @@ func handleGenerateAudit(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// handleExtractFindings parses the audit report's finding/remediation table and
+// bulk-creates remediation_items. Safe to call multiple times: duplicate titles
+// for the same audit are skipped via INSERT OR IGNORE.
+func handleExtractFindings(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		audit, err := dbGetAudit(db, id)
+		if err != nil || audit == nil {
+			http.Error(w, "audit not found", http.StatusNotFound)
+			return
+		}
+		if audit.Report == nil || *audit.Report == "" {
+			http.Error(w, "no report available", http.StatusConflict)
+			return
+		}
+		created := extractAndCreateFindings(db, id, audit.Repo, *audit.Report)
+		writeJSON(w, http.StatusOK, map[string]int{"created": created})
+	}
+}
+
+// extractAndCreateFindings parses markdown table rows from the report and
+// inserts a remediationItem for each row that has a recognisable severity column.
+func extractAndCreateFindings(db *sql.DB, auditID, repo, reportMD string) int {
+	created := 0
+	knownSev := map[string]bool{
+		"critical": true, "high": true, "medium": true, "low": true,
+		"info": true, "informational": true,
+	}
+	sevNorm := map[string]string{"informational": "info"}
+
+	for _, line := range strings.Split(reportMD, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") || strings.Contains(line, "---") {
+			continue
+		}
+		cols := strings.Split(line, "|")
+		if len(cols) < 4 {
+			continue
+		}
+		cells := make([]string, 0, len(cols))
+		for _, c := range cols {
+			cells = append(cells, strings.TrimSpace(c))
+		}
+
+		// Find severity cell and the adjacent title cell
+		sev, title := "", ""
+		for i, c := range cells {
+			cl := strings.ToLower(c)
+			if knownSev[cl] {
+				sev = cl
+				// Look for title in adjacent non-empty cells
+				for _, offset := range []int{-1, 1, -2, 2} {
+					j := i + offset
+					if j >= 0 && j < len(cells) && cells[j] != "" &&
+						!knownSev[strings.ToLower(cells[j])] &&
+						!strings.HasPrefix(cells[j], "P") &&
+						len(cells[j]) > 3 {
+						title = cells[j]
+						break
+					}
+				}
+				break
+			}
+		}
+
+		if sev == "" || title == "" {
+			continue
+		}
+		// Strip markdown formatting from title
+		title = strings.ReplaceAll(title, "**", "")
+		title = strings.ReplaceAll(title, "`", "")
+		if norm, ok := sevNorm[sev]; ok {
+			sev = norm
+		}
+		if len(title) > 200 {
+			title = title[:200]
+		}
+
+		itemID := uuid.New().String()
+		if err := dbCreateRemediationItem(db, itemID, auditID, repo, title, sev); err == nil {
+			created++
+		}
+	}
+	return created
+}
+
+// handleCompareAudit runs two provider configurations in parallel and returns
+// both reports as JSON for side-by-side comparison. Does NOT persist results.
+func handleCompareAudit(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		contextJSON, err := dbGetAuditContext(db, id)
+		if err != nil || contextJSON == nil {
+			http.Error(w, "no saved context for this audit", http.StatusNotFound)
+			return
+		}
+		var req struct {
+			A createAuditRequest `json:"a"`
+			B createAuditRequest `json:"b"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		pA, pB := buildAuditParams(req.A), buildAuditParams(req.B)
+		ctx := mustUnmarshalContext(*contextJSON)
+
+		type result struct {
+			Report       string `json:"report"`
+			InputTokens  int    `json:"input_tokens"`
+			OutputTokens int    `json:"output_tokens"`
+			Error        string `json:"error,omitempty"`
+			Provider     string `json:"provider"`
+			Model        string `json:"model"`
+		}
+
+		runProvider := func(p auditParams) result {
+			res := result{Provider: p.Provider, Model: p.Model}
+			var report string
+			var in, out int
+			var e error
+			switch p.Provider {
+			case "anthropic":
+				report, in, out, e = generateReport(ctx, p.AnthropicKey, p.Model)
+			case "openai":
+				report, in, out, e = generateOpenAIReport(ctx, p.OpenAIKey, p.Model)
+			case "gemini":
+				report, in, out, e = generateGeminiReport(ctx, p.GeminiKey, p.Model)
+			case "ollama":
+				report, in, out, e = generateOllamaReport(ctx, p.OllamaURL, p.Model)
+			default:
+				report = generateTemplateReport(ctx)
+			}
+			if e != nil {
+				res.Error = e.Error()
+				return res
+			}
+			res.Report = verifyReport(report, ctx)
+			res.InputTokens = in
+			res.OutputTokens = out
+			return res
+		}
+
+		type pair struct {
+			A result `json:"a"`
+			B result `json:"b"`
+		}
+		chA := make(chan result, 1)
+		chB := make(chan result, 1)
+		go func() { chA <- runProvider(pA) }()
+		go func() { chB <- runProvider(pB) }()
+		writeJSON(w, http.StatusOK, pair{A: <-chA, B: <-chB})
+	}
+}
+
 func handleListAudits(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		audits, err := dbListAudits(db)

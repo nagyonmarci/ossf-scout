@@ -8,6 +8,8 @@ import AuditDetail from './pages/AuditDetail'
 import SchedulePage from './pages/SchedulePage'
 import PortfolioPage from './pages/PortfolioPage'
 import RemediationPage from './pages/RemediationPage'
+import OrgScanPage from './pages/OrgScanPage'
+import AuditComparePage from './pages/AuditComparePage'
 
 function AppHeader() {
   return (
@@ -25,6 +27,7 @@ function AppHeader() {
             <NavLink to="/schedules">Schedules</NavLink>
             <NavLink to="/portfolio">Portfolio</NavLink>
             <NavLink to="/remediation">Remediation</NavLink>
+            <NavLink to="/orgscan">Org scan</NavLink>
           </nav>
         </div>
       </div>
@@ -68,9 +71,11 @@ export default function App() {
           <Route path="/scans/:id" element={<ScanDetail />} />
           <Route path="/audits" element={<AuditPage />} />
           <Route path="/audits/:id" element={<AuditDetail />} />
+          <Route path="/audits/:id/compare" element={<AuditComparePage />} />
           <Route path="/schedules" element={<SchedulePage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
           <Route path="/remediation" element={<RemediationPage />} />
+          <Route path="/orgscan" element={<OrgScanPage />} />
         </Route>
       </Routes>
       <BackToTop />

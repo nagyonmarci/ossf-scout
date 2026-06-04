@@ -47,6 +47,8 @@ export default function AuditDetail() {
   const [genAnalysisModel, setGenAnalysisModel] = useState(() => LS.get('audit.analysisModel', ''));
   const [genSubmitting, setGenSubmitting] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractMsg, setExtractMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -175,9 +177,18 @@ export default function AuditDetail() {
                 </button>
               )}
               {audit.has_context && (
-                <a className="btn" href={`/api/audits/${audit.id}/context.md`} download>
-                  Download AI context
-                </a>
+                <>
+                  <a className="btn" href={`/api/audits/${audit.id}/context.md`} download>
+                    Download AI context
+                  </a>
+                  <Link
+                    to={`/audits/${audit.id}/compare`}
+                    className="btn"
+                    style={{ background: 'transparent', border: '1px solid var(--border)' }}
+                  >
+                    Compare models
+                  </Link>
+                </>
               )}
               {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
                 <a className="btn" href={`/api/audits/${audit.id}/export.sarif`} download>
@@ -185,14 +196,35 @@ export default function AuditDetail() {
                 </a>
               )}
               {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
-                <Link
-                  to={`/remediation?audit_id=${audit.id}`}
-                  className="btn"
-                  state={{ auditId: audit.id, repo: audit.repo }}
-                  style={{ background: 'transparent', border: '1px solid var(--border)' }}
-                >
-                  Track findings
-                </Link>
+                <>
+                  <Link
+                    to={`/remediation?audit_id=${audit.id}`}
+                    className="btn"
+                    style={{ background: 'transparent', border: '1px solid var(--border)' }}
+                  >
+                    Track findings
+                  </Link>
+                  <button
+                    className="btn"
+                    style={{ background: 'transparent', border: '1px solid var(--border)' }}
+                    disabled={extracting}
+                    onClick={async () => {
+                      setExtracting(true);
+                      setExtractMsg(null);
+                      try {
+                        const r = await api.extractFindings(audit!.id);
+                        setExtractMsg(`${r.created} finding${r.created !== 1 ? 's' : ''} added to tracker`);
+                      } catch (e) {
+                        setExtractMsg('Extract failed: ' + String(e));
+                      } finally {
+                        setExtracting(false);
+                      }
+                    }}
+                  >
+                    {extracting ? 'Extracting…' : 'Extract to tracker'}
+                  </button>
+                  {extractMsg && <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{extractMsg}</span>}
+                </>
               )}
               {canRunWithAI && (
                 audit.has_context ? (

@@ -195,12 +195,26 @@ export const api = {
   createAudit: (params: CreateAuditParams) => request<Audit>('POST', '/api/audits', params),
   generateAudit: (id: string, params: GenerateAuditParams) => request<Audit>('POST', `/api/audits/${id}/generate`, params),
   deleteAudit: (id: string) => request<void>('DELETE', `/api/audits/${id}`),
+  extractFindings: (id: string) => request<{ created: number }>('POST', `/api/audits/${id}/extract-findings`, {}),
+  compareAudit: (id: string, a: CreateAuditParams, b: CreateAuditParams) =>
+    request<{
+      a: { report: string; input_tokens: number; output_tokens: number; error?: string; provider: string; model: string };
+      b: { report: string; input_tokens: number; output_tokens: number; error?: string; provider: string; model: string };
+    }>('POST', `/api/audits/${id}/compare`, { a, b }),
   listSchedules: () => request<Schedule[]>('GET', '/api/schedules'),
   createSchedule: (params: CreateScheduleParams) => request<Schedule>('POST', '/api/schedules', params),
   updateSchedule: (id: string, params: UpdateScheduleParams) => request<void>('PUT', `/api/schedules/${id}`, params),
   deleteSchedule: (id: string) => request<void>('DELETE', `/api/schedules/${id}`),
   triggerSchedule: (id: string) => request<void>('POST', `/api/schedules/${id}/run`, {}),
   getCostStats: (days?: number) => request<CostStats>('GET', `/api/stats/costs${days ? `?days=${days}` : ''}`),
+  listOrgRepos: (org: string, opts?: { min_stars?: number; exclude_forks?: boolean; exclude_archived?: boolean }) => {
+    const q = new URLSearchParams()
+    if (opts?.min_stars) q.set('min_stars', String(opts.min_stars))
+    if (opts?.exclude_forks) q.set('exclude_forks', '1')
+    if (opts?.exclude_archived) q.set('exclude_archived', '1')
+    const qs = q.toString()
+    return request<Array<{ full_name: string; description: string; stargazers_count: number; language: string; archived: boolean; fork: boolean }>>('GET', `/api/orgs/${org}/repos${qs ? '?' + qs : ''}`)
+  },
   getIssuesPRs: (owner: string, repo: string, refresh?: boolean) =>
     request<{ repo: string; summary: string; cached: string }>('GET', `/api/issues-prs/${owner}/${repo}${refresh ? '?refresh=true' : ''}`),
   getPortfolio: (repos?: string[]) =>

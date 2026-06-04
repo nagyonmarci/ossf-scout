@@ -34,6 +34,8 @@ func startServer(port int, dbPath string, serverToken string) {
 
 	mux.HandleFunc("POST /api/audits", handleCreateAudit(db))
 	mux.HandleFunc("POST /api/audits/{id}/generate", handleGenerateAudit(db))
+	mux.HandleFunc("POST /api/audits/{id}/extract-findings", handleExtractFindings(db))
+	mux.HandleFunc("POST /api/audits/{id}/compare", handleCompareAudit(db))
 	mux.HandleFunc("GET /api/audits", handleListAudits(db))
 	mux.HandleFunc("GET /api/audits/{id}", handleGetAudit(db))
 	mux.HandleFunc("GET /api/audits/{id}/context.md", handleDownloadAuditContext(db))
@@ -55,6 +57,7 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("GET /api/stats/portfolio", handleGetPortfolio(db))
 	mux.HandleFunc("GET /api/stats/trend", handleGetScoreTrend(db))
 	mux.HandleFunc("GET /api/issues-prs/{owner}/{repo}", handleGetIssuesPRs(db))
+	mux.HandleFunc("GET /api/orgs/{org}/repos", handleListOrgRepos())
 
 	mux.HandleFunc("POST /api/webhooks/github", handleGitHubWebhook(db))
 

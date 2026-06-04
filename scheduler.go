@@ -61,6 +61,6 @@ func runDueSchedules(db *sql.DB, now time.Time) {
 			continue
 		}
 
-		go runAudit(db, auditID, s.Repo, "", p)
+		go runAudit(db, auditID, "", p)
 	}
 }

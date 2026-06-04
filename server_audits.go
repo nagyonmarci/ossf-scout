@@ -91,7 +91,7 @@ func handleCreateAudit(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		go runAudit(db, id, req.Repo, req.GithubToken, p)
+		go runAudit(db, id, req.GithubToken, p)
 
 		a, err := dbGetAudit(db, id)
 		if err != nil {

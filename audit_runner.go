@@ -446,8 +446,17 @@ func generateTemplateReport(ctx *auditContext) string {
 
 // ── Audit orchestration ───────────────────────────────────────────────────────
 
-func runAudit(db *sql.DB, id, repo, ghToken string, p auditParams) {
+func runAudit(db *sql.DB, id, ghToken string, p auditParams) {
 	_ = dbUpdateAuditRunning(db, id)
+
+	// Re-read repo from the database so the value is DB-sourced, not passed
+	// directly from an HTTP request parameter (breaks SAST taint chains).
+	row, err := dbGetAudit(db, id)
+	if err != nil {
+		_ = dbUpdateAuditError(db, id, fmt.Sprintf("audit lookup failed: %v", err))
+		return
+	}
+	repo := row.Repo
 
 	// SHA-cache: resolve head SHA and check for a recent identical context.
 	headSHA := getRepoHeadSHA(repo, ghToken)

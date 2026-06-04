@@ -87,7 +87,7 @@ func handleGitHubWebhook(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		// Free static snapshot — no AI key needed
-		go runAudit(db, id, repo, "", auditParams{Provider: ""})
+		go runAudit(db, id, "", auditParams{Provider: ""})
 
 		writeJSON(w, http.StatusAccepted, map[string]string{"audit_id": id, "repo": repo})
 	}

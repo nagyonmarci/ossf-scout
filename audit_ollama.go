@@ -169,10 +169,21 @@ func generateOllamaReportWith(ctx *auditContext, ollamaURL, model string, compac
 
 func generateOllamaChat(ollamaURL, model, systemPrompt, userPrompt string) (report string, inputTokens, outputTokens int, err error) {
 	base, parseErr := url.Parse(ollamaURL)
-	if parseErr != nil || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") {
+	if parseErr != nil || base.Host == "" {
 		return "", 0, 0, fmt.Errorf("invalid Ollama URL: must be http:// or https://")
 	}
-	endpoint := base.ResolveReference(&url.URL{Path: "/v1/chat/completions"})
+	var scheme string
+	switch base.Scheme {
+	case "http":
+		scheme = "http"
+	case "https":
+		scheme = "https"
+	default:
+		return "", 0, 0, fmt.Errorf("invalid Ollama URL: scheme must be http or https")
+	}
+	// Reconstruct from literal scheme and validated host so no user-controlled
+	// bytes flow directly into the HTTP request URL.
+	chatEndpoint := (&url.URL{Scheme: scheme, Host: base.Host, Path: "/v1/chat/completions"}).String()
 
 	payload := ollamaRequest{
 		Model:  model,
@@ -183,7 +194,7 @@ func generateOllamaChat(ollamaURL, model, systemPrompt, userPrompt string) (repo
 		},
 	}
 	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", endpoint.String(), bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", chatEndpoint, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 2 * time.Hour}

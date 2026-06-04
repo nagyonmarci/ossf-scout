@@ -26,12 +26,13 @@ type auditParams struct {
 
 // getRepoHeadSHA resolves the current HEAD commit SHA for a GitHub repo via git ls-remote.
 func getRepoHeadSHA(repo, ghToken string) string {
-	if validateRepo(repo) != nil {
+	owner, repoName, ok := splitValidRepo(repo)
+	if !ok {
 		return ""
 	}
-	repoURL := "https://github.com/" + repo + ".git"
+	repoURL := "https://github.com/" + owner + "/" + repoName + ".git"
 	if ghToken != "" {
-		repoURL = "https://x-access-token:" + ghToken + "@github.com/" + repo + ".git"
+		repoURL = "https://x-access-token:" + ghToken + "@github.com/" + owner + "/" + repoName + ".git"
 	}
 	cctx, cancel := context.WithTimeout(context.Background(), resolveTagTimeout)
 	defer cancel()

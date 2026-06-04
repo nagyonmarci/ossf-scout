@@ -256,8 +256,9 @@ func resolvePinnedActions(unpinned string) string {
 }
 
 func collectContext(repo, ghToken string) (*auditContext, string, error) {
-	if err := validateRepo(repo); err != nil {
-		return nil, "", err
+	owner, repoName, ok := splitValidRepo(repo)
+	if !ok {
+		return nil, "", fmt.Errorf("invalid repository name")
 	}
 
 	tmpDir, err := os.MkdirTemp("", "ossf-audit-*")
@@ -265,9 +266,9 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 		return nil, "", fmt.Errorf("mktemp: %w", err)
 	}
 
-	cloneURL := fmt.Sprintf("https://github.com/%s.git", repo)
+	cloneURL := fmt.Sprintf("https://github.com/%s/%s.git", owner, repoName)
 	if ghToken != "" {
-		cloneURL = fmt.Sprintf("https://x-access-token:%s@github.com/%s.git", ghToken, repo)
+		cloneURL = fmt.Sprintf("https://x-access-token:%s@github.com/%s/%s.git", ghToken, owner, repoName)
 	}
 	cloneCmd := exec.Command("git", "clone", "--depth=50", cloneURL, tmpDir)
 	cloneCmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")

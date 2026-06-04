@@ -263,7 +263,7 @@ func handleCompareAudit(db *sql.DB) http.HandlerFunc {
 				res.Error = e.Error()
 				return res
 			}
-			res.Report = verifyReport(report, ctx)
+			res.Report = verifyReport(stripThinkBlocks(report), ctx)
 			res.InputTokens = in
 			res.OutputTokens = out
 			return res
@@ -327,6 +327,137 @@ func handleDownloadAuditContext(db *sql.DB) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 		_, _ = fmt.Fprint(w, md)
+	}
+}
+
+// handleSupplyChainGraph parses the saved context's PinnedSuggestions field and
+// returns a JSON graph of {repo} → [action nodes] suitable for tree rendering.
+func handleSupplyChainGraph(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		contextJSON, err := dbGetAuditContext(db, id)
+		if err != nil || contextJSON == nil {
+			http.Error(w, "context not found", http.StatusNotFound)
+			return
+		}
+		ctx := mustUnmarshalContext(*contextJSON)
+
+		type graphNode struct {
+			Action   string   `json:"action"`
+			Tag      string   `json:"tag"`
+			SHA      string   `json:"sha"`
+			Resolved bool     `json:"resolved"`
+			Files    []string `json:"files"`
+		}
+		var nodes []graphNode
+
+		for _, line := range strings.Split(ctx.CICD.PinnedSuggestions, "\n") {
+			if strings.HasPrefix(line, "#") || strings.TrimSpace(line) == "" || line == "none" {
+				continue
+			}
+			// format: action@tag -> sha | file:line, file:line
+			arrowIdx := strings.Index(line, " -> ")
+			pipeIdx := strings.Index(line, " | ")
+			if arrowIdx < 0 {
+				continue
+			}
+			actionTag := strings.TrimSpace(line[:arrowIdx])
+			var sha, filesStr string
+			if pipeIdx > arrowIdx {
+				sha = strings.TrimSpace(line[arrowIdx+4 : pipeIdx])
+				filesStr = strings.TrimSpace(line[pipeIdx+3:])
+			} else {
+				sha = strings.TrimSpace(line[arrowIdx+4:])
+			}
+			parts := strings.SplitN(actionTag, "@", 2)
+			action, tag := parts[0], ""
+			if len(parts) == 2 {
+				tag = parts[1]
+			}
+			var files []string
+			for _, f := range strings.Split(filesStr, ",") {
+				if f = strings.TrimSpace(f); f != "" {
+					// strip line number, keep file path
+					if colonIdx := strings.LastIndex(f, ":"); colonIdx > 0 {
+						f = f[:colonIdx]
+					}
+					files = append(files, f)
+				}
+			}
+			resolved := len(sha) == 40 && !strings.Contains(sha, "unresolved")
+			nodes = append(nodes, graphNode{
+				Action: action, Tag: tag, SHA: sha, Resolved: resolved, Files: files,
+			})
+		}
+
+		// Also collect unpinned (not in PinnedSuggestions but in UnpinnedActions)
+		for _, line := range strings.Split(ctx.CICD.UnpinnedActions, "\n") {
+			// grep output: file:line:  uses: action@tag
+			colonCount := strings.Count(line, ":")
+			if colonCount < 2 {
+				continue
+			}
+			parts := strings.SplitN(line, ":", 3)
+			usesLine := strings.TrimSpace(parts[2])
+			if !strings.HasPrefix(usesLine, "uses:") {
+				continue
+			}
+			actionTag := strings.TrimSpace(strings.TrimPrefix(usesLine, "uses:"))
+			// check if already in nodes
+			already := false
+			for _, n := range nodes {
+				if n.Action+"@"+n.Tag == actionTag {
+					already = true
+					break
+				}
+			}
+			if !already && actionTag != "" {
+				ap := strings.SplitN(actionTag, "@", 2)
+				action, tag := ap[0], ""
+				if len(ap) == 2 {
+					tag = ap[1]
+				}
+				nodes = append(nodes, graphNode{
+					Action: action, Tag: tag, SHA: "", Resolved: false,
+					Files: []string{parts[0]},
+				})
+			}
+		}
+
+		if nodes == nil {
+			nodes = []graphNode{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"repo":  ctx.Meta.Repo,
+			"nodes": nodes,
+		})
+	}
+}
+
+func handleExportAuditJSON(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		audit, err := dbGetAudit(db, id)
+		if err != nil || audit == nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		contextJSON, _ := dbGetAuditContext(db, id)
+		var ctx *auditContext
+		if contextJSON != nil {
+			c := mustUnmarshalContext(*contextJSON)
+			ctx = c
+		}
+		export := map[string]any{
+			"audit":   audit,
+			"context": ctx,
+		}
+		filename := fmt.Sprintf("audit-%s-%s.json",
+			strings.ReplaceAll(audit.Repo, "/", "-"),
+			audit.CreatedAt.UTC().Format("2006-01-02"))
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+		writeJSON(w, http.StatusOK, export)
 	}
 }
 

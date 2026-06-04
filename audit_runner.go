@@ -563,6 +563,7 @@ func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, p auditPara
 		notifyWebhook(auditCtx.Meta.Repo, "error", id)
 		return
 	}
+	report = stripThinkBlocks(report)
 	report = verifyReport(report, auditCtx)
 	_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)
 	notifyWebhook(auditCtx.Meta.Repo, "done", id)

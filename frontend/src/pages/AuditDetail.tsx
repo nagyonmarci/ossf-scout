@@ -4,6 +4,71 @@ import Markdown from 'react-markdown';
 import { api, Audit } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
+interface SCNode { action: string; tag: string; sha: string; resolved: boolean; files: string[] }
+
+function SupplyChainGraph({ auditId }: { auditId: string }) {
+  const [nodes, setNodes] = useState<SCNode[] | null>(null);
+  const [repo, setRepo] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/audits/${auditId}/supply-chain`)
+      .then(r => r.json())
+      .then(d => { setNodes(d.nodes ?? []); setRepo(d.repo ?? ''); })
+      .catch(() => setNodes([]))
+      .finally(() => setLoading(false));
+  }, [auditId]);
+
+  if (loading) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>Loading supply chain…</p>;
+  if (!nodes || nodes.length === 0) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>No GitHub Actions dependencies found in context.</p>;
+
+  const NODE_W = 220, NODE_H = 44, GAP_X = 40, GAP_Y = 20;
+  const ROOT_W = 160, ROOT_H = 36;
+  const svgW = ROOT_W + GAP_X + NODE_W + 32;
+  const svgH = Math.max(ROOT_H + 20, nodes.length * (NODE_H + GAP_Y));
+  const rootX = 8, rootY = svgH / 2 - ROOT_H / 2;
+  const nodesX = rootX + ROOT_W + GAP_X;
+
+  return (
+    <div style={{ overflowX: 'auto', marginTop: 8 }}>
+      <svg width={svgW} height={svgH} style={{ display: 'block', fontFamily: 'monospace' }}>
+        {/* Root node */}
+        <rect x={rootX} y={rootY} width={ROOT_W} height={ROOT_H} rx={6}
+          fill="rgba(100,149,237,0.15)" stroke="rgba(100,149,237,0.6)" strokeWidth={1.5} />
+        <text x={rootX + ROOT_W / 2} y={rootY + ROOT_H / 2 + 5} textAnchor="middle"
+          fill="var(--fg, #e0e0e0)" fontSize={12} fontWeight={600}>
+          {repo.split('/')[1] || repo}
+        </text>
+
+        {nodes.map((n, i) => {
+          const ny = i * (NODE_H + GAP_Y) + GAP_Y / 2;
+          const color = n.resolved ? 'rgba(76,175,80,0.15)' : 'rgba(255,152,0,0.15)';
+          const stroke = n.resolved ? 'rgba(76,175,80,0.6)' : 'rgba(255,152,0,0.6)';
+          const cy = ny + NODE_H / 2;
+          return (
+            <g key={n.action + n.tag + i}>
+              <line x1={rootX + ROOT_W} y1={rootY + ROOT_H / 2} x2={nodesX} y2={cy}
+                stroke="var(--border, #444)" strokeWidth={1} strokeDasharray="4 3" />
+              <rect x={nodesX} y={ny} width={NODE_W} height={NODE_H} rx={5}
+                fill={color} stroke={stroke} strokeWidth={1.5} />
+              <text x={nodesX + 8} y={ny + 16} fill="var(--fg, #e0e0e0)" fontSize={11} fontWeight={600}>
+                {n.action.length > 28 ? '…' + n.action.slice(-27) : n.action}
+              </text>
+              <text x={nodesX + 8} y={ny + 30} fill="var(--muted, #888)" fontSize={10}>
+                {n.tag ? `@${n.tag.slice(0, 20)}` : '(no tag)'}{' '}
+                {n.resolved ? `· ${n.sha.slice(0, 8)}` : '· unresolved'}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+        Green = SHA resolved · Orange = tag still mutable · {nodes.length} action dependencies
+      </p>
+    </div>
+  );
+}
+
 const ALL_MODELS: Record<string, { id: string; label: string }[]> = {
   anthropic: [
     { id: 'claude-opus-4-8',           label: 'Opus 4'   },
@@ -191,9 +256,14 @@ export default function AuditDetail() {
                 </>
               )}
               {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
-                <a className="btn" href={`/api/audits/${audit.id}/export.sarif`} download>
-                  Export SARIF
-                </a>
+                <>
+                  <a className="btn" href={`/api/audits/${audit.id}/export.sarif`} download>
+                    Export SARIF
+                  </a>
+                  <a className="btn" href={`/api/audits/${audit.id}/export.json`} download>
+                    Export JSON
+                  </a>
+                </>
               )}
               {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
                 <>
@@ -366,6 +436,16 @@ export default function AuditDetail() {
           {audit.report && (audit.status === 'done' || audit.status === 'error') && (
             <div className="card audit-report">
               <Markdown>{audit.report}</Markdown>
+            </div>
+          )}
+
+          {audit.has_context && (audit.status === 'done' || audit.status === 'error') && (
+            <div className="card">
+              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Supply Chain Graph</h3>
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 8px' }}>
+                GitHub Actions dependencies detected in this repo's workflows.
+              </p>
+              <SupplyChainGraph auditId={audit.id} />
             </div>
           )}
         </>

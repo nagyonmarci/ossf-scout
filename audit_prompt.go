@@ -3,8 +3,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+var reThinkBlock = regexp.MustCompile(`(?s)<think>.*?</think>\s*`)
+
+// stripThinkBlocks removes <think>…</think> reasoning blocks that the model
+// emits as part of severity calibration (per system prompt rule 13).
+func stripThinkBlocks(s string) string {
+	return strings.TrimSpace(reThinkBlock.ReplaceAllString(s, ""))
+}
 
 // ── Prompts ───────────────────────────────────────────────────────────────────
 

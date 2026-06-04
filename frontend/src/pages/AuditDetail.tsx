@@ -184,6 +184,16 @@ export default function AuditDetail() {
                   Export SARIF
                 </a>
               )}
+              {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
+                <Link
+                  to={`/remediation?audit_id=${audit.id}`}
+                  className="btn"
+                  state={{ auditId: audit.id, repo: audit.repo }}
+                  style={{ background: 'transparent', border: '1px solid var(--border)' }}
+                >
+                  Track findings
+                </Link>
+              )}
               {canRunWithAI && (
                 audit.has_context ? (
                   <button

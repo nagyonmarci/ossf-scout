@@ -160,6 +160,19 @@ export interface CostStats {
   audit_count: number;
 }
 
+export interface RemediationItem {
+  id: string;
+  audit_id: string;
+  repo: string;
+  title: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  status: 'open' | 'in_progress' | 'resolved';
+  due_date: string | null;
+  resolved_at: string | null;
+  notes: string;
+  created_at: string;
+}
+
 export interface PortfolioRepo {
   repo: string;
   latest_score: number;
@@ -192,6 +205,21 @@ export const api = {
     request<{ repo: string; summary: string; cached: string }>('GET', `/api/issues-prs/${owner}/${repo}${refresh ? '?refresh=true' : ''}`),
   getPortfolio: (repos?: string[]) =>
     request<PortfolioRepo[]>('GET', `/api/stats/portfolio${repos?.length ? `?repos=${repos.join(',')}` : ''}`),
+  getScoreTrend: (repo: string, limit?: number) =>
+    request<Array<{ scanned_at: string; score: number; stars: number }>>('GET', `/api/stats/trend?repo=${encodeURIComponent(repo)}${limit ? `&limit=${limit}` : ''}`),
+  listRemediation: (params?: { audit_id?: string; repo?: string; status?: string }) => {
+    const q = new URLSearchParams()
+    if (params?.audit_id) q.set('audit_id', params.audit_id)
+    if (params?.repo) q.set('repo', params.repo)
+    if (params?.status) q.set('status', params.status)
+    const qs = q.toString()
+    return request<RemediationItem[]>('GET', `/api/remediation${qs ? '?' + qs : ''}`)
+  },
+  createRemediationItem: (auditId: string, repo: string, title: string, severity: string) =>
+    request<RemediationItem>('POST', '/api/remediation', { audit_id: auditId, repo, title, severity }),
+  updateRemediationItem: (id: string, patch: Partial<Pick<RemediationItem, 'title' | 'severity' | 'status' | 'notes'> & { due_date: string }>) =>
+    request<void>('PUT', `/api/remediation/${id}`, patch),
+  deleteRemediationItem: (id: string) => request<void>('DELETE', `/api/remediation/${id}`),
   getTrending: (params: GetTrendingParams) => {
     const q = new URLSearchParams()
     if (params.language) q.set('language', params.language)

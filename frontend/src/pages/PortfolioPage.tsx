@@ -1,6 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api, PortfolioRepo } from '../api';
+
+function Sparkline({ points }: { points: Array<{ scanned_at: string; score: number }> }) {
+  if (points.length < 2) return <span style={{ color: 'var(--muted)', fontSize: 12 }}>not enough data</span>;
+  const w = 120, h = 32, pad = 2;
+  const scores = points.map(p => p.score);
+  const min = Math.min(...scores), max = Math.max(...scores);
+  const range = max - min || 1;
+  const xs = points.map((_, i) => pad + (i / (points.length - 1)) * (w - pad * 2));
+  const ys = scores.map(s => h - pad - ((s - min) / range) * (h - pad * 2));
+  const d = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
+  const last = scores[scores.length - 1];
+  const first = scores[0];
+  const color = last >= first ? '#4caf50' : '#f44336';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <svg width={w} height={h} style={{ overflow: 'visible' }}>
+        <polyline points={xs.map((x, i) => `${x},${ys[i]}`).join(' ')} fill="none" stroke={color} strokeWidth="1.5" />
+        <circle cx={xs[xs.length - 1]} cy={ys[ys.length - 1]} r={3} fill={color} />
+      </svg>
+      <span style={{ fontSize: 11, color }}>
+        {first.toFixed(1)} → {last.toFixed(1)}
+      </span>
+    </div>
+  );
+}
 
 const scoreColor = (score: number) => {
   if (score >= 7) return 'var(--success, #4caf50)';
@@ -28,6 +53,21 @@ export default function PortfolioPage() {
   const [error, setError] = useState<string | null>(null);
   const [filterInput, setFilterInput] = useState('');
   const [sortBy, setSortBy] = useState<'score' | 'stars' | 'audits'>('score');
+  const [trendRepo, setTrendRepo] = useState<string | null>(null);
+  const [trendData, setTrendData] = useState<Array<{ scanned_at: string; score: number }>>([]);
+  const [trendLoading, setTrendLoading] = useState(false);
+
+  const loadTrend = useCallback(async (repo: string) => {
+    if (trendRepo === repo) { setTrendRepo(null); return; }
+    setTrendRepo(repo);
+    setTrendLoading(true);
+    try {
+      const data = await api.getScoreTrend(repo);
+      setTrendData(data);
+    } finally {
+      setTrendLoading(false);
+    }
+  }, [trendRepo]);
 
   useEffect(() => {
     api.getPortfolio()
@@ -96,6 +136,7 @@ export default function PortfolioPage() {
                 <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Weak checks</th>
                 <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>Audits</th>
                 <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Last audit</th>
+                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Trend</th>
                 <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Actions</th>
               </tr>
             </thead>
@@ -146,6 +187,19 @@ export default function PortfolioPage() {
                   </td>
                   <td style={{ padding: '10px 14px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                     {r.last_audit_at ? new Date(r.last_audit_at).toLocaleDateString() : '—'}
+                  </td>
+                  <td style={{ padding: '10px 14px', minWidth: 160 }}>
+                    <button
+                      style={{ padding: '2px 8px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--muted)' }}
+                      onClick={() => loadTrend(r.repo)}
+                    >
+                      {trendRepo === r.repo ? 'Hide' : 'Show trend'}
+                    </button>
+                    {trendRepo === r.repo && (
+                      <div style={{ marginTop: 6 }}>
+                        {trendLoading ? <span style={{ fontSize: 12, color: 'var(--muted)' }}>Loading…</span> : <Sparkline points={trendData} />}
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                     <Link

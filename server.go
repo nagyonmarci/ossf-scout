@@ -46,8 +46,14 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("DELETE /api/schedules/{id}", handleDeleteSchedule(db))
 	mux.HandleFunc("POST /api/schedules/{id}/run", handleTriggerSchedule(db))
 
+	mux.HandleFunc("GET /api/remediation", handleListRemediation(db))
+	mux.HandleFunc("POST /api/remediation", handleCreateRemediation(db))
+	mux.HandleFunc("PUT /api/remediation/{id}", handleUpdateRemediation(db))
+	mux.HandleFunc("DELETE /api/remediation/{id}", handleDeleteRemediation(db))
+
 	mux.HandleFunc("GET /api/stats/costs", handleGetCostStats(db))
 	mux.HandleFunc("GET /api/stats/portfolio", handleGetPortfolio(db))
+	mux.HandleFunc("GET /api/stats/trend", handleGetScoreTrend(db))
 	mux.HandleFunc("GET /api/issues-prs/{owner}/{repo}", handleGetIssuesPRs(db))
 
 	mux.HandleFunc("POST /api/webhooks/github", handleGitHubWebhook(db))

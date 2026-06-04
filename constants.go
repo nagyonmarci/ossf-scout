@@ -85,3 +85,6 @@ var modelPrices = map[string][2]float64{
 
 // Scheduler
 const defaultScheduleIntervalH = 168 // 1 week in hours
+
+// Audit generation
+const defaultMaxTokens = 8192 // max output tokens for all AI providers

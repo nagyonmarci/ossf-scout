@@ -114,7 +114,7 @@ func openDB(path string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec("PRAGMA foreign_keys = ON;PRAGMA journal_mode = WAL;"); err != nil {
+	if _, err := db.Exec("PRAGMA foreign_keys = ON;PRAGMA journal_mode = WAL;PRAGMA synchronous = NORMAL;PRAGMA wal_autocheckpoint = 1000;PRAGMA cache_size = -65536;PRAGMA temp_store = MEMORY;"); err != nil {
 		return nil, err
 	}
 	if _, err := db.Exec(schema); err != nil {
@@ -184,6 +184,10 @@ CREATE TABLE IF NOT EXISTS repo_issues_prs (
 CREATE INDEX IF NOT EXISTS idx_repo_issues_prs_repo ON repo_issues_prs(repo);`
 	if _, err := db.Exec(issuePRsSchema); err != nil {
 		return nil, fmt.Errorf("create repo_issues_prs table: %w", err)
+	}
+
+	if err := dbEnsureRemediationTable(db); err != nil {
+		return nil, fmt.Errorf("create remediation_items table: %w", err)
 	}
 
 	// Mark any scans that were running when the server last died
@@ -794,6 +798,177 @@ func dbGetPortfolio(db *sql.DB, repos []string) ([]portfolioRepo, error) {
 		}
 		if provider.Valid {
 			p.Provider = provider.String
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// ── Remediation tracker ───────────────────────────────────────────────────────
+
+type remediationItem struct {
+	ID         string  `json:"id"`
+	AuditID    string  `json:"audit_id"`
+	Repo       string  `json:"repo"`
+	Title      string  `json:"title"`
+	Severity   string  `json:"severity"`
+	Status     string  `json:"status"` // open | in_progress | resolved
+	DueDate    *string `json:"due_date"`
+	ResolvedAt *string `json:"resolved_at"`
+	Notes      string  `json:"notes"`
+	CreatedAt  string  `json:"created_at"`
+}
+
+func dbEnsureRemediationTable(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS remediation_items (
+    id          TEXT PRIMARY KEY,
+    audit_id    TEXT NOT NULL REFERENCES audits(id) ON DELETE CASCADE,
+    repo        TEXT NOT NULL DEFAULT '',
+    title       TEXT NOT NULL,
+    severity    TEXT NOT NULL DEFAULT 'medium',
+    status      TEXT NOT NULL DEFAULT 'open',
+    due_date    TEXT,
+    resolved_at TEXT,
+    notes       TEXT NOT NULL DEFAULT '',
+    created_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_remediation_audit ON remediation_items(audit_id);
+CREATE INDEX IF NOT EXISTS idx_remediation_repo  ON remediation_items(repo);
+CREATE INDEX IF NOT EXISTS idx_remediation_status ON remediation_items(status);`)
+	return err
+}
+
+func dbListRemediationByAudit(db *sql.DB, auditID string) ([]remediationItem, error) {
+	rows, err := db.Query(
+		`SELECT id,audit_id,repo,title,severity,status,due_date,resolved_at,notes,created_at
+		 FROM remediation_items WHERE audit_id=? ORDER BY
+		 CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at`,
+		auditID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return remediationRowsFromSQL(rows)
+}
+
+func dbListRemediationByRepo(db *sql.DB, repo string) ([]remediationItem, error) {
+	rows, err := db.Query(
+		`SELECT id,audit_id,repo,title,severity,status,due_date,resolved_at,notes,created_at
+		 FROM remediation_items WHERE repo=? ORDER BY
+		 CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, status, created_at`,
+		repo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return remediationRowsFromSQL(rows)
+}
+
+func dbListAllRemediation(db *sql.DB, status string) ([]remediationItem, error) {
+	var rows *sql.Rows
+	var err error
+	if status != "" {
+		rows, err = db.Query(
+			`SELECT id,audit_id,repo,title,severity,status,due_date,resolved_at,notes,created_at
+			 FROM remediation_items WHERE status=? ORDER BY
+			 CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at`,
+			status)
+	} else {
+		rows, err = db.Query(
+			`SELECT id,audit_id,repo,title,severity,status,due_date,resolved_at,notes,created_at
+			 FROM remediation_items ORDER BY
+			 CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, status, created_at`)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return remediationRowsFromSQL(rows)
+}
+
+func dbCreateRemediationItem(db *sql.DB, id, auditID, repo, title, severity string) error {
+	_, err := db.Exec(
+		`INSERT INTO remediation_items (id,audit_id,repo,title,severity) VALUES (?,?,?,?,?)`,
+		id, auditID, repo, title, severity)
+	return err
+}
+
+func dbUpdateRemediationStatus(db *sql.DB, id, status, notes string) error {
+	var resolvedAt interface{}
+	if status == "resolved" {
+		t := time.Now().UTC().Format(time.RFC3339)
+		resolvedAt = t
+	}
+	_, err := db.Exec(
+		`UPDATE remediation_items SET status=?, notes=?, resolved_at=? WHERE id=?`,
+		status, notes, resolvedAt, id)
+	return err
+}
+
+func dbUpdateRemediationItem(db *sql.DB, id, title, severity, status, notes, dueDate string) error {
+	var due interface{}
+	if dueDate != "" {
+		due = dueDate
+	}
+	var resolvedAt interface{}
+	if status == "resolved" {
+		t := time.Now().UTC().Format(time.RFC3339)
+		resolvedAt = t
+	}
+	_, err := db.Exec(
+		`UPDATE remediation_items SET title=?,severity=?,status=?,notes=?,due_date=?,resolved_at=? WHERE id=?`,
+		title, severity, status, notes, due, resolvedAt, id)
+	return err
+}
+
+func dbDeleteRemediationItem(db *sql.DB, id string) error {
+	_, err := db.Exec(`DELETE FROM remediation_items WHERE id=?`, id)
+	return err
+}
+
+func remediationRowsFromSQL(rows *sql.Rows) ([]remediationItem, error) {
+	var out []remediationItem
+	for rows.Next() {
+		var r remediationItem
+		if err := rows.Scan(&r.ID, &r.AuditID, &r.Repo, &r.Title, &r.Severity,
+			&r.Status, &r.DueDate, &r.ResolvedAt, &r.Notes, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ── Score trend ───────────────────────────────────────────────────────────────
+
+type scoreTrendPoint struct {
+	ScannedAt string  `json:"scanned_at"`
+	Score     float64 `json:"score"`
+	Stars     int     `json:"stars"`
+}
+
+// dbGetScoreTrend returns score history for a repo, ordered by scan date.
+func dbGetScoreTrend(db *sql.DB, repo string, limit int) ([]scoreTrendPoint, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := db.Query(`
+		SELECT s.created_at, r.score, r.stars
+		FROM scan_results r
+		JOIN scans s ON s.id = r.scan_id
+		WHERE r.repo = ?
+		ORDER BY s.created_at ASC
+		LIMIT ?`, repo, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	var out []scoreTrendPoint
+	for rows.Next() {
+		var p scoreTrendPoint
+		if err := rows.Scan(&p.ScannedAt, &p.Score, &p.Stars); err != nil {
+			return nil, err
 		}
 		out = append(out, p)
 	}

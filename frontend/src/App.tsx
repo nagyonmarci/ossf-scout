@@ -7,6 +7,7 @@ import AuditPage from './pages/AuditPage'
 import AuditDetail from './pages/AuditDetail'
 import SchedulePage from './pages/SchedulePage'
 import PortfolioPage from './pages/PortfolioPage'
+import RemediationPage from './pages/RemediationPage'
 
 function AppHeader() {
   return (
@@ -23,6 +24,7 @@ function AppHeader() {
             <NavLink to="/audits">Audit</NavLink>
             <NavLink to="/schedules">Schedules</NavLink>
             <NavLink to="/portfolio">Portfolio</NavLink>
+            <NavLink to="/remediation">Remediation</NavLink>
           </nav>
         </div>
       </div>
@@ -68,6 +70,7 @@ export default function App() {
           <Route path="/audits/:id" element={<AuditDetail />} />
           <Route path="/schedules" element={<SchedulePage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
+          <Route path="/remediation" element={<RemediationPage />} />
         </Route>
       </Routes>
       <BackToTop />

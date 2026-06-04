@@ -18,11 +18,14 @@ import (
 // appended as an audit appendix; unverified claims flip the report to DRAFT.
 
 var (
-	reSHA40    = regexp.MustCompile(`\b[0-9a-fA-F]{40}\b`)
-	reFileLine = regexp.MustCompile(`([\w./@-]+\.(?:ts|tsx|js|jsx|go|py|rego|tf|ya?ml|json|rb|java|php)):(\d{1,6})`)
-	rePR       = regexp.MustCompile(`#(\d{2,7})\b`)
-	reVector   = regexp.MustCompile(`CVSS:3\.[01]/[A-Za-z:/]+`)
-	reScoreBnd = regexp.MustCompile(`(\d{1,2}\.\d)\s*\(?(Critical|High|Medium|Low|None)\)?`)
+	reSHA40      = regexp.MustCompile(`\b[0-9a-fA-F]{40}\b`)
+	reFileLine   = regexp.MustCompile(`([\w./@-]+\.(?:ts|tsx|js|jsx|go|py|rego|tf|ya?ml|json|rb|java|php)):(\d{1,6})`)
+	rePR         = regexp.MustCompile(`#(\d{2,7})\b`)
+	reVector     = regexp.MustCompile(`CVSS:3\.[01]/[A-Za-z:/]+`)
+	reScoreBnd   = regexp.MustCompile(`(\d{1,2}\.\d)\s*\(?(Critical|High|Medium|Low|None)\)?`)
+	reCVE        = regexp.MustCompile(`CVE-\d{4}-\d{4,}`)
+	rePkgVersion = regexp.MustCompile(`\b([\w][\w.-]{1,60})@(\d+\.\d[\w.+\-]*)`)
+	reWorkflow   = regexp.MustCompile(`\.github/workflows/([\w.\-]+\.ya?ml)`)
 )
 
 func cvssBand(s float64) string {
@@ -199,6 +202,46 @@ func verifyReport(report string, ctx *auditContext) string {
 		add("CVSS vector", vec, true, fmt.Sprintf("computed %.1f (%s)", score, cvssBand(score)))
 	}
 
+	// 6. CVE identifiers — must appear in the GHSA/Dependabot evidence collected.
+	depHay := strings.ToLower(ctx.GitHub.DependabotAlerts + " " + ctx.Dependencies.PnpmAudit + " " + ctx.IaC.OSVScanner)
+	for _, cve := range reCVE.FindAllString(report, -1) {
+		lower := strings.ToLower(cve)
+		if strings.Contains(depHay, lower) || strings.Contains(hayLower, lower) {
+			add("CVE", cve, true, "found in Dependabot/dependency evidence")
+		} else {
+			add("CVE", cve, false, "not in collected Dependabot or dependency scan evidence — may be fabricated")
+		}
+	}
+
+	// 7. Workflow file references must match a workflow file known from context.
+	workflowSet := map[string]bool{}
+	for _, name := range strings.Split(ctx.CICD.WorkflowList, "\n") {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			workflowSet[strings.ToLower(name)] = true
+		}
+	}
+	for _, m := range reWorkflow.FindAllStringSubmatch(report, -1) {
+		full, base := m[0], strings.ToLower(m[1])
+		if workflowSet[base] || strings.Contains(hayLower, base) {
+			add("workflow file", full, true, "matches collected workflow list")
+		} else {
+			add("workflow file", full, false, "not in collected workflow list — may not exist")
+		}
+	}
+
+	// 8. Package version claims — check against npm audit / osv-scanner / go.sum evidence.
+	pkgHay := strings.ToLower(ctx.Dependencies.PnpmAudit + " " + ctx.IaC.OSVScanner)
+	for _, m := range rePkgVersion.FindAllStringSubmatch(report, -1) {
+		full, pkg, ver := m[0], strings.ToLower(m[1]), strings.ToLower(m[2])
+		if strings.Contains(pkgHay, pkg+"@"+ver) || strings.Contains(pkgHay, pkg+`"`+":"+`"`+ver) ||
+			strings.Contains(hayLower, pkg+"@"+ver) {
+			add("pkg@version", full, true, "found in dependency evidence")
+		} else {
+			add("pkg@version", full, false, "not found in npm/osv-scanner evidence")
+		}
+	}
+
 	if len(results) == 0 {
 		return report + "\n\n## Appendix: Claim Verification\n\nNo concrete machine-checkable claims (SHAs, file:line, PR numbers, CVSS vectors) were found to verify.\n"
 	}
@@ -215,9 +258,10 @@ func verifyReport(report string, ctx *auditContext) string {
 	var b strings.Builder
 	b.WriteString("\n\n## Appendix: Claim Verification\n\n")
 	b.WriteString("Automated post-generation check of concrete claims against collected evidence. ")
-	b.WriteString("Method: SHAs matched against the resolved pin set and git evidence; ")
+	b.WriteString("Method: SHAs matched against resolved pin set and git evidence; ")
 	b.WriteString("`file:line` against `grep -rn` output; `#PR` against GitHub/commit evidence; ")
-	b.WriteString("CVSS bands recomputed from score and vector. No live network calls.\n\n")
+	b.WriteString("CVEs against Dependabot/osv-scanner; workflow files against WorkflowList; ")
+	b.WriteString("pkg@version against npm audit/osv-scanner; CVSS bands recomputed. No live network calls.\n\n")
 	b.WriteString("| Claim | Type | Status | Detail |\n")
 	b.WriteString("|---|---|---|---|\n")
 	for _, r := range results {

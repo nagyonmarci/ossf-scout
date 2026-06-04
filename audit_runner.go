@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -495,7 +496,40 @@ func mustUnmarshalContext(contextJSON string) *auditContext {
 	return &ctx
 }
 
+// estimateAuditCost returns a rough pre-run cost estimate in USD based on
+// context length and the target model's pricing.
+func estimateAuditCost(contextJSON, model string) float64 {
+	prices, ok := modelPrices[model]
+	if !ok {
+		return 0
+	}
+	estimatedInputTokens := len(contextJSON) / 4
+	return float64(estimatedInputTokens)/1_000_000*prices[0] + float64(defaultMaxTokens)/1_000_000*prices[1]
+}
+
 func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, p auditParams) {
+	// Budget guard: reject before making any API call if estimated cost exceeds limit.
+	if maxCostStr := os.Getenv("MAX_AUDIT_COST_USD"); maxCostStr != "" && p.Provider != "" && p.Provider != "ollama" {
+		if maxCost, err := strconv.ParseFloat(maxCostStr, 64); err == nil && maxCost > 0 {
+			raw, _ := json.Marshal(auditCtx)
+			model := p.Model
+			if model == "" {
+				switch p.Provider {
+				case "openai":
+					model = defaultOpenAIModel
+				case "gemini":
+					model = defaultGeminiModel
+				}
+			}
+			if est := estimateAuditCost(string(raw), model); est > maxCost {
+				_ = dbUpdateAuditError(db, id,
+					fmt.Sprintf("estimated cost $%.4f exceeds MAX_AUDIT_COST_USD=$%.2f; adjust limit or choose a cheaper model", est, maxCost))
+				notifyWebhook(auditCtx.Meta.Repo, "error", id)
+				return
+			}
+		}
+	}
+
 	var report string
 	var inputTokens, outputTokens int
 	var err error

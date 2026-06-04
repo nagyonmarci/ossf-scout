@@ -194,6 +194,35 @@ func handleGetIssuesPRs(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// ── Score trend handler ───────────────────────────────────────────────────────
+
+// handleGetScoreTrend returns score history for a repo.
+// Path: GET /api/stats/trend?repo=owner/name&limit=N
+func handleGetScoreTrend(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		repo := r.URL.Query().Get("repo")
+		if repo == "" {
+			http.Error(w, "repo param required", http.StatusBadRequest)
+			return
+		}
+		limit := 50
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		points, err := dbGetScoreTrend(db, repo, limit)
+		if err != nil {
+			http.Error(w, "db error", http.StatusInternalServerError)
+			return
+		}
+		if points == nil {
+			points = []scoreTrendPoint{}
+		}
+		writeJSON(w, http.StatusOK, points)
+	}
+}
+
 // ── Portfolio handler ─────────────────────────────────────────────────────────
 
 // handleGetPortfolio returns aggregated stats for multiple repos.

@@ -14,7 +14,7 @@ Available as a **CLI tool** or a **web server** with a browser UI and scan histo
 > ### 🔎 Generate a full DevSecOps audit
 > Point ossf-scout at **any public repo** and it clones it, runs 30+ security tools, and produces a formal Markdown report — findings with CVSS scores and OWASP/STRIDE mapping, fix commands, and ready-to-paste CI guardrails. Free as a static snapshot, or AI-synthesised via Anthropic/Ollama.
 >
-> **📄 See a real sample → [`examples/directus-audit-report.md`](examples/directus-audit-report.md)** &nbsp;·&nbsp; raw evidence context → [`examples/directus-audit-context.md`](examples/directus-audit-context.md)
+> **📄 See real samples** — AI-synthesised report → [`examples/directus-audit-report-ai.md`](examples/directus-audit-report-ai.md) &nbsp;·&nbsp; static snapshot → [`examples/directus-audit-report.md`](examples/directus-audit-report.md) &nbsp;·&nbsp; raw evidence context → [`examples/directus-audit-context.md`](examples/directus-audit-context.md)
 
 ---
 
@@ -43,7 +43,7 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Open issues count** — from GitHub Search API (no extra token scopes)
 - **Notifications** — in-app toast + browser Notification API on scan completion
 - **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
-- **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, generates a formal DevSecOps report ([sample](examples/directus-audit-report.md)); choose Anthropic (Opus 4 / Sonnet 4 / Haiku 4), a local **Ollama** model, or run for free as a static data snapshot
+- **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, generates a formal DevSecOps report ([sample](examples/directus-audit-report-ai.md)); choose Anthropic (Opus 4 / Sonnet 4 / Haiku 4), a local **Ollama** model, or run for free as a static data snapshot
 
 ---
 
@@ -91,7 +91,10 @@ The scan history is stored in `./data/ossf-scout.db` and persists across restart
 
 ### Audit Tab
 
-> **📄 Sample output:** [`examples/directus-audit-report.md`](examples/directus-audit-report.md) — a complete static-snapshot audit of `directus/directus`. The matching AI input is in [`examples/directus-audit-context.md`](examples/directus-audit-context.md).
+> **📄 Sample output** for `directus/directus`:
+> - **AI-synthesised report** → [`examples/directus-audit-report-ai.md`](examples/directus-audit-report-ai.md) — calibrated findings, CVSS vectors, CI guardrails (the full audit format)
+> - **Static snapshot** → [`examples/directus-audit-report.md`](examples/directus-audit-report.md) — free, no-AI raw data dump
+> - **AI input context** → [`examples/directus-audit-context.md`](examples/directus-audit-context.md) — the evidence fed to the model
 
 Open the **Audit** tab in the web UI:
 

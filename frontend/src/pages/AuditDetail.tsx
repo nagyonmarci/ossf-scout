@@ -108,7 +108,7 @@ export default function AuditDetail() {
   const [genModel, setGenModel] = useState(() => LS.get('audit.model', ALL_MODELS.anthropic[0].id));
   const [genOllamaURL, setGenOllamaURL] = useState(() => LS.get('audit.ollamaURL', ''));
   const [genOllamaModel, setGenOllamaModel] = useState(() => LS.get('audit.ollamaModel', ''));
-  const [genSplitGeneration, setGenSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'false') === 'true');
+  const [genSplitGeneration, setGenSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'true') === 'true');
   const [genAnalysisModel, setGenAnalysisModel] = useState(() => LS.get('audit.analysisModel', ''));
   const [genSubmitting, setGenSubmitting] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);

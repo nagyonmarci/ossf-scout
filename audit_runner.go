@@ -23,6 +23,7 @@ type auditParams struct {
 	Model           string
 	AnalysisModel   string
 	SplitGeneration bool
+	SkipSecrets     bool // skip gitleaks/trufflehog during context collection
 }
 
 // gitAuthEnv returns an environment for git subprocesses that authenticates to
@@ -485,7 +486,7 @@ func runAudit(db *sql.DB, id, ghToken string, p auditParams) {
 		}
 	}
 
-	auditCtx, tmpDir, err := collectContext(repo, ghToken)
+	auditCtx, tmpDir, err := collectContext(repo, ghToken, collectOptions{SkipSecrets: p.SkipSecrets})
 	if err != nil {
 		_ = dbUpdateAuditError(db, id, fmt.Sprintf("collect failed: %v", err))
 		return

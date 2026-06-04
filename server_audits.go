@@ -23,6 +23,7 @@ type createAuditRequest struct {
 	Model           string `json:"model"`
 	AnalysisModel   string `json:"analysis_model"`
 	SplitGeneration bool   `json:"split_generation"`
+	SkipSecrets     bool   `json:"skip_secrets"`
 	Provider        string `json:"provider"` // "anthropic" | "openai" | "gemini" | "ollama" | "" (template)
 	OllamaURL       string `json:"ollama_url"`
 }
@@ -33,6 +34,7 @@ func buildAuditParams(req createAuditRequest) auditParams {
 		Model:           req.Model,
 		AnalysisModel:   req.AnalysisModel,
 		SplitGeneration: req.SplitGeneration,
+		SkipSecrets:     req.SkipSecrets,
 	}
 
 	p.AnthropicKey = req.AnthropicKey

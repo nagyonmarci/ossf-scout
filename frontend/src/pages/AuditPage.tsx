@@ -83,8 +83,9 @@ export default function AuditPage() {
 
   const [ollamaURL, setOllamaURL]   = useState(() => LS.get('audit.ollamaURL', ''));
   const [ollamaModel, setOllamaModel] = useState(() => LS.get('audit.ollamaModel', ''));
-  const [splitGeneration, setSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'false') === 'true');
+  const [splitGeneration, setSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'true') === 'true');
   const [analysisModel, setAnalysisModel] = useState(() => LS.get('audit.analysisModel', ''));
+  const [skipSecrets, setSkipSecrets] = useState(() => LS.get('audit.skipSecrets', 'false') === 'true');
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +137,7 @@ export default function AuditPage() {
              : undefined,
         split_generation: (p === 'anthropic' || p === 'ollama') ? splitGeneration || undefined : undefined,
         analysis_model: splitGeneration ? (analysisModel || undefined) : undefined,
+        skip_secrets: skipSecrets || undefined,
         ollama_url: p === 'ollama' ? (ollamaURL || undefined) : undefined,
       });
       setRepo('');
@@ -341,6 +343,12 @@ export default function AuditPage() {
             <input type="password" className="input" placeholder="ghp_…" value={token}
               onChange={(e) => { setToken(e.target.value); LS.set('audit.ghToken', e.target.value); }}
               style={{ marginTop: 4 }} />
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={skipSecrets}
+              onChange={(e) => { setSkipSecrets(e.target.checked); LS.set('audit.skipSecrets', String(e.target.checked)); }} />
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Skip secret scanning (faster — skips gitleaks &amp; trufflehog)</span>
           </label>
 
           {error && <p className="error-msg">{error}</p>}

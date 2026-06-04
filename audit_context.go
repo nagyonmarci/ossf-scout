@@ -255,7 +255,12 @@ func resolvePinnedActions(unpinned string) string {
 	return b.String()
 }
 
-func collectContext(repo, ghToken string) (*auditContext, string, error) {
+// collectOptions controls which expensive tool categories are run during context collection.
+type collectOptions struct {
+	SkipSecrets bool // skip gitleaks and trufflehog (slow; set true when speed matters)
+}
+
+func collectContext(repo, ghToken string, opts collectOptions) (*auditContext, string, error) {
 	owner, repoName, ok := splitValidRepo(repo)
 	if !ok {
 		return nil, "", fmt.Errorf("invalid repository name")
@@ -389,10 +394,20 @@ func collectContext(repo, ghToken string) (*auditContext, string, error) {
 	ctx.CICD.PinnedSuggestions = resolvePinnedActions(ctx.CICD.UnpinnedActions)
 
 	ctx.Secrets = auditSecrets{
-		Gitleaks: shIn(tmpDir, "gitleaks not installed — skipped",
-			"gitleaks detect --source . --no-git --report-format json 2>&1 | head -200 || echo 'gitleaks not installed — skipped'"),
-		TruffleHog: shIn(tmpDir, "trufflehog not installed — skipped",
-			"trufflehog filesystem . --json --no-update 2>&1 | head -200 || echo 'trufflehog not installed — skipped'"),
+		Gitleaks: func() string {
+			if opts.SkipSecrets {
+				return "skipped (SkipSecrets=true)"
+			}
+			return shIn(tmpDir, "gitleaks not installed — skipped",
+				"gitleaks detect --source . --no-git --report-format json 2>&1 | head -200 || echo 'gitleaks not installed — skipped'")
+		}(),
+		TruffleHog: func() string {
+			if opts.SkipSecrets {
+				return "skipped (SkipSecrets=true)"
+			}
+			return shIn(tmpDir, "trufflehog not installed — skipped",
+				"trufflehog filesystem . --json --no-update 2>&1 | head -200 || echo 'trufflehog not installed — skipped'")
+		}(),
 		PrivateKeyHeaders: shIn(tmpDir, "none",
 			"grep -rn '-----BEGIN.*PRIVATE KEY-----' . --include='*.pem' --include='*.key' --include='*.env' | grep -v node_modules | head -20 || echo 'none'"),
 		EnvFiles: shIn(tmpDir, "(none found)",

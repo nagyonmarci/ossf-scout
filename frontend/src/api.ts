@@ -97,6 +97,7 @@ export interface CreateAuditParams {
   model?: string;
   analysis_model?: string;
   split_generation?: boolean;
+  skip_secrets?: boolean;
   provider?: string;
   ollama_url?: string;
 }

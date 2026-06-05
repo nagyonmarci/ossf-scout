@@ -1,13 +1,13 @@
 .PHONY: build dev docker clean
 
 build:
-	cd frontend && npm ci && npm run build
+	cd frontend && pnpm install --frozen-lockfile && pnpm run build
 	go build -o ossf-scout .
 
-# Faster rebuild: skips npm ci if node_modules already exists
+# Faster rebuild: skips install if node_modules already exists
 dev:
-	cd frontend && [ -d node_modules ] || npm ci
-	cd frontend && npm run build
+	cd frontend && [ -d node_modules ] || pnpm install --frozen-lockfile
+	cd frontend && pnpm run build
 	go build -o ossf-scout .
 
 docker:

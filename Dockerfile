@@ -25,7 +25,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go install github.com/ossf/scorecard/v5@v5.5.0 && \
     go install github.com/zricethezav/gitleaks/v8@v8.21.2 && \
-    go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+    go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 && \
+    go install github.com/google/osv-scanner/cmd/osv-scanner@v1.9.2
 
 # Stage 3: download arch-aware binary tools
 FROM --platform=$BUILDPLATFORM debian:12-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb AS bintools
@@ -62,16 +63,16 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
 # Stage 4: runtime — all tools bundled, debian for glibc compatibility
 FROM debian:12-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git python3 python3-pip nodejs npm ca-certificates \
+    git nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-RUN pip3 install --no-cache-dir --break-system-packages checkov==3.2.532
 RUN npm install -g pnpm@8
 
 WORKDIR /app
 COPY --from=builder /app/ossf-scout .
-COPY --from=builder /go/bin/scorecard    /usr/local/bin/scorecard
-COPY --from=builder /go/bin/gitleaks     /usr/local/bin/gitleaks
-COPY --from=builder /go/bin/actionlint   /usr/local/bin/actionlint
+COPY --from=builder /go/bin/scorecard      /usr/local/bin/scorecard
+COPY --from=builder /go/bin/gitleaks       /usr/local/bin/gitleaks
+COPY --from=builder /go/bin/actionlint     /usr/local/bin/actionlint
+COPY --from=builder /go/bin/osv-scanner    /usr/local/bin/osv-scanner
 COPY --from=bintools /usr/local/bin/trivy      /usr/local/bin/trivy
 COPY --from=bintools /usr/local/bin/helm       /usr/local/bin/helm
 COPY --from=bintools /usr/local/bin/zizmor     /usr/local/bin/zizmor

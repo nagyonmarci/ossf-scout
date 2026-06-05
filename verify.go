@@ -12,11 +12,10 @@ import (
 
 // verify.go — post-generation grounding check.
 //
-// Every concrete claim the model writes (commit SHA, file:line, PR number,
-// CVSS band/vector, CVE, workflow file, pkg@version) is checked against the
-// evidence collected in auditContext. Nothing here needs the live clone, so it
-// runs on both the generate and re-run paths. The result is appended as an
-// audit appendix; any unverified claim flips the report to DRAFT.
+// Every concrete claim the model writes (action pin SHA, file:line, PR number,
+// CVSS band) is checked against the collected evidence in auditContext. Nothing
+// here needs the live clone, so it also runs on the re-run path. The result is
+// appended as an audit appendix; unverified claims flip the report to DRAFT.
 
 var (
 	reSHA40      = regexp.MustCompile(`\b[0-9a-fA-F]{40}\b`)
@@ -25,8 +24,9 @@ var (
 	reVector     = regexp.MustCompile(`CVSS:3\.[01]/[A-Za-z:/]+`)
 	reScoreBnd   = regexp.MustCompile(`(\d{1,2}\.\d)\s*\(?(Critical|High|Medium|Low|None)\)?`)
 	reCVE        = regexp.MustCompile(`CVE-\d{4}-\d{4,}`)
-	rePkgVersion = regexp.MustCompile(`\b([\w][\w.-]{1,60})@(\d+\.\d[\w.+\-]*)`)
-	reWorkflow   = regexp.MustCompile(`\.github/workflows/([\w.\-]+\.ya?ml)`)
+	rePkgVersion  = regexp.MustCompile(`\b([\w][\w.-]{1,60})@(\d+\.\d[\w.+\-]*)`)
+	reWorkflow    = regexp.MustCompile(`\.github/workflows/([\w.\-]+\.ya?ml)`)
+	reBranchClaim = regexp.MustCompile(`\bbranch[:\s]+([a-zA-Z0-9_.\-/]+)`)
 )
 
 func cvssBand(s float64) string {
@@ -105,21 +105,29 @@ type claimResult struct {
 	detail string
 }
 
-// verifyReport checks the concrete claims in an AI-generated report against the
-// collected audit evidence and appends an "Appendix: Claim Verification". If any
-// claim cannot be grounded, a DRAFT banner is prepended.
+// pinnedSHASet returns the lowercase set of authoritative pin SHAs that the
+// collector resolved via git ls-remote.
+func pinnedSHASet(ctx *auditContext) map[string]bool {
+	set := map[string]bool{}
+	for _, s := range reSHA40.FindAllString(ctx.CICD.PinnedSuggestions, -1) {
+		set[strings.ToLower(s)] = true
+	}
+	return set
+}
+
 func verifyReport(report string, ctx *auditContext) string {
 	if strings.TrimSpace(report) == "" {
 		return report
 	}
 
-	// Universal evidence haystack: every collected string (grep output, git log,
-	// GitHub JSON) flattened to one searchable blob.
-	hay := report
+	// Universal evidence haystack: every collected string, including grep output
+	// (path:line:content), git log, and GitHub JSON.
+	hay := report // placeholder; overwritten below
 	if raw, err := json.Marshal(ctx); err == nil {
 		hay = string(raw)
 	}
 	hayLower := strings.ToLower(hay)
+	pins := pinnedSHASet(ctx)
 
 	var results []claimResult
 	seen := map[string]bool{}
@@ -132,13 +140,16 @@ func verifyReport(report string, ctx *auditContext) string {
 		results = append(results, claimResult{claim, kind, ok, detail})
 	}
 
-	// 1. Commit / pin SHAs (40-hex) must appear in the collected evidence.
+	// 1. Action pin / commit SHAs (40-hex).
 	for _, sha := range reSHA40.FindAllString(report, -1) {
 		l := strings.ToLower(sha)
-		if strings.Contains(hayLower, l) {
-			add("SHA", sha, true, "present in collected evidence")
-		} else {
-			add("SHA", sha, false, "not found in collected evidence — verify it is real")
+		switch {
+		case pins[l]:
+			add("pin SHA", sha, true, "matches resolved pin set")
+		case strings.Contains(hayLower, l):
+			add("commit SHA", sha, true, "present in git/evidence")
+		default:
+			add("SHA", sha, false, "not in resolved pins or evidence — likely fabricated")
 		}
 	}
 
@@ -182,7 +193,7 @@ func verifyReport(report string, ctx *auditContext) string {
 		}
 	}
 
-	// 5. CVSS vector sanity: recompute each vector's score.
+	// 5. CVSS vector sanity: recompute each vector's score (informational + mismatch).
 	for _, vec := range reVector.FindAllString(report, -1) {
 		score, ok := cvssBaseScore(vec)
 		if !ok {
@@ -192,14 +203,14 @@ func verifyReport(report string, ctx *auditContext) string {
 		add("CVSS vector", vec, true, fmt.Sprintf("computed %.1f (%s)", score, cvssBand(score)))
 	}
 
-	// 6. CVE identifiers — must appear in the collected dependency evidence.
-	depHay := strings.ToLower(ctx.Dependencies.PnpmAudit)
+	// 6. CVE identifiers — must appear in the GHSA/Dependabot evidence collected.
+	depHay := strings.ToLower(ctx.GitHub.DependabotAlerts + " " + ctx.Dependencies.PnpmAudit + " " + ctx.IaC.OSVScanner)
 	for _, cve := range reCVE.FindAllString(report, -1) {
 		lower := strings.ToLower(cve)
 		if strings.Contains(depHay, lower) || strings.Contains(hayLower, lower) {
-			add("CVE", cve, true, "found in dependency evidence")
+			add("CVE", cve, true, "found in Dependabot/dependency evidence")
 		} else {
-			add("CVE", cve, false, "not in collected dependency-scan evidence — may be fabricated")
+			add("CVE", cve, false, "not in collected Dependabot or dependency scan evidence — may be fabricated")
 		}
 	}
 
@@ -220,14 +231,27 @@ func verifyReport(report string, ctx *auditContext) string {
 		}
 	}
 
-	// 8. Package version claims — check against the npm/pnpm audit evidence.
-	pkgHay := strings.ToLower(ctx.Dependencies.PnpmAudit)
+	// 8. Package version claims — check against npm audit / osv-scanner / go.sum evidence.
+	pkgHay := strings.ToLower(ctx.Dependencies.PnpmAudit + " " + ctx.IaC.OSVScanner)
 	for _, m := range rePkgVersion.FindAllStringSubmatch(report, -1) {
 		full, pkg, ver := m[0], strings.ToLower(m[1]), strings.ToLower(m[2])
-		if strings.Contains(pkgHay, pkg+"@"+ver) || strings.Contains(hayLower, pkg+"@"+ver) {
+		if strings.Contains(pkgHay, pkg+"@"+ver) || strings.Contains(pkgHay, pkg+`"`+":"+`"`+ver) ||
+			strings.Contains(hayLower, pkg+"@"+ver) {
 			add("pkg@version", full, true, "found in dependency evidence")
 		} else {
-			add("pkg@version", full, false, "not found in dependency-audit evidence")
+			add("pkg@version", full, false, "not found in npm/osv-scanner evidence")
+		}
+	}
+
+	// 9. Branch name claims — check against collected DefaultBranch.
+	if ctx.GitHub.DefaultBranch != "" {
+		for _, m := range reBranchClaim.FindAllStringSubmatch(report, -1) {
+			claimed := m[1]
+			if claimed == ctx.GitHub.DefaultBranch || claimed == "main" || claimed == "master" {
+				continue // common/expected
+			}
+			add("branch name", claimed, false,
+				fmt.Sprintf("claimed branch %q not recognised (default: %s)", claimed, ctx.GitHub.DefaultBranch))
 		}
 	}
 
@@ -247,9 +271,10 @@ func verifyReport(report string, ctx *auditContext) string {
 	var b strings.Builder
 	b.WriteString("\n\n## Appendix: Claim Verification\n\n")
 	b.WriteString("Automated post-generation check of concrete claims against collected evidence. ")
-	b.WriteString("Method: SHAs and `file:line` matched against `grep -rn` output; `#PR` against ")
-	b.WriteString("GitHub/commit evidence; CVEs and pkg@version against the dependency audit; ")
-	b.WriteString("workflow files against the collected workflow list; CVSS bands recomputed. No live network calls.\n\n")
+	b.WriteString("Method: SHAs matched against resolved pin set and git evidence; ")
+	b.WriteString("`file:line` against `grep -rn` output; `#PR` against GitHub/commit evidence; ")
+	b.WriteString("CVEs against Dependabot/osv-scanner; workflow files against WorkflowList; ")
+	b.WriteString("pkg@version against npm audit/osv-scanner; CVSS bands recomputed. No live network calls.\n\n")
 	b.WriteString("| Claim | Type | Status | Detail |\n")
 	b.WriteString("|---|---|---|---|\n")
 	for _, r := range results {

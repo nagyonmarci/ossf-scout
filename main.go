@@ -13,10 +13,10 @@ func main() {
 	var dbPath string
 
 	flag.StringVar(&cfg.language, "lang", "", "Filter by language (e.g. go, python, java)")
-	flag.IntVar(&cfg.minStars, "min-stars", 500, "Minimum stars")
-	flag.Float64Var(&cfg.maxScore, "max-score", 5.0, "Maximum OpenSSF score to include (0-10)")
-	flag.IntVar(&cfg.limit, "limit", 100, "Max repos to fetch from GitHub search")
-	flag.IntVar(&cfg.workers, "workers", 5, "Concurrent Scorecard API workers")
+	flag.IntVar(&cfg.minStars, "min-stars", defaultMinStars, "Minimum stars")
+	flag.Float64Var(&cfg.maxScore, "max-score", defaultMaxScore, "Maximum OpenSSF score to include (0-10)")
+	flag.IntVar(&cfg.limit, "limit", defaultLimit, "Max repos to fetch from GitHub search")
+	flag.IntVar(&cfg.workers, "workers", defaultWorkers, "Concurrent Scorecard API workers")
 	flag.BoolVar(&cfg.jsonOut, "json", false, "Output as JSON")
 	flag.StringVar(&cfg.token, "token", os.Getenv("GITHUB_TOKEN"), "GitHub PAT (or set GITHUB_TOKEN env)")
 	flag.StringVar(&cfg.checkFilter, "checks", "", "Comma-separated Scorecard checks to highlight (default: security set)")
@@ -27,7 +27,7 @@ func main() {
 	flag.StringVar(&cfg.keyword, "keyword", "", "Keyword search in repo name/description")
 	flag.StringVar(&cfg.singleRepo, "repo", "", "Scan a single specific repo (owner/repo), skips GitHub search")
 	flag.BoolVar(&serve, "serve", false, "Start web server mode")
-	flag.IntVar(&port, "port", 7878, "Port for web server mode")
+	flag.IntVar(&port, "port", defaultPort, "Port for web server mode")
 	flag.StringVar(&dbPath, "db", "ossf-scout.db", "SQLite database path")
 	flag.Parse()
 

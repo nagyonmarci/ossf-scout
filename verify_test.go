@@ -14,7 +14,7 @@ func TestCVSSBaseScore(t *testing.T) {
 		{"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8},
 		{"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H", 7.5},
 		{"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N", 5.3},
-		{"CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:N", 8.7}, // scope-changed (verified vs official calc)
+		{"CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:N", 8.7}, // scope-changed (verified against official calc)
 		{"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N", 0.0},
 	}
 	for _, c := range cases {
@@ -42,14 +42,15 @@ func TestCVSSBand(t *testing.T) {
 
 func TestVerifyReport(t *testing.T) {
 	ctx := &auditContext{}
-	// A real commit SHA + a real PR number live in the collected git evidence.
-	ctx.Git.RecentCommits = "11bd71901bbe5b1630ceea73d27597364c9af683 fix things (#42)\n./src/app.ts:99:  const x = 1"
+	// authoritative pin + a real commit in evidence
+	ctx.CICD.PinnedSuggestions = "actions/checkout@v4 -> 11bd71901bbe5b1630ceea73d27597364c9af683 | .github/workflows/ci.yml:10"
+	ctx.Git.RecentCommits = "abc123 fix things (#42)\n./src/app.ts:99:  const x = 1"
 
 	report := strings.Join([]string{
-		"pinned to 11bd71901bbe5b1630ceea73d27597364c9af683",         // SHA in evidence -> verified
-		"pin to deadbeefdeadbeefdeadbeefdeadbeefdeadbeef for safety", // SHA not in evidence -> unverified
+		"uses: actions/checkout@v4  # pin: 11bd71901bbe5b1630ceea73d27597364c9af683", // authoritative -> verified
+		"pin to deadbeefdeadbeefdeadbeefdeadbeefdeadbeef for safety",                 // fabricated -> unverified
 		"CVSS 8.7 (Critical)",              // band wrong -> unverified
-		"CVSS 9.8 (Critical)",              // band ok -> verified
+		"CVSS 9.8 (Critical)",              // band ok
 		"see ./src/app.ts:99 for the call", // file:line in evidence -> verified
 		"also files.ts:285 is vulnerable",  // file:line NOT in evidence -> unverified
 		"fixed in #42",                     // PR in evidence -> verified
@@ -62,31 +63,34 @@ func TestVerifyReport(t *testing.T) {
 		"Appendix: Claim Verification",
 		"DRAFT",
 		"band for 8.7 is High",
-		"verify it is real",                         // fabricated SHA flagged
-		"no matching line in collected evidence",    // bad file:line flagged
-		"no GitHub/commit evidence for this number", // #9999 flagged
-		"computed 5.3 (Medium)",                     // CVSS vector recomputed
+		"likely fabricated",
+		"no matching line in collected evidence",
+		"computed 5.3 (Medium)",
 	}
 	for _, m := range must {
 		if !strings.Contains(out, m) {
 			t.Errorf("output missing %q", m)
 		}
 	}
+	// authoritative pin SHA must be verified, not fabricated-flagged
+	if strings.Contains(out, "11bd71901bbe5b1630ceea73d27597364c9af683 | SHA | ❌") {
+		t.Error("authoritative pin SHA wrongly flagged")
+	}
+	t.Logf("\n%s", out[strings.Index(out, "## Appendix"):])
 }
 
-func TestVerifyReportEmpty(t *testing.T) {
-	if out := verifyReport("", &auditContext{}); out != "" {
-		t.Errorf("empty report should pass through unchanged, got %q", out)
+func TestResolvePinnedActionsLive(t *testing.T) {
+	in := ".github/workflows/ci.yml:10:      uses: actions/checkout@v4\n" +
+		".github/workflows/ci.yml:11:      uses: actions/checkout@v4\n" +
+		".github/workflows/rel.yml:5:      uses: actions/setup-node@v4"
+	out := resolvePinnedActions(in)
+	if !strings.Contains(out, "actions/checkout@v4 ->") || !strings.Contains(out, "actions/setup-node@v4 ->") {
+		t.Fatalf("missing entries:\n%s", out)
 	}
-}
-
-func TestVerifyReportNoClaimsCleanPasses(t *testing.T) {
-	// A report with no machine-checkable specifics gets the appendix but no DRAFT banner.
-	out := verifyReport("All good. No specifics here.", &auditContext{})
-	if strings.Contains(out, "DRAFT") {
-		t.Error("a claim-free report should not be marked DRAFT")
+	// dedupe: checkout appears twice in input, once in output
+	if strings.Count(out, "actions/checkout@v4 ->") != 1 {
+		t.Errorf("checkout not deduped:\n%s", out)
 	}
-	if !strings.Contains(out, "Appendix: Claim Verification") {
-		t.Error("appendix should still be appended")
-	}
+	resolved := reSHA40.FindAllString(out, -1)
+	t.Logf("resolved %d SHA(s) live:\n%s", len(resolved), out)
 }

@@ -273,7 +273,7 @@ func buildAuditSummarySections(ctx *auditContext) []auditSummarySection {
 		})},
 		{Name: "Dependencies and secrets", Content: sectionMD(func(w func(string, ...any)) {
 			w("## Dependencies")
-			w("### pnpm / npm audit\n```\n%s\n```", ctx.Dependencies.PnpmAudit)
+			w("### Dependency audit (pnpm/npm/yarn)\n```\n%s\n```", ctx.Dependencies.PnpmAudit)
 			w("### Workspace overrides\n```\n%s\n```", ctx.Dependencies.WorkspaceOverrides)
 			w("## Secrets Scanning")
 			w("### Gitleaks\n```\n%s\n```", ctx.Secrets.Gitleaks)
@@ -540,7 +540,7 @@ func buildContextMarkdown(ctx *auditContext) string {
 	w("")
 	w("## Dependencies")
 	w("")
-	w("### pnpm / npm audit")
+	w("### Dependency audit (pnpm/npm/yarn)")
 	w("```")
 	w("%s", ctx.Dependencies.PnpmAudit)
 	w("```")

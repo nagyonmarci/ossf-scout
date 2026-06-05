@@ -78,9 +78,8 @@ var modelPrices = map[string][2]float64{
 	"claude-sonnet-4-6":         {3.0, 15.0},
 	"claude-haiku-4-5-20251001": {0.80, 4.0},
 	// OpenAI
-	"gpt-4.1":              {2.0, 8.0},
-	"gpt-4.1-long-context": {2.0, 8.0},
-	"gpt-4.1-mini":         {0.40, 1.60},
+	"gpt-4.1":      {2.0, 8.0},
+	"gpt-4.1-mini": {0.40, 1.60},
 	"gpt-4.1-nano": {0.10, 0.40},
 	"gpt-4o":       {2.5, 10.0},
 	"gpt-4o-mini":  {0.15, 0.60},

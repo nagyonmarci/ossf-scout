@@ -12,8 +12,7 @@ const PROVIDER_MODELS: Record<string, { id: string; label: string; hint: string;
     { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4',   hint: '~$0.05–$0.20/run', inputRate: 0.80,  outputRate: 4    },
   ],
   openai: [
-    { id: 'gpt-4.1',              label: 'GPT-4.1',              hint: '~$0.09–$0.35/run · 30K TPM (T1)',   inputRate: 2.0,  outputRate: 8.0  },
-    { id: 'gpt-4.1-long-context', label: 'GPT-4.1 long context', hint: '~$0.09–$0.35/run · 200K TPM (T1)',  inputRate: 2.0,  outputRate: 8.0  },
+    { id: 'gpt-4.1', label: 'GPT-4.1', hint: '~$0.09–$0.35/run · 30K TPM (T1)', inputRate: 2.0, outputRate: 8.0 },
     { id: 'gpt-4.1-mini',         label: 'GPT-4.1 mini',         hint: '~$0.02–$0.07/run · 200K TPM (T1)',  inputRate: 0.40, outputRate: 1.60 },
     { id: 'gpt-4.1-nano',         label: 'GPT-4.1 nano',         hint: '~$0.005–$0.02/run · 200K TPM (T1)', inputRate: 0.10, outputRate: 0.40 },
     { id: 'gpt-4o',       label: 'GPT-4o (128K ctx)',       hint: '~$0.10–$0.50/run · 30K TPM (T1)',   inputRate: 2.5,  outputRate: 10   },

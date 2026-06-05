@@ -36,8 +36,12 @@ var (
 	// Repo link lives in the first <h2><a href="/owner/repo"> inside the article
 	reH2Link        = regexp.MustCompile(`(?s)<h2\b[^>]*>.*?<a\b[^>]*href="/([A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*)"`)
 	reLangAttr      = regexp.MustCompile(`itemprop="programmingLanguage">([^<]+)<`)
-	reStarsTrending = regexp.MustCompile(`([\d,]+)\s+stars?\s+(?:today|this week|this month)`)
+	reStarsTrending = regexp.MustCompile(`([\d,]+)\s+stars?\s+(?:today|this (?:week|month|year))`)
 )
+
+// maxTrendingArticles caps how many <article> blocks we parse, so pathological
+// or hostile input can't blow up memory. GitHub's trending page shows ~25.
+const maxTrendingArticles = 100
 
 func scrapeTrending(language, since, token string) ([]trendingEntry, error) {
 	trendURL := "https://github.com/trending"
@@ -56,7 +60,8 @@ func scrapeTrending(language, since, token string) ([]trendingEntry, error) {
 	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 
-	resp, err := http.DefaultClient.Do(req)
+	// Reuse the shared client (15s timeout) instead of http.DefaultClient (no timeout).
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +83,7 @@ func scrapeTrending(language, since, token string) ([]trendingEntry, error) {
 }
 
 func parseTrending(html string) []trendingEntry {
-	articles := reArticle.FindAllStringSubmatch(html, -1)
+	articles := reArticle.FindAllStringSubmatch(html, maxTrendingArticles)
 	var entries []trendingEntry
 
 	for _, a := range articles {

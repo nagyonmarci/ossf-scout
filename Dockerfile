@@ -63,7 +63,8 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
 # Stage 4: runtime — all tools bundled, debian for glibc compatibility
 FROM debian:12-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git nodejs npm ca-certificates \
+    git nodejs npm ca-certificates python3 python3-pip \
+    && pip3 install --no-cache-dir --break-system-packages semgrep \
     && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@8
 

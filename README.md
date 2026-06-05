@@ -78,7 +78,7 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 ### Packaging
 
 - **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
-- **Docker image with bundled tools** — ships `scorecard`, `gitleaks`, `actionlint`, `osv-scanner`, `trivy`, `helm`, `zizmor`, `kube-linter`, `trufflehog`, Node/npm, and `pnpm`
+- **Docker image with bundled tools** — ships `scorecard`, `gitleaks`, `actionlint`, `osv-scanner`, `trivy`, `helm`, `zizmor`, `kube-linter`, `trufflehog`, `semgrep`, Node/npm, and `pnpm`
 - **Offline-friendly Ollama profile** — Docker Compose can run an Ollama sidecar for local AI generation
 
 ---
@@ -188,7 +188,7 @@ Audit detail pages also expose a supply-chain graph for GitHub Actions pinning, 
 | Git history | Last 30 commits, files changed in the last 10 commits |
 | GitHub API | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts, branch protection rules, Dependabot alerts (requires `security_events` scope), release history |
 | Secrets | `gitleaks`, `trufflehog`, private key headers, `.env` file contents, AWS/JWT/GH token regex patterns |
-| IaC | Terraform file list, `checkov`, `trivy config`, `osv-scanner`, Kubernetes manifest list, `kube-linter` |
+| IaC | Terraform file list, `trivy config`, `osv-scanner`, Kubernetes manifest list, `kube-linter` |
 | Policy as Code | OPA `.rego` files, Kyverno `ClusterPolicy`/`Policy` YAMLs, Falco rule detection |
 | SLSA / Supply Chain | Provenance / SBOM files, cosign keys, SLSA GitHub Generator workflow usage, signed commit check |
 

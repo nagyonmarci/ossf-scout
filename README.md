@@ -9,10 +9,10 @@ Discover GitHub repositories where security practices are weakest — and where 
 
 Searches GitHub for popular repositories, queries the [OpenSSF Scorecard](https://scorecard.dev/) API for each, and surfaces projects missing key security practices — no CI tests, no SAST, no branch protection, etc.
 
-Available as a **CLI tool** or a **web server** with a browser UI and scan history.
+Available as a **CLI tool** or a **web server** with a browser UI, scan history, scheduled audits, remediation tracking, and portfolio views.
 
 > ### 🔎 Generate a full DevSecOps audit
-> Point ossf-scout at **any public repo** and it clones it, runs 30+ security tools, and produces a formal Markdown report — findings with CVSS scores and OWASP/STRIDE mapping, fix commands, and ready-to-paste CI guardrails. Free as a static snapshot, or AI-synthesised via Anthropic/Ollama.
+> Point ossf-scout at **any public repo** and it clones it, runs 30+ security tools, and produces a formal Markdown report — findings with CVSS scores and OWASP/STRIDE mapping, fix commands, and ready-to-paste CI guardrails. Free as a static snapshot, or AI-synthesised via Anthropic, OpenAI, Gemini, or Ollama.
 >
 > **📄 See real samples** — AI-synthesised report → [`examples/directus-audit-report-ai.md`](examples/directus-audit-report-ai.md) &nbsp;·&nbsp; static snapshot → [`examples/directus-audit-report.md`](examples/directus-audit-report.md) &nbsp;·&nbsp; raw evidence context → [`examples/directus-audit-context.md`](examples/directus-audit-context.md)
 
@@ -29,22 +29,57 @@ Most OpenSSF Scorecard tooling answers *"how secure is **this** repo?"* or *"how
 | [`scorecard-monitor`](https://github.com/ossf/scorecard-monitor) | Tracking score changes for **your own** orgs | ossf-scout finds **other people's** popular-but-weak repos to contribute to |
 | [deps.dev](https://deps.dev) / [Socket](https://socket.dev) | Package/dependency (SCA) security | ossf-scout looks at **repo-level** security posture, not packages |
 
-The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos**, plus an **AI-powered DevSecOps audit/remediation** report — all in one self-contained binary.
+The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos**, plus an **AI-powered DevSecOps audit/remediation workspace** — all in one self-contained binary.
 
 ---
 
 ## Features
 
-- **Scorecard API + CLI fallback** — queries `api.securityscorecards.dev`; falls back to the local `scorecard` binary for repos not yet indexed
-- **Web UI** — filterable results table, resizable columns, sticky header, scan history
-- **Quick presets** — DevSecOps opportunities, AI/LLM, MCP/Agents, Cloud Native, Security tooling
-- **Filters** — language, topic, keyword, min stars, date range, min Maintained score, specific checks
-- **Single-repo mode** — score any repo directly by `owner/repo`
-- **Open issues count** — from GitHub Search API (no extra token scopes)
-- **Notifications** — in-app toast + browser Notification API on scan completion
-- **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
-- **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, generates a formal DevSecOps report ([sample](examples/directus-audit-report-ai.md)); choose Anthropic (Opus 4 / Sonnet 4 / Haiku 4), a local **Ollama** model, or run for free as a static data snapshot
+### Discovery & Scorecard scanning
+
+- **GitHub Search + OpenSSF Scorecard discovery** — ranks popular repositories whose Scorecard results fall below your threshold
+- **Scorecard API + CLI fallback** — queries `api.securityscorecards.dev`; optionally falls back to the local `scorecard` binary for repos not yet indexed
+- **Single-repo mode** — score any public repo directly by `owner/repo` without running a GitHub Search query
+- **GitHub Trending scanner** — scrapes trending repositories by language/time window and scores them against OpenSSF data
+- **Organization scan queue** — lists public repos for a GitHub org, filters forks/archived repos/min stars, and queues selected repos for audit
+- **Open issues count** — enriches scan rows through GitHub Search API without requiring extra token scopes
+- **Flexible filters** — language, topic, keyword, pushed-after date, min stars, max Scorecard score, min Maintained score, and highlighted checks
+- **Quick presets** — DevSecOps opportunities, AI/LLM, MCP/Agents, Cloud Native, and Security tooling
+
+### Web workspace
+
+- **Browser UI** — scan form, scan history, result details, sortable/filterable results, resizable columns, sticky headers, and Scorecard check docs links
+- **Persistent SQLite history** — scans, results, audits, audit contexts, schedules, issue/PR summaries, remediation items, and trend data survive restarts
+- **Portfolio dashboard** — aggregates watched repos with latest score, stars, weak checks, audit counts, provider, language, and score sparklines
+- **Score trend API/UI** — tracks Scorecard score and star history per repo across repeated scans
+- **Remediation board** — extracts findings from audit reports, creates remediation cards, and tracks status, severity, notes, due dates, and resolution
+- **Schedules** — run recurring audits at configurable intervals, enable/disable jobs, trigger now, and constrain runs to UTC time windows
+- **Auto-detected audit schedules** — suggests schedules for repos that repeatedly appear weak or are already being audited
+- **Issues/PR intelligence** — caches security-relevant open/closed issues and PR summaries for a repo; `?refresh=true` forces a live re-fetch
+- **Notifications** — in-app toast and browser Notification API on scan completion; optional outbound webhook after audit completion (`NOTIFY_WEBHOOK_URL`)
+- **Authentik-compatible access control** — optional forward-auth mode with read/write/admin group checks
+
+### DevSecOps audits
+
+- **Static snapshot mode** — runs for free without an AI key and returns the collected evidence as a structured Markdown report
+- **AI report generation** — supports Anthropic, OpenAI, Gemini, and local/remote Ollama models
+- **Split generation** — lets a cheaper/fast model summarise evidence sections before a stronger final model writes the report
+- **Saved evidence context** — stores the compact Markdown/JSON context so reports can be regenerated later with another provider or model
+- **Context caching** — reuses a recent audit context when the repo HEAD SHA has not changed
+- **Skip-secrets option** — skips the slower `gitleaks`/`trufflehog` passes when speed matters
+- **Audit compare** — generates two reports from the same saved context and compares providers/models side-by-side
+- **Supply-chain graph** — visualizes GitHub Actions pinning suggestions and unresolved action references from saved audit context
+- **Export formats** — download Markdown reports, AI context Markdown, full JSON exports, or SARIF suitable for GitHub Code Scanning
+- **Reasoning-model output cleaning** — strips `<think>…</think>` blocks emitted by reasoning models (DeepSeek-R1, QwQ, etc.) before saving the report
 - **Ground-truth claim verification** — after generation, every concrete claim (commit/pin SHA, `file:line`, `#PR`, CVE, `pkg@version`, workflow file, CVSS band/vector) is checked against the collected evidence and the CVSS base score recomputed; unverifiable claims are listed in an appendix and the report is marked **DRAFT**
+- **Cost tracking and guardrails** — records input/output tokens, estimates per-model cost, aggregates 30-day spend, and can reject audits above `MAX_AUDIT_COST_USD`
+- **GitHub webhook audits** — signed GitHub `pull_request`/`push` webhooks can automatically run a free static audit when security-sensitive files change
+
+### Packaging
+
+- **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
+- **Docker image with bundled tools** — ships `scorecard`, `gitleaks`, `actionlint`, `osv-scanner`, `trivy`, `helm`, `zizmor`, `kube-linter`, `trufflehog`, Node/npm, and `pnpm`
+- **Offline-friendly Ollama profile** — Docker Compose can run an Ollama sidecar for local AI generation
 
 ---
 
@@ -109,20 +144,16 @@ Enter `owner/repo` (e.g. `directus/directus`), choose a provider, and click **Ru
 | Provider | Cost | Setup |
 |----------|------|-------|
 | **Static snapshot** | Free | No key needed — returns structured raw data |
-| **Anthropic** | ~$0.03–$0.50 | API key via UI or `ANTHROPIC_API_KEY` env |
-| **Ollama** | Free (local) | Ollama running locally; set URL + model name |
+| **Anthropic** | Paid | API key via UI or `ANTHROPIC_API_KEY`; models: Opus 4, Sonnet 4, Haiku 4 |
+| **OpenAI** | Paid | API key via UI or `OPENAI_API_KEY`; models: GPT-4o, GPT-4o mini, o3-mini |
+| **Gemini** | Paid | API key via UI or `GEMINI_API_KEY`; models: Gemini 2.0 Flash, 1.5 Pro, 1.5 Flash |
+| **Ollama** | Free/local | `OLLAMA_BASE_URL` on the server; model name selected in the UI |
 
-**Anthropic models:**
+Approximate per-run costs are shown in the UI after each audit based on recorded input/output tokens and the configured model price table. Static snapshots and Ollama runs are treated as free.
 
-| Model | Single-stage | Split mode (Haiku analyses sections) |
-|-------|-------------|--------------------------------------|
-| Opus 4 (most capable) | ~$0.20–$0.50 | ~$0.10–$0.25 |
-| Sonnet 4 | ~$0.05–$0.15 | ~$0.03–$0.08 |
-| Haiku 4 (fastest / cheapest) | ~$0.01–$0.05 | — |
+The tool sends **Markdown context** to the AI instead of raw JSON — the Zizmor SARIF output (which can be 40 000+ lines) is replaced with a compact findings table, reducing input tokens by ~90% compared to the JSON approach. AI paths use this format for single-stage generation, split section analysis, split synthesis, and later re-generation from a saved context.
 
-The tool sends **Markdown context** to the AI instead of raw JSON — the Zizmor SARIF output (which can be 40 000+ lines) is replaced with a compact findings table, reducing input tokens by ~90% compared to the JSON approach. All AI paths (single-stage, split section analysis, split synthesis) use this format.
-
-Enable **Split generation** in the UI to have Haiku summarise each evidence section first; the selected model then synthesises the final report. Recommended for large monorepos where per-section analysis improves finding quality.
+Enable **Split generation** in the UI to have an analysis model summarise each evidence section first; the selected final model then synthesises the report. Recommended for large monorepos where per-section analysis improves finding quality. Split mode is currently implemented for Anthropic and Ollama.
 
 **Ollama setup:**
 
@@ -131,25 +162,33 @@ ollama serve
 ollama pull llama3.2   # or qwen2.5, deepseek-r1:8b, etc.
 ```
 
-In the UI set the Ollama base URL. When running via Docker, leave the URL field empty — the server default (`host.docker.internal:11434`) is pre-configured in `docker-compose.yml`. For native use set it to `http://localhost:11434`. If the model's context window is too small, the tool automatically retries with a compacted context.
+For Ollama, set `OLLAMA_BASE_URL` on the server. When running via Docker, the default (`http://host.docker.internal:11434`) is pre-configured in `docker-compose.yml`; for native use set it to `http://localhost:11434`. If the model's context window is too small, the tool automatically retries with a compacted context.
 
-The Markdown report appears in the browser when complete (~1–3 min for AI, ~30s for snapshot) and can be downloaded as a `.md` file. If AI generation fails, the static snapshot is saved as a fallback — a **Run with AI** button on the detail page lets you re-run the same repo with a different provider.
+For an offline/local profile:
+
+```bash
+OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile offline up --build
+```
+
+The Markdown report appears in the browser when complete (~1–3 min for AI, ~30s for snapshot) and can be downloaded as a `.md` file. If AI generation fails, the static snapshot is saved as a fallback — a **Run with AI** button on the detail page lets you re-run the same saved context with a different provider.
 
 A **Download AI context** button is available for every audit (including static snapshots) once the repo has been cloned and analysed. It downloads the compact Markdown that would be sent to the AI — useful for pasting into any LLM manually or for inspecting exactly what evidence was collected.
+
+Audit detail pages also expose a supply-chain graph for GitHub Actions pinning, JSON export, SARIF export, and a remediation extraction action that turns report findings into trackable remediation items.
 
 **What it collects**
 
 | Category | Checks |
 |----------|--------|
 | CI/CD | Unpinned GitHub Actions, `zizmor` workflow analysis, `actionlint` workflow linting, workflow file list |
-| Code | `eval()`, `Math.random()`, raw SQL, `X-Powered-By`, hardcoded secrets, weak crypto, `process.exit`/`os.Exit`, SQL injection (`knex.raw`/`whereRaw`), SSRF (`fetch`/`axios`/`got`), path traversal, XXE, deserialization, rate limiting, CORS config |
-| Key files | Entry point (first 150 lines), auth middleware, permission system, security config (`helmet`/`cors`/`session`) |
+| Code | `eval()`, `Math.random()`, raw SQL, `X-Powered-By`, hardcoded secrets, weak crypto, `process.exit`/`os.Exit`, SQL injection (`knex.raw`/`whereRaw`), SSRF (`fetch`/`axios`/`got`), path traversal, XXE, deserialization, rate limiting, CORS config, Semgrep auto findings |
+| Key files | Entry point (first 150 lines), auth middleware, permission system, security config (`helmet`/`cors`/`session`), startup validation checks, `CODEOWNERS` file |
 | Infrastructure | `helm lint`, Helm secret templates + values, `Dockerfile` |
-| Dependencies | `pnpm audit` / `npm audit` JSON, workspace `overrides` |
+| Dependencies | `pnpm audit` / `npm audit` / `yarn audit` JSON, workspace `overrides` |
 | Git history | Last 30 commits, files changed in the last 10 commits |
-| GitHub API | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts, branch protection rules (requires token) |
+| GitHub API | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts, branch protection rules, Dependabot alerts (requires `security_events` scope), release history |
 | Secrets | `gitleaks`, `trufflehog`, private key headers, `.env` file contents, AWS/JWT/GH token regex patterns |
-| IaC | Terraform file list, `checkov`, `trivy config`, Kubernetes manifest list, `kube-linter` |
+| IaC | Terraform file list, `checkov`, `trivy config`, `osv-scanner`, Kubernetes manifest list, `kube-linter` |
 | Policy as Code | OPA `.rego` files, Kyverno `ClusterPolicy`/`Policy` YAMLs, Falco rule detection |
 | SLSA / Supply Chain | Provenance / SBOM files, cosign keys, SLSA GitHub Generator workflow usage, signed commit check |
 
@@ -170,7 +209,7 @@ The generated Markdown document follows a fixed structure:
 9. Threat Model (STRIDE) — table covering Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege across auth flows, CI/CD, supply chain, secrets, and API inputs
 10. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm
 
-**Cost:** Free without an API key (static snapshot). With a key: Sonnet 4 ~$0.05–$0.15 per run (single-stage). Token counts and estimated cost are shown in the audit history table.
+**Cost:** Free without an API key (static snapshot). With a paid provider, token counts and estimated cost are shown in the audit history table and the cost dashboard. Set `MAX_AUDIT_COST_USD` to reject runs whose pre-flight estimate is above your budget.
 
 ---
 
@@ -181,7 +220,8 @@ The generated Markdown document follows a fixed structure:
 | `-lang` | _(any)_ | Filter by language (`go`, `python`, `java`, …) |
 | `-topic` | _(any)_ | Filter by GitHub topic (`llm`, `kubernetes`, …) |
 | `-keyword` | _(any)_ | Filter by keyword in repo name or description |
-| `-single-repo` | _(none)_ | Score a specific repo directly (`owner/repo`) |
+| `-repo` | _(none)_ | Scan a single specific repo (`owner/repo`), skips GitHub search |
+| `-pushed-after` | _(none)_ | Only include repos pushed after this date (`YYYY-MM-DD`) |
 | `-min-stars` | `500` | Minimum GitHub star count |
 | `-max-score` | `5.0` | Maximum OpenSSF score to include (0–10) |
 | `-min-maintained` | `0` | Minimum Maintained check score (0 = disabled) |
@@ -203,8 +243,15 @@ The generated Markdown document follows a fixed structure:
 |----------|-------------|
 | `GITHUB_TOKEN` | GitHub PAT. Without it, GitHub limits unauthenticated requests to 60/hour. |
 | `ANTHROPIC_API_KEY` | Anthropic API key for the Audit tab. Can also be provided per-audit in the web UI (overrides the server-level key). |
+| `OPENAI_API_KEY` | OpenAI API key for the Audit tab. Can also be provided per-audit in the web UI. |
+| `GEMINI_API_KEY` | Google Gemini API key for the Audit tab. Can also be provided per-audit in the web UI. |
+| `OLLAMA_BASE_URL` | Base URL for a local/remote Ollama instance (e.g. `http://localhost:11434`). Defaults to `http://host.docker.internal:11434` in Docker. |
+| `MAX_AUDIT_COST_USD` | Optional budget cap. Audits whose pre-flight cost estimate exceeds this value are rejected before any tokens are sent. |
+| `GITHUB_WEBHOOK_SECRET` | Optional. If set, incoming GitHub webhook payloads are validated against the `X-Hub-Signature-256` header — unsigned requests are rejected. |
+| `NOTIFY_WEBHOOK_URL` | Optional. A URL to POST a JSON notification to after each audit completes (repo, status, audit ID). |
+| `AUTH_REQUIRED` | Set to `true` to enable Authentik forward-auth mode. Requests missing `X-Authentik-Username` return 401; write/admin endpoints additionally check `ossf-write`/`ossf-admin` groups. |
 
-The token can also be provided per-scan in the web UI (overrides the server-level token).
+The GitHub token and AI API keys can also be provided per-scan/per-audit in the web UI (override the server-level values).
 
 ### Token scopes
 
@@ -212,6 +259,7 @@ The token can also be provided per-scan in the web UI (overrides the server-leve
 |------|----------------|
 | Default (REST API via `api.securityscorecards.dev`) | None — any valid token is enough to raise the rate limit |
 | `-cli-fallback` (scorecard CLI) | Classic PAT with **`public_repo`** scope — needed for the `Branch-Protection` check (GraphQL query) |
+| Dependabot alerts collection (audit) | **`security_events`** scope — needed to read Dependabot vulnerability alerts via the GitHub API |
 
 To create a classic PAT: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → tick **`public_repo`** under _repo_.
 

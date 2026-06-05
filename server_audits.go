@@ -195,7 +195,13 @@ func extractAndCreateFindings(db *sql.DB, auditID, repo, reportMD string) int {
 		// Find severity column index, then title is at index+1.
 		sev, title := "", ""
 		for i, c := range cells {
-			cl := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(c, "**", ""), "`", ""))
+			// Normalise: strip markdown, take first word only (handles "Medium (5.3)" → "medium")
+			cleaned := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(c, "**", ""), "`", ""))
+			parts := strings.Fields(cleaned)
+			if len(parts) == 0 {
+				continue
+			}
+			cl := parts[0]
 			if !knownSev[cl] {
 				continue
 			}

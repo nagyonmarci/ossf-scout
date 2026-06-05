@@ -1,13 +1,29 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api, Audit, AuditStatus } from '../api';
+import { api, Audit, AuditStatus, CostStats } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
-const ANTHROPIC_MODELS = [
-  { id: 'claude-opus-4-8',           label: 'Opus 4',   hint: '~$1–$4/run',        inputRate: 15,   outputRate: 75  },
-  { id: 'claude-sonnet-4-6',         label: 'Sonnet 4', hint: '~$0.20–$0.80/run',  inputRate: 3,    outputRate: 15  },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4',  hint: '~$0.05–$0.20/run',  inputRate: 0.80, outputRate: 4   },
-];
+type Provider = '' | 'anthropic' | 'openai' | 'gemini' | 'ollama';
+
+const PROVIDER_MODELS: Record<string, { id: string; label: string; hint: string; inputRate: number; outputRate: number }[]> = {
+  anthropic: [
+    { id: 'claude-opus-4-8',           label: 'Opus 4',    hint: '~$1–$4/run',       inputRate: 15,    outputRate: 75   },
+    { id: 'claude-sonnet-4-6',         label: 'Sonnet 4',  hint: '~$0.20–$0.80/run', inputRate: 3,     outputRate: 15   },
+    { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4',   hint: '~$0.05–$0.20/run', inputRate: 0.80,  outputRate: 4    },
+  ],
+  openai: [
+    { id: 'gpt-4o',      label: 'GPT-4o',       hint: '~$0.10–$0.50/run',  inputRate: 2.5,  outputRate: 10   },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini',  hint: '~$0.005–$0.03/run', inputRate: 0.15, outputRate: 0.60 },
+    { id: 'o3-mini',     label: 'o3-mini',       hint: '~$0.05–$0.20/run',  inputRate: 1.10, outputRate: 4.40 },
+  ],
+  gemini: [
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', hint: '~$0.005–$0.02/run', inputRate: 0.10, outputRate: 0.40 },
+    { id: 'gemini-1.5-pro',   label: 'Gemini 1.5 Pro',   hint: '~$0.05–$0.25/run',  inputRate: 1.25, outputRate: 5.0  },
+    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash',  hint: '~$0.003–$0.015/run',inputRate: 0.075,outputRate: 0.30 },
+  ],
+};
+
+const ALL_MODELS = Object.values(PROVIDER_MODELS).flat();
 
 function formatDate(s: string) {
   return new Date(s).toLocaleString();
@@ -15,8 +31,9 @@ function formatDate(s: string) {
 
 function costEstimate(provider: string, model: string, inputTokens: number | null, outputTokens: number | null): string {
   if (provider === 'ollama') return 'free (local)';
+  if (!provider) return 'free';
   if (!inputTokens && !outputTokens) return '—';
-  const m = ANTHROPIC_MODELS.find((x) => x.id === model);
+  const m = ALL_MODELS.find((x) => x.id === model);
   const inputRate  = m?.inputRate  ?? 15;
   const outputRate = m?.outputRate ?? 75;
   const cost = ((inputTokens ?? 0) / 1_000_000) * inputRate
@@ -27,8 +44,16 @@ function costEstimate(provider: string, model: string, inputTokens: number | nul
 function modeLabel(provider: string, model: string): string {
   if (provider === 'ollama') return model ? `Ollama · ${model}` : 'Ollama';
   if (provider === 'anthropic') {
-    const m = ANTHROPIC_MODELS.find((x) => x.id === model);
+    const m = PROVIDER_MODELS.anthropic.find((x) => x.id === model);
     return m?.label ?? model ?? 'Anthropic';
+  }
+  if (provider === 'openai') {
+    const m = PROVIDER_MODELS.openai.find((x) => x.id === model);
+    return m?.label ?? model ?? 'OpenAI';
+  }
+  if (provider === 'gemini') {
+    const m = PROVIDER_MODELS.gemini.find((x) => x.id === model);
+    return m?.label ?? model ?? 'Gemini';
   }
   return 'Snapshot';
 }
@@ -42,26 +67,41 @@ export default function AuditPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [audits, setAudits] = useState<Audit[]>([]);
+  const [costStats, setCostStats] = useState<CostStats | null>(null);
   const [repo, setRepo] = useState(() => searchParams.get('repo') ?? '');
   const [token, setToken] = useState(() => LS.get('audit.ghToken', ''));
-  const [provider, setProvider] = useState(() => LS.get('audit.provider', ''));
+  const [provider, setProvider] = useState<Provider>(() => LS.get('audit.provider', '') as Provider);
+
+  // Per-provider state
   const [anthropicKey, setAnthropicKey] = useState(() => LS.get('audit.anthropicKey', ''));
-  const [anthropicModel, setAnthropicModel] = useState(() => LS.get('audit.model', ANTHROPIC_MODELS[0].id));
-  const [ollamaURL, setOllamaURL] = useState(() => LS.get('audit.ollamaURL', ''));
+  const [openaiKey, setOpenaiKey]       = useState(() => LS.get('audit.openaiKey', ''));
+  const [geminiKey, setGeminiKey]       = useState(() => LS.get('audit.geminiKey', ''));
+
+  const [anthropicModel, setAnthropicModel] = useState(() => LS.get('audit.model', PROVIDER_MODELS.anthropic[0].id));
+  const [openaiModel, setOpenaiModel]       = useState(() => LS.get('audit.openaiModel', PROVIDER_MODELS.openai[0].id));
+  const [geminiModel, setGeminiModel]       = useState(() => LS.get('audit.geminiModel', PROVIDER_MODELS.gemini[0].id));
+
+  const [ollamaURL, setOllamaURL]   = useState(() => LS.get('audit.ollamaURL', ''));
   const [ollamaModel, setOllamaModel] = useState(() => LS.get('audit.ollamaModel', ''));
-  const [splitGeneration, setSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'false') === 'true');
+  const [splitGeneration, setSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'true') === 'true');
   const [analysisModel, setAnalysisModel] = useState(() => LS.get('audit.analysisModel', ''));
+  const [skipSecrets, setSkipSecrets] = useState(() => LS.get('audit.skipSecrets', 'false') === 'true');
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    try { setAudits(await api.listAudits()); }
-    catch (e) { setError(String(e)); }
+    try {
+      const [a, c] = await Promise.all([api.listAudits(), api.getCostStats(30)]);
+      setAudits(a);
+      setCostStats(c);
+    } catch (e) {
+      setError(String(e));
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  // Clear stale localhost default — server default (OLLAMA_BASE_URL) is more reliable
   useEffect(() => {
     if (localStorage.getItem('audit.ollamaURL') === 'http://localhost:11434') {
       localStorage.removeItem('audit.ollamaURL');
@@ -82,15 +122,23 @@ export default function AuditPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const p = provider;
       await api.createAudit({
         repo: repo.trim(),
         github_token: token || undefined,
-        provider: provider || undefined,
-        anthropic_key: provider === 'anthropic' ? (anthropicKey || undefined) : undefined,
-        model: provider === 'anthropic' ? anthropicModel : provider === 'ollama' ? ollamaModel : undefined,
-        split_generation: (provider === 'anthropic' || provider === 'ollama') ? splitGeneration || undefined : undefined,
+        provider: p || undefined,
+        anthropic_key: p === 'anthropic' ? (anthropicKey || undefined) : undefined,
+        openai_key:    p === 'openai'    ? (openaiKey    || undefined) : undefined,
+        gemini_key:    p === 'gemini'    ? (geminiKey    || undefined) : undefined,
+        model: p === 'anthropic' ? anthropicModel
+             : p === 'openai'    ? openaiModel
+             : p === 'gemini'    ? geminiModel
+             : p === 'ollama'    ? ollamaModel
+             : undefined,
+        split_generation: (p === 'anthropic' || p === 'ollama') ? splitGeneration || undefined : undefined,
         analysis_model: splitGeneration ? (analysisModel || undefined) : undefined,
-        ollama_url: provider === 'ollama' ? (ollamaURL || undefined) : undefined,
+        skip_secrets: skipSecrets || undefined,
+        ollama_url: p === 'ollama' ? (ollamaURL || undefined) : undefined,
       });
       setRepo('');
       load();
@@ -107,12 +155,32 @@ export default function AuditPage() {
     setAudits((prev) => prev.filter((a) => a.id !== id));
   }
 
-  const selectedAnthropicModel = ANTHROPIC_MODELS.find((m) => m.id === anthropicModel);
+  const providerLabels: Record<Provider, string> = {
+    '': 'Static snapshot',
+    anthropic: 'Anthropic',
+    openai: 'OpenAI',
+    gemini: 'Gemini',
+    ollama: 'Ollama',
+  };
+
+  const currentModels = PROVIDER_MODELS[provider] ?? [];
+  const currentModel = provider === 'anthropic' ? anthropicModel
+    : provider === 'openai' ? openaiModel
+    : provider === 'gemini' ? geminiModel
+    : '';
+  const selectedModel = currentModels.find((m) => m.id === currentModel);
 
   return (
     <div className="container">
       <div className="card">
-        <h2>New Audit</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h2 style={{ margin: 0 }}>New Audit</h2>
+          {costStats && costStats.total_usd > 0 && (
+            <span style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--surface)', padding: '3px 10px', borderRadius: 12, border: '1px solid var(--border)' }}>
+              30-day cost: <strong>${costStats.total_usd.toFixed(3)}</strong> · {costStats.audit_count} audits
+            </span>
+          )}
+        </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <label>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>Target repository (owner/name)</span>
@@ -127,11 +195,11 @@ export default function AuditPage() {
             />
           </label>
 
-          {/* Provider */}
+          {/* Provider selector */}
           <div>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>AI provider</span>
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              {(['', 'anthropic', 'ollama'] as const).map((p) => (
+            <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+              {(['', 'anthropic', 'openai', 'gemini', 'ollama'] as Provider[]).map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -139,7 +207,7 @@ export default function AuditPage() {
                   style={{ padding: '5px 14px', fontSize: 13, background: provider === p ? undefined : 'transparent', border: '1px solid var(--border)', color: provider === p ? undefined : 'var(--muted)' }}
                   onClick={() => { setProvider(p); LS.set('audit.provider', p); }}
                 >
-                  {p === '' ? 'Static snapshot' : p === 'anthropic' ? 'Anthropic' : 'Ollama'}
+                  {providerLabels[p]}
                 </button>
               ))}
             </div>
@@ -153,64 +221,83 @@ export default function AuditPage() {
                   Anthropic API key{' '}
                   <span style={{ fontWeight: 400 }}>(or set <code>ANTHROPIC_API_KEY</code> on the server)</span>
                 </span>
-                <input
-                  type="password"
-                  className="input"
-                  placeholder="sk-ant-…"
-                  value={anthropicKey}
+                <input type="password" className="input" placeholder="sk-ant-…" value={anthropicKey}
                   onChange={(e) => { setAnthropicKey(e.target.value); LS.set('audit.anthropicKey', e.target.value); }}
-                  style={{ marginTop: 4 }}
-                />
+                  style={{ marginTop: 4 }} />
               </label>
               <label>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  Model{' '}
-                  {selectedAnthropicModel && (
-                    <span style={{ fontWeight: 400 }}>
-                      {splitGeneration ? `Haiku analyzes sections → ${selectedAnthropicModel.label} synthesizes` : selectedAnthropicModel.hint}
-                    </span>
-                  )}
+                  Model{selectedModel && <span style={{ fontWeight: 400 }}> — {splitGeneration ? `Haiku analyzes → ${selectedModel.label} synthesizes` : selectedModel.hint}</span>}
                 </span>
-                <select
-                  className="input"
-                  value={anthropicModel}
+                <select className="input" value={anthropicModel}
                   onChange={(e) => { setAnthropicModel(e.target.value); LS.set('audit.model', e.target.value); }}
-                  style={{ marginTop: 4 }}
-                >
-                  {ANTHROPIC_MODELS.map((m) => (
-                    <option key={m.id} value={m.id}>{m.label} — {m.hint}</option>
-                  ))}
+                  style={{ marginTop: 4 }}>
+                  {PROVIDER_MODELS.anthropic.map((m) => <option key={m.id} value={m.id}>{m.label} — {m.hint}</option>)}
                 </select>
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={splitGeneration}
-                  onChange={(e) => {
-                    setSplitGeneration(e.target.checked);
-                    LS.set('audit.splitGeneration', String(e.target.checked));
-                  }}
-                />
-                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  Split generation — Haiku summarises sections, selected model writes final report (~60% cost reduction for large repos)
-                </span>
+                <input type="checkbox" checked={splitGeneration}
+                  onChange={(e) => { setSplitGeneration(e.target.checked); LS.set('audit.splitGeneration', String(e.target.checked)); }} />
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Split generation — Haiku summarises sections, selected model writes final report (~60% cost reduction)</span>
               </label>
               {splitGeneration && (
                 <label>
-                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                    Analysis model{' '}
-                    <span style={{ fontWeight: 400 }}>(optional — empty uses Haiku)</span>
-                  </span>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="claude-haiku-4-5-20251001"
-                    value={analysisModel}
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>Analysis model <span style={{ fontWeight: 400 }}>(empty = Haiku)</span></span>
+                  <input type="text" className="input" placeholder="claude-haiku-4-5-20251001" value={analysisModel}
                     onChange={(e) => { setAnalysisModel(e.target.value); LS.set('audit.analysisModel', e.target.value); }}
-                    style={{ marginTop: 4 }}
-                  />
+                    style={{ marginTop: 4 }} />
                 </label>
               )}
+            </>
+          )}
+
+          {/* OpenAI fields */}
+          {provider === 'openai' && (
+            <>
+              <label>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  OpenAI API key{' '}
+                  <span style={{ fontWeight: 400 }}>(or set <code>OPENAI_API_KEY</code> on the server)</span>
+                </span>
+                <input type="password" className="input" placeholder="sk-…" value={openaiKey}
+                  onChange={(e) => { setOpenaiKey(e.target.value); LS.set('audit.openaiKey', e.target.value); }}
+                  style={{ marginTop: 4 }} />
+              </label>
+              <label>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Model{selectedModel && <span style={{ fontWeight: 400 }}> — {selectedModel.hint}</span>}
+                </span>
+                <select className="input" value={openaiModel}
+                  onChange={(e) => { setOpenaiModel(e.target.value); LS.set('audit.openaiModel', e.target.value); }}
+                  style={{ marginTop: 4 }}>
+                  {PROVIDER_MODELS.openai.map((m) => <option key={m.id} value={m.id}>{m.label} — {m.hint}</option>)}
+                </select>
+              </label>
+            </>
+          )}
+
+          {/* Gemini fields */}
+          {provider === 'gemini' && (
+            <>
+              <label>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Gemini API key{' '}
+                  <span style={{ fontWeight: 400 }}>(or set <code>GEMINI_API_KEY</code> on the server)</span>
+                </span>
+                <input type="password" className="input" placeholder="AIza…" value={geminiKey}
+                  onChange={(e) => { setGeminiKey(e.target.value); LS.set('audit.geminiKey', e.target.value); }}
+                  style={{ marginTop: 4 }} />
+              </label>
+              <label>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                  Model{selectedModel && <span style={{ fontWeight: 400 }}> — {selectedModel.hint}</span>}
+                </span>
+                <select className="input" value={geminiModel}
+                  onChange={(e) => { setGeminiModel(e.target.value); LS.set('audit.geminiModel', e.target.value); }}
+                  style={{ marginTop: 4 }}>
+                  {PROVIDER_MODELS.gemini.map((m) => <option key={m.id} value={m.id}>{m.label} — {m.hint}</option>)}
+                </select>
+              </label>
             </>
           )}
 
@@ -220,60 +307,29 @@ export default function AuditPage() {
               <label>
                 <span style={{ fontSize: 13, color: 'var(--muted)' }}>
                   Ollama base URL{' '}
-                  <span style={{ fontWeight: 400 }}>
-                    (leave empty to use server default — Docker pre-configured to <code>host.docker.internal:11434</code>)
-                  </span>
+                  <span style={{ fontWeight: 400 }}>(leave empty — Docker pre-configured to <code>host.docker.internal:11434</code>)</span>
                 </span>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="http://host.docker.internal:11434"
-                  value={ollamaURL}
+                <input type="text" className="input" placeholder="http://host.docker.internal:11434" value={ollamaURL}
                   onChange={(e) => { setOllamaURL(e.target.value); LS.set('audit.ollamaURL', e.target.value); }}
-                  style={{ marginTop: 4 }}
-                />
+                  style={{ marginTop: 4 }} />
               </label>
               <label>
-                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  Final report model{' '}
-                  <span style={{ fontWeight: 400 }}>(<code>ollama list</code> to see available models)</span>
-                </span>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="llama3.2, qwen2.5, deepseek-r1:8b, …"
-                  value={ollamaModel}
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Final report model (<code>ollama list</code>)</span>
+                <input type="text" className="input" placeholder="llama3.2, qwen2.5, deepseek-r1:8b, …" value={ollamaModel}
                   onChange={(e) => { setOllamaModel(e.target.value); LS.set('audit.ollamaModel', e.target.value); }}
-                  style={{ marginTop: 4 }}
-                />
+                  style={{ marginTop: 4 }} />
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={splitGeneration}
-                  onChange={(e) => {
-                    setSplitGeneration(e.target.checked);
-                    LS.set('audit.splitGeneration', String(e.target.checked));
-                  }}
-                />
-                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                  Split generation into section summaries before the final report
-                </span>
+                <input type="checkbox" checked={splitGeneration}
+                  onChange={(e) => { setSplitGeneration(e.target.checked); LS.set('audit.splitGeneration', String(e.target.checked)); }} />
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Split generation into section summaries before the final report</span>
               </label>
               {splitGeneration && (
                 <label>
-                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                    Analysis model{' '}
-                    <span style={{ fontWeight: 400 }}>(optional — empty uses the final report model)</span>
-                  </span>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="llama3.2, qwen2.5:7b, …"
-                    value={analysisModel}
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>Analysis model <span style={{ fontWeight: 400 }}>(empty = final model)</span></span>
+                  <input type="text" className="input" placeholder="llama3.2, qwen2.5:7b, …" value={analysisModel}
                     onChange={(e) => { setAnalysisModel(e.target.value); LS.set('audit.analysisModel', e.target.value); }}
-                    style={{ marginTop: 4 }}
-                  />
+                    style={{ marginTop: 4 }} />
                 </label>
               )}
             </>
@@ -284,14 +340,15 @@ export default function AuditPage() {
               GitHub token{' '}
               <span style={{ fontWeight: 400 }}>(optional — needed for secret-scanning alerts and private repos)</span>
             </span>
-            <input
-              type="password"
-              className="input"
-              placeholder="ghp_…"
-              value={token}
+            <input type="password" className="input" placeholder="ghp_…" value={token}
               onChange={(e) => { setToken(e.target.value); LS.set('audit.ghToken', e.target.value); }}
-              style={{ marginTop: 4 }}
-            />
+              style={{ marginTop: 4 }} />
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input type="checkbox" checked={skipSecrets}
+              onChange={(e) => { setSkipSecrets(e.target.checked); LS.set('audit.skipSecrets', String(e.target.checked)); }} />
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Skip secret scanning (faster — skips gitleaks &amp; trufflehog)</span>
           </label>
 
           {error && <p className="error-msg">{error}</p>}
@@ -300,11 +357,11 @@ export default function AuditPage() {
           </button>
         </form>
         <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
-          {provider === 'ollama'
-            ? 'Clones the repo, runs static analysis, generates a report with your local Ollama model — free, no API key needed.'
-            : provider === 'anthropic'
-            ? 'Clones the repo, runs static analysis, calls the Anthropic API. Typical cost: $0.02–$1.50/run.'
-            : 'Clones the repo and runs static analysis. Returns a structured raw-data snapshot — free, no AI.'}
+          {provider === 'ollama'    ? 'Clones the repo, runs static analysis, generates a report with your local Ollama model — free, no API key needed.'
+          : provider === 'anthropic' ? 'Clones the repo, runs static analysis, calls the Anthropic API. Typical cost: $0.02–$1.50/run.'
+          : provider === 'openai'   ? 'Clones the repo, runs static analysis, calls the OpenAI API.'
+          : provider === 'gemini'   ? 'Clones the repo, runs static analysis, calls the Google Gemini API.'
+          : 'Clones the repo and runs static analysis. Returns a structured raw-data snapshot — free, no AI.'}
         </p>
       </div>
 
@@ -336,9 +393,7 @@ export default function AuditPage() {
                     <td style={{ color: 'var(--muted)', fontSize: 12 }}>{modeLabel(a.provider, a.model)}</td>
                     <td>{costEstimate(a.provider, a.model, a.input_tokens, a.output_tokens)}</td>
                     <td>
-                      <button className="btn btn-danger" onClick={(e) => deleteAudit(e, a.id)}>
-                        Delete
-                      </button>
+                      <button className="btn btn-danger" onClick={(e) => deleteAudit(e, a.id)}>Delete</button>
                     </td>
                   </tr>
                 ))}

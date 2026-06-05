@@ -2019,3 +2019,29 @@ jobs:
 | **Information disclosure** | SSRF to internal/metadata endpoints; software-version banner | F-001, F-004 | `IMPORT_IP_DENY_LIST` (weak default); `helmet` CSP/HSTS | Harden denylist + `assertPublic`; drop `X-Powered-By` |
 | **Denial of service** | Unauthenticated request floods | — | Global rate limiter (`rate-limiter-global.ts`, Redis/Memory, `Retry-After`) | Confirm limits tuned per route in production |
 | **Elevation of privilege** | Script execution via Flows `exec` operation | F-005 (`operations/exec/index.ts:49`) | isolated-vm sandbox + timeout; admin-only flow authoring | Keep flow-create restricted to trusted admin roles |
+
+### Security posture (derived)
+
+**Overall: ≈ 73 / 100** — derived from this evidence only; partial (see *Not assessed*).
+
+| Domain | Score | Rationale |
+|--------|------:|-----------|
+| CI/CD security | 70 | CodeQL present; 50+ unpinned actions (F-002) |
+| Dependency management | 70 | CVE-update commits in history; `npm audit` couldn't run (`ENOLOCK`) |
+| Secrets management | 95 | No hardcoded secrets; only a JWT test fixture; scanners unavailable |
+| Supply-chain security | 60 | Unpinned actions + no SBOM/provenance; offset by `cosign` + signed HEAD |
+| Repository governance | 70 | Signed commits; branch protection/security policy not captured |
+
+### Not assessed (scope boundary)
+
+Static + repository-metadata only. **Out of scope / not reachable:** runtime / DAST, cloud
+configuration, Kubernetes manifests (none present), production infrastructure, third-party SaaS
+integrations, authenticated GitHub metadata (rate-limited), dependency CVEs (`npm audit` `ENOLOCK`).
+
+### Remediation roadmap (phased)
+
+| Phase | Time budget | Actions |
+|-------|-------------|---------|
+| **Phase 1 — harden** | ≤ 1 hour | Pin actions to SHAs (F-002); digest-pin Docker (F-003); confirm Dependabot |
+| **Phase 2 — close gaps** | ≤ 1 day | SSRF allowlist (F-001); Scorecard + zizmor in CI; re-run with token + `pnpm audit` |
+| **Phase 3 — supply-chain maturity** | ≤ 1 week | SBOM (CycloneDX); SLSA provenance; extend Sigstore/cosign signing |

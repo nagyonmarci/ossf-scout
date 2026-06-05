@@ -19,6 +19,21 @@
 | Mode | Static analysis + GitHub metadata (API rate-limited at scan time) |
 | Status | **DRAFT** — GitHub issues/PRs, branch protection and dependency audit could not be collected (see §3) |
 
+## Security posture (derived)
+
+**Overall: ≈ 73 / 100** — *derived from the captured evidence only; partial (see "Not assessed").*
+
+| Domain | Score | Rationale (evidence) |
+|--------|------:|----------------------|
+| CI/CD security | 70 | CodeQL workflow present, but 50+ unpinned actions incl. third-party (F-002); `actionlint`/`zizmor` not run |
+| Dependency management | 70 | Git history shows CVE-update commits + changesets, but `npm audit` couldn't run (`ENOLOCK`) and Dependabot status not captured |
+| Secrets management | 95 | No hardcoded secrets; only a JWT **test fixture**; scanners (`gitleaks`/`trufflehog`) unavailable so not fully verified |
+| Supply-chain security | 60 | Unpinned actions + no SBOM/provenance (F-002), offset by `cosign` in release and GPG-signed HEAD |
+| Repository governance | 70 | Signed commits present; branch protection + security policy **not captured** (rate-limited) |
+
+> Scores are a calibrated reviewer estimate, not a Scorecard run. Re-run with a `GITHUB_TOKEN` +
+> `pnpm audit` (R-4) to firm up Dependency, Supply-chain and Governance.
+
 ## 2. Scope
 
 Static review of the checked-out tree at commit `d358376`: GitHub Actions workflows, application
@@ -46,7 +61,21 @@ were **out of scope / unavailable** this run.
 
 > P-labels are fix-urgency, not severity. No Critical/High findings were identified in the captured evidence.
 
+**Risk triage** (severity vs. how easily it's exploited vs. how much work to fix):
+
+| Finding | Severity | Exploitability | Remediation effort |
+|---------|----------|----------------|--------------------|
+| F-001 SSRF | Medium | Low (needs auth + permission) | Medium (~1 day) |
+| F-002 Unpinned actions | Medium | Low (needs upstream compromise) | Low (~3 h) |
+| F-003 Docker base not pinned | Low | Low | Low (~1 h) |
+| F-004 `X-Powered-By` | Informational | n/a | Low (minutes) |
+| F-005 `exec` sandbox | Informational | Low (admin-gated, by design) | n/a |
+
 ## 5. Findings
+
+> Each finding below follows **Observation → Risk → Recommendation**: *Description + Evidence* = the
+> observation, *Impact chain* = the risk, *Fix* = the recommendation. A copy-paste **Evidence** block
+> (File / Line / Issue) is included so a maintainer can jump straight to the line.
 
 ### F-001 · SSRF via server-side fetch of user-supplied URLs
 **OWASP:** A10:2021 · **CWE:** CWE-918 · **Severity:** CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N → **4.3 Medium**
@@ -65,6 +94,11 @@ range** (e.g. cloud-metadata `169.254.169.254`, `localhost`), and the other outb
 authenticated user can still point the server at internal addresses. *(The `IMPORT_IP_DENY_LIST`
 default is a documented Directus env control — not captured in the static evidence; verify the
 configured value in your deployment.)*
+
+**Evidence.**
+- File `api/src/services/files.ts` · Line `285` · Issue: `axios.get(encodeURL(importURL))` — server fetches a user-supplied URL.
+- File `api/src/services/mcp-oauth/cimd.ts` · Line `277` · Issue: `axios.get(clientId)` — fetch of client-supplied metadata URL.
+- File `api/src/permissions/utils/fetch-dynamic-variable-data.ts` · Line `118` · Issue: `fetch(fields)` with caller-influenced target.
 
 **Impact chain.** Authenticated user (with file-create or OAuth-registration permission) → submits an
 internal URL → Directus fetches it server-side → response/metadata may be reflected → limited
@@ -104,6 +138,11 @@ concern are **third-party** actions:
 
 First-party actions (`actions/checkout@v6`, `github/codeql-action/*@v4`) are also tag-pinned.
 
+**Evidence.**
+- File `.github/workflows/changeset-check.yml` · Line `32` · Issue: `uses: tj-actions/changed-files@v47` — third-party action pinned to a mutable tag, not a commit SHA.
+- File `.github/workflows/check.yml` · Lines `32, 56, 75` · Issue: same third-party action on a mutable tag.
+- File `.github/workflows/claude.yml` · Line `35` · Issue: `uses: anthropics/claude-code-action@v1` — mutable tag.
+
 **Root cause.** Tags are mutable; if a third-party action's tag is repointed (maintainer compromise),
 the new code runs in CI with that workflow's token. `changeset-check.yml` grants `pull-requests: write`
 and runs `tj-actions/changed-files` on the `pull_request` event.
@@ -137,6 +176,8 @@ rg -n "uses: .*@v[0-9]" .github/workflows   # must return nothing once fully pin
 **Positive notes (evidence):** the runtime stage drops to `USER node` (non-root) and uses a multi-stage
 build — both good practices.
 
+**Evidence.** File `Dockerfile` · Issue: `FROM node:${NODE_VERSION}-alpine` (floating tag, no `@sha256` digest) for both stages; `npm install --global corepack@latest pm2@5`.
+
 **Fix.**
 ```dockerfile
 FROM node:22-alpine@sha256:<digest> AS builder   # pin by manifest digest
@@ -156,6 +197,8 @@ rg -n "^FROM .*:(?!.*@sha256)" Dockerfile   # any match = unpinned base image
 then sets `res.setHeader('X-Powered-By', 'Directus')`, re-advertising the software. This is fingerprinting
 information only — no direct security impact, hence Informational.
 
+**Evidence.** File `api/src/app.ts` · Lines `152` (`app.disable('x-powered-by')`) and `237` (`res.setHeader('X-Powered-By', 'Directus')`) · Issue: the header is disabled, then explicitly re-set.
+
 **Fix.** Remove the explicit header (or gate it behind a debug flag).
 
 **Verification.**
@@ -165,6 +208,8 @@ curl -sI http://localhost:8055/server/ping | grep -i x-powered-by   # expect no 
 
 ### F-005 · Sandboxed `eval` in the `exec` flow operation
 **OWASP:** A03:2021 · **CWE:** CWE-95 · **Severity:** CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:L/I:L/A:L → **0.0 Informational (by design)**
+
+**Evidence.** File `api/src/operations/exec/index.ts` · Line `49` · Issue: `context.eval(code, …)` — but `context` is an isolated-vm sandbox and `code` is admin-authored (by design).
 
 **Description.** `api/src/operations/exec/index.ts:49` runs `context.eval(code, { timeout: scriptTimeoutMs })`.
 The `context` is an isolated-vm sandbox and the executed `code` comes from a Flow's "Run Script"
@@ -180,6 +225,19 @@ and timeout in the security docs.
 all returned HTTP 403 (unauthenticated rate limit). No specific issue or PR numbers are cited.
 Re-run with a `GITHUB_TOKEN` to populate this section. *(Note from git history: commit `eab59d9`
 "CVE dependency updates (#27589)" indicates the project does track and merge CVE fixes.)*
+
+## Not assessed (scope boundary)
+
+This audit is **static + repository-metadata only**. The following were explicitly **out of scope or
+not reachable** this run and carry no assurance either way:
+
+- **Runtime / DAST** — no running instance was exercised (no auth-bypass, injection, or SSRF *proof* at runtime).
+- **Cloud configuration** — IAM, network policy, storage ACLs of any hosting environment.
+- **Kubernetes manifests / Helm** — none present in the repo; `helm`/`kube-linter` unavailable.
+- **Production infrastructure** — load balancers, WAF, secrets managers, runtime env vars.
+- **Third-party SaaS integrations** — the external providers Directus can call (storage, AI, OAuth) were not tested.
+- **Authenticated GitHub metadata** — issues/PRs, branch protection, secret-scanning alerts (HTTP 403 rate-limit).
+- **Dependency CVEs** — `npm audit` failed (`ENOLOCK`); no SCA data collected.
 
 ## 7. P2 recommendations
 
@@ -197,6 +255,14 @@ Re-run with a `GITHUB_TOKEN` to populate this section. *(Note from git history: 
 |---|---|---|
 | **High impact** | **Quick wins** — R-4 (re-run with token + `pnpm audit`) | **Major projects** — R-1 (SSRF allowlist helper) |
 | **Low / med impact** | **Fill-ins** — R-2 (pin actions), R-3 (digest-pin Docker), R-5 (Scorecard/zizmor CI) | — |
+
+### Remediation roadmap (phased)
+
+| Phase | Time budget | Actions |
+|-------|-------------|---------|
+| **Phase 1 — harden** | ≤ 1 hour | Pin all GitHub Actions to SHAs (R-2); digest-pin Docker base images (R-3); confirm Dependabot `github-actions` + `npm` ecosystems enabled |
+| **Phase 2 — close gaps** | ≤ 1 day | Add the SSRF egress allowlist helper across all fetch sites (R-1/F-001); add OpenSSF Scorecard + `zizmor` to CI (R-5); re-run the audit with `GITHUB_TOKEN` + `pnpm audit` (R-4) |
+| **Phase 3 — supply-chain maturity** | ≤ 1 week | Publish SBOM (CycloneDX); add SLSA provenance to releases; extend Sigstore/cosign signing already used in `release.yml` to all artefacts |
 
 ## 8. Remediation status
 

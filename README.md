@@ -92,7 +92,7 @@ The scan history is stored in `./data/ossf-scout.db` and persists across restart
 ### Audit Tab
 
 > **📄 Sample output** for `directus/directus`:
-> - **AI-synthesised report** → [`examples/directus-audit-report-ai.md`](examples/directus-audit-report-ai.md) — calibrated findings, CVSS vectors, an effort/impact matrix, CI-automated verification, and a STRIDE threat model (the full audit format)
+> - **AI-synthesised report** → [`examples/directus-audit-report-ai.md`](examples/directus-audit-report-ai.md) — a derived security-posture score, calibrated findings (Evidence + Observation/Risk/Recommendation, CVSS), severity/exploitability/effort triage, a "not assessed" scope boundary, a phased remediation roadmap, CI-automated verification, and a STRIDE threat model (the full audit format)
 > - **Static snapshot** → [`examples/directus-audit-report.md`](examples/directus-audit-report.md) — free, no-AI raw data dump
 > - **AI input context** → [`examples/directus-audit-context.md`](examples/directus-audit-context.md) — the evidence fed to the model
 

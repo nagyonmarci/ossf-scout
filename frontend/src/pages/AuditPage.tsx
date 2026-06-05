@@ -12,14 +12,21 @@ const PROVIDER_MODELS: Record<string, { id: string; label: string; hint: string;
     { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4',   hint: '~$0.05–$0.20/run', inputRate: 0.80,  outputRate: 4    },
   ],
   openai: [
-    { id: 'gpt-4o',      label: 'GPT-4o',       hint: '~$0.10–$0.50/run',  inputRate: 2.5,  outputRate: 10   },
-    { id: 'gpt-4o-mini', label: 'GPT-4o mini',  hint: '~$0.005–$0.03/run', inputRate: 0.15, outputRate: 0.60 },
-    { id: 'o3-mini',     label: 'o3-mini',       hint: '~$0.05–$0.20/run',  inputRate: 1.10, outputRate: 4.40 },
+    { id: 'gpt-4.1',      label: 'GPT-4.1',       hint: '~$0.09–$0.35/run',  inputRate: 2.0,  outputRate: 8.0  },
+    { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini',  hint: '~$0.02–$0.07/run',  inputRate: 0.40, outputRate: 1.60 },
+    { id: 'gpt-4.1-nano', label: 'GPT-4.1 nano',  hint: '~$0.005–$0.02/run', inputRate: 0.10, outputRate: 0.40 },
+    { id: 'gpt-4o',       label: 'GPT-4o',         hint: '~$0.10–$0.50/run',  inputRate: 2.5,  outputRate: 10   },
+    { id: 'gpt-4o-mini',  label: 'GPT-4o mini',   hint: '~$0.005–$0.03/run', inputRate: 0.15, outputRate: 0.60 },
+    { id: 'o4-mini',      label: 'o4-mini',        hint: '~$0.05–$0.20/run',  inputRate: 1.10, outputRate: 4.40 },
+    { id: 'o3',           label: 'o3',             hint: '~$0.45–$1.80/run',  inputRate: 10.0, outputRate: 40.0 },
+    { id: 'o3-mini',      label: 'o3-mini',        hint: '~$0.05–$0.20/run',  inputRate: 1.10, outputRate: 4.40 },
   ],
   gemini: [
-    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', hint: '~$0.005–$0.02/run', inputRate: 0.10, outputRate: 0.40 },
-    { id: 'gemini-1.5-pro',   label: 'Gemini 1.5 Pro',   hint: '~$0.05–$0.25/run',  inputRate: 1.25, outputRate: 5.0  },
-    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash',  hint: '~$0.003–$0.015/run',inputRate: 0.075,outputRate: 0.30 },
+    { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro',   hint: '~$0.05–$0.45/run',  inputRate: 1.25,  outputRate: 10.0 },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash',  hint: '~$0.015–$0.10/run', inputRate: 0.30,  outputRate: 2.50 },
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash',  hint: '~$0.005–$0.02/run', inputRate: 0.10,  outputRate: 0.40 },
+    { id: 'gemini-1.5-pro',   label: 'Gemini 1.5 Pro',   hint: '~$0.05–$0.25/run',  inputRate: 1.25,  outputRate: 5.0  },
+    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash',  hint: '~$0.003–$0.015/run',inputRate: 0.075, outputRate: 0.30 },
   ],
 };
 

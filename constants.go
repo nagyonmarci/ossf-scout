@@ -73,15 +73,25 @@ const (
 
 // modelPrices maps model name → [input $/1M tokens, output $/1M tokens]
 var modelPrices = map[string][2]float64{
+	// Anthropic
 	"claude-opus-4-8":           {15.0, 75.0},
 	"claude-sonnet-4-6":         {3.0, 15.0},
 	"claude-haiku-4-5-20251001": {0.80, 4.0},
-	"gpt-4o":                    {2.5, 10.0},
-	"gpt-4o-mini":               {0.15, 0.60},
-	"o3-mini":                   {1.10, 4.40},
-	"gemini-2.0-flash":          {0.10, 0.40},
-	"gemini-1.5-pro":            {1.25, 5.0},
-	"gemini-1.5-flash":          {0.075, 0.30},
+	// OpenAI
+	"gpt-4.1":      {2.0, 8.0},
+	"gpt-4.1-mini": {0.40, 1.60},
+	"gpt-4.1-nano": {0.10, 0.40},
+	"gpt-4o":       {2.5, 10.0},
+	"gpt-4o-mini":  {0.15, 0.60},
+	"o3":           {10.0, 40.0},
+	"o3-mini":      {1.10, 4.40},
+	"o4-mini":      {1.10, 4.40},
+	// Gemini
+	"gemini-2.5-pro":   {1.25, 10.0},
+	"gemini-2.5-flash": {0.30, 2.50},
+	"gemini-2.0-flash": {0.10, 0.40},
+	"gemini-1.5-pro":   {1.25, 5.0},
+	"gemini-1.5-flash": {0.075, 0.30},
 }
 
 // Scheduler

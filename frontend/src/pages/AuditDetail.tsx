@@ -237,9 +237,14 @@ export default function AuditDetail() {
             {audit.status === 'error' && <p className="error-msg">Error: {audit.error}</p>}
             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
-                <button className="btn btn-primary" onClick={downloadReport}>
-                  Download .md
-                </button>
+                <>
+                  <button className="btn btn-primary" onClick={downloadReport}>
+                    Download .md
+                  </button>
+                  <button className="btn no-print" onClick={() => window.print()}>
+                    Print / PDF
+                  </button>
+                </>
               )}
               {audit.has_context && (
                 <>

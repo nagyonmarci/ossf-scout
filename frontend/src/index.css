@@ -586,3 +586,41 @@ td.description {
 
 /* Pending badge */
 .badge-pending { background: rgba(234,179,8,0.15); color: var(--yellow); }
+
+/* ── Print / PDF ──────────────────────────────────────────────────────────── */
+.no-print { display: initial; }
+
+@media print {
+  @page { margin: 20mm; }
+
+  /* hide everything except the audit report content */
+  nav, header, .no-print, .action-bar,
+  .sidebar, aside, footer { display: none !important; }
+
+  /* full-width, white background */
+  body { background: #fff !important; color: #000 !important; font-size: 11pt; }
+  .prose, .audit-content, main, [class*="content"] {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* headings: avoid orphaned heading at page bottom */
+  h1, h2, h3, h4 { page-break-after: avoid; color: #000 !important; }
+
+  /* tables and code blocks: avoid splitting across pages */
+  table, pre, figure { page-break-inside: avoid; }
+
+  /* code blocks: wrap long lines, readable font size */
+  pre, code { white-space: pre-wrap !important; font-size: 8.5pt; background: #f5f5f5 !important; color: #000 !important; }
+
+  /* links: show URL inline */
+  a[href]::after { content: " (" attr(href) ")"; font-size: 8pt; color: #555; }
+  a[href^="#"]::after, a[href^="javascript"]::after { content: ""; }
+
+  /* tables: borders for readability */
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc !important; padding: 4px 6px; }
+  th { background: #eee !important; }
+}

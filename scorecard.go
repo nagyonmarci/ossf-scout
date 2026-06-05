@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 )
 
 type scorecardResponse struct {
@@ -48,7 +47,7 @@ func scorecardGet(owner, repo string) (*scorecardResponse, error) {
 }
 
 func scorecardCLI(owner, repo, token string) (*scorecardResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), scorecardCLITimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "scorecard",

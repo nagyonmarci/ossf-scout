@@ -357,11 +357,46 @@ jobs:
 
 ---
 
-## Appendix: Claim verification
+> *Editor's note: the block below is the **actual `verifyReport()` output** for this report — not hand-written — so the sample shows 1:1 what the tool appends. The three "unverified" rows are forward-looking **fix suggestions** (pinned versions `pm2@5.4.3` / `corepack@0.32.0` from the F-003 fix, and the proposed `hardening.yml` workflow); the verifier flags them because they aren't in the **current** evidence — exactly the strictness the check is designed to enforce.*
 
-All concrete claims in this report trace to [`directus-audit-context.md`](directus-audit-context.md):
-`file:line` references (e.g. `api/src/services/files.ts:285`, `api/src/app.ts:237`) and commit/PR
-references (`d358376`, `#27589`) appear verbatim in the collected context. **No** action pin SHA, CVE
-number, or GitHub issue/PR number was asserted that is absent from the evidence — unavailable data is
-labelled *(not captured)*. Because GitHub metadata and dependency audit were unavailable, this report
-is marked **DRAFT** pending a re-run with a `GITHUB_TOKEN` and `pnpm audit`.
+> ⚠️ **DRAFT — 3 unverified claim(s).** Concrete specifics below could not be grounded in the collected evidence. Resolve every item in "Appendix: Claim Verification" before publishing or disclosing.
+
+## Appendix: Claim Verification
+
+Automated post-generation check of concrete claims against collected evidence. Method: SHAs and `file:line` matched against `grep -rn` output; `#PR` against GitHub/commit evidence; CVEs and pkg@version against the dependency audit; workflow files against the collected workflow list; CVSS bands recomputed. No live network calls.
+
+| Claim | Type | Status | Detail |
+|---|---|---|---|
+| `pm2@5.4.3` | pkg@version | ❌ unverified | not found in dependency-audit evidence |
+| `corepack@0.32.0` | pkg@version | ❌ unverified | not found in dependency-audit evidence |
+| `.github/workflows/hardening.yml` | workflow file | ❌ unverified | not in collected workflow list — may not exist |
+| `4.3 (Medium)` | CVSS band | ✓ verified | band correct |
+| `4.8 (Medium)` | CVSS band | ✓ verified | band correct |
+| `3.9 (Low)` | CVSS band | ✓ verified | band correct |
+| `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N` | CVSS vector | ✓ verified | computed 4.3 (Medium) |
+| `CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N` | CVSS vector | ✓ verified | computed 4.8 (Medium) |
+| `CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N` | CVSS vector | ✓ verified | computed 4.2 (Medium) |
+| `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N` | CVSS vector | ✓ verified | computed 0.0 (None) |
+| `CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:L/I:L/A:L` | CVSS vector | ✓ verified | computed 4.1 (Medium) |
+| `#27589` | PR/issue | ✓ verified | present in GitHub/commit evidence |
+| `d358376d91385256285b80a566c5ee0ae7bbcc32` | SHA | ✓ verified | present in collected evidence |
+| `api/src/services/files.ts:285` | file:line | ✓ verified | found in grep evidence |
+| `api/src/services/mcp-oauth/cimd.ts:277` | file:line | ✓ verified | found in grep evidence |
+| `api/src/permissions/utils/fetch-dynamic-variable-data.ts:118` | file:line | ✓ verified | found in grep evidence |
+| `cimd.ts:277` | file:line | ✓ verified | found in grep evidence |
+| `.github/workflows/changeset-check.yml:32` | file:line | ✓ verified | found in grep evidence |
+| `.github/workflows/check.yml:32` | file:line | ✓ verified | found in grep evidence |
+| `.github/workflows/claude.yml:35` | file:line | ✓ verified | found in grep evidence |
+| `.github/workflows/claude-code-review.yml:23` | file:line | ✓ verified | found in grep evidence |
+| `api/src/app.ts:152` | file:line | ✓ verified | found in grep evidence |
+| `api/src/app.ts:237` | file:line | ✓ verified | found in grep evidence |
+| `api/src/operations/exec/index.ts:49` | file:line | ✓ verified | found in grep evidence |
+| `operations/exec/index.ts:49` | file:line | ✓ verified | found in grep evidence |
+| `app/src/utils/jwt-payload.test.ts:6` | file:line | ✓ verified | found in grep evidence |
+| `.github/workflows/changeset-check.yml` | workflow file | ✓ verified | matches collected workflow list |
+| `.github/workflows/check.yml` | workflow file | ✓ verified | matches collected workflow list |
+| `.github/workflows/claude.yml` | workflow file | ✓ verified | matches collected workflow list |
+| `.github/workflows/claude-code-review.yml` | workflow file | ✓ verified | matches collected workflow list |
+| `.github/workflows/security-verify.yml` | workflow file | ✓ verified | matches collected workflow list |
+
+**Summary:** 28 verified, 3 unverified.

@@ -26,7 +26,7 @@ var (
 	reCVE        = regexp.MustCompile(`CVE-\d{4}-\d{4,}`)
 	rePkgVersion  = regexp.MustCompile(`\b([\w][\w.-]{1,60})@(\d+\.\d[\w.+\-]*)`)
 	reWorkflow    = regexp.MustCompile(`\.github/workflows/([\w.\-]+\.ya?ml)`)
-	reBranchClaim = regexp.MustCompile(`\bbranch[:\s]+([a-zA-Z0-9_.\-/]+)`)
+	reBranchClaim = regexp.MustCompile(`\bbranch:\s*([a-zA-Z0-9_.\-/]+)`)
 )
 
 func cvssBand(s float64) string {

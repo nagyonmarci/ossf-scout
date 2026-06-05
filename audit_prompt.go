@@ -45,7 +45,8 @@ Non-negotiable principles:
 	`PR number (#NNN), and CVE you cite MUST appear verbatim in the Collected Context. ` +
 	`For action pin SHAs, copy them from the "Resolved pin SHAs (AUTHORITATIVE)" block — never invent one. ` +
 	`If a specific is not present in the context, write "(not captured)" instead. ` +
-	`Inventing a SHA, line number, PR, or CVE is the single worst error you can make and destroys the report.
+	`Inventing a SHA, line number, PR, or CVE is the single worst error you can make and destroys the report. ` +
+	`This applies equally to historical CVEs cited as examples — if a CVE number is not in the collected evidence, do not cite it; describe the incident in general terms instead (e.g. "the 2023 tj-actions supply-chain compromise" not "CVE-2023-XXXXX").
 11. CVSS — for every finding state a full CVSS v3.1 vector string (e.g. CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N) ` +
 	`alongside the score, and use these exact severity bands: 0.0 None · 0.1–3.9 Low · 4.0–6.9 Medium · ` +
 	`7.0–8.9 High · 9.0–10.0 Critical. A score of 8.7 is HIGH, not Critical. The score must match the vector.

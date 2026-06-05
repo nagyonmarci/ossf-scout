@@ -410,7 +410,15 @@ else echo 'no package manager available'; fi`),
 				return "skipped (SkipSecrets=true)"
 			}
 			return shIn(tmpDir, "gitleaks not installed — skipped",
-				"gitleaks detect --source . --no-git --report-format json 2>&1 | head -200 || echo 'gitleaks not installed — skipped'")
+				`gitleaks detect --source . --no-git --report-format json 2>/dev/null | `+
+					`python3 -c "`+
+					`import sys,json`+"\n"+
+					`try:`+"\n"+
+					`    d=json.load(sys.stdin)`+"\n"+
+					`    [print(f\"{f.get('RuleID','?')} | {f.get('File','?')}:{f.get('StartLine','?')} | {str(f.get('Secret',''))[:25]}\") for f in d[:40]]`+"\n"+
+					`    print(f'total: {len(d)} finding(s)')`+"\n"+
+					`except Exception as e: print(f'parse error: {e}')`+
+					`" 2>/dev/null || echo 'gitleaks not installed — skipped'`)
 		}(),
 		TruffleHog: func() string {
 			if opts.SkipSecrets {

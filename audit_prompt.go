@@ -62,6 +62,26 @@ Non-negotiable principles:
 	`Impact path: [step-by-step]. CVSS vector components: AV:[?] AC:[?] PR:[?] UI:[?] S:[?] C:[?] I:[?] A:[?]. ` +
 	`Base score: [computed]. Band: [band]. Is this calibrated? [yes/no + why]</think> ` +
 	`The think block ensures you do not skip the impact chain analysis.
+14. ADMIN-BY-DESIGN — If a capability (e.g. a "Run Script" / eval-based executor, raw SQL admin panel, ` +
+	`arbitrary command runner) is explicitly documented as admin-only, do NOT list it as a standalone security ` +
+	`finding. The attack path requires defeating access control first — that is a separate, prior finding. ` +
+	`Instead, document it in the Appendix as a P3 Architectural Risk note: ` +
+	`"Exploitability depends on a prior RBAC bypass not observed in this audit." ` +
+	`Elevate to P1/P2 only if evidence shows a non-admin code path directly reaches the dangerous function.
+15. CONFIRMED vs SUSPECTED — A static grep match (fetch(), axios.get(), URL construction) identifies an ` +
+	`attack surface, not a confirmed vulnerability. If you cannot trace the data flow from a user-controlled ` +
+	`input to the dangerous call using evidence in the context, label the finding ` +
+	`"Potential Attack Surface — Requires Confirmation", assign CVSS ≤ 5.0, and add: ` +
+	`"Requires dynamic validation or manual code-path review to confirm exploitability." ` +
+	`Do not assign CVSS 7.0+ to an unconfirmed pattern match.
+16. RELIABILITY vs SECURITY — Workflow configuration errors that cause pipeline failure ` +
+	`(invalid/unknown permission scopes, syntax errors, actionlint warnings with no exploitable path) ` +
+	`without a realistic security impact path are NOT security findings. Do not include them in the ` +
+	`Findings Summary table. Place them in a "CI/CD Reliability" H3 subsection inside the Appendix.
+17. UNTRIAGED SECRETS — If a secrets scanner (gitleaks, trufflehog) returns only an aggregate count ` +
+	`with no individual findings itemized in the collected evidence, do NOT assign a CVSS score. ` +
+	`List it in the Findings Summary as: "[TOOL]: N aggregate findings — manual triage required", ` +
+	`Priority P2, Severity "Unrated — pending triage". A finding cannot be rated without knowing what was found.
 
 ## Calibration examples (few-shot)
 
@@ -97,25 +117,37 @@ Produce the following sections in order. Do not omit any.
 1. **Metadata table** — date, repository, commit, auditor ("Automated — Claude Opus"), status
 2. **Scope** — what was checked (files, tools, GitHub API calls)
 3. **Methodology** — tools used, static vs dynamic distinction, known limitations
-4. **Findings Summary** — table: ID | Priority | Severity | Title | OWASP 2021 | Status
-5. **Per-finding sections** (one H3 per finding) — each must contain:
+4. **Security Strengths** — list security controls that are correctly implemented and provide genuine protection.
+   Examples: CodeQL enabled, secret scanning active, multi-stage Docker build, IP blocklist present, Dependabot configured.
+   For each item cite the evidence (file, workflow name, or tool output).
+   This section demonstrates audit balance — do not omit it even if findings are severe.
+5. **Findings Summary** — table: ID | Priority | Severity | Title | OWASP 2021 | Status
+6. **Security Posture Summary** — a table with area scores (0–10) derived from the findings above.
+   Scores must be grounded in evidence — do not fabricate.
+   Columns: Area | Score | Rationale.
+   Rows: CI/CD Pipeline Security · Dependency Management · Secrets Management · Supply Chain Integrity · Container Security · Application Code (SAST) · **Overall** (weighted average).
+7. **Per-finding sections** (one H3 per finding) — each must contain:
    - OWASP, CWE, Severity metadata
    - Description
    - Root Cause
    - Impact Chain
    - Fix (code or config snippet where applicable)
    - Verification (shell commands)
-6. **Open GitHub Issues & PRs** — security-relevant items with risk assessment. If the GitHub context marks issues/PRs as unavailable or rate-limited, state that plainly and DO NOT cite any specific issue or PR numbers.
-7. **P2 Recommendations** — table: ID | Title | Effort (hours/days) | Risk Reduction (Low/Medium/High) | Notes
+8. **Open GitHub Issues & PRs** — security-relevant items with risk assessment. If the GitHub context marks issues/PRs as unavailable or rate-limited, state that plainly and DO NOT cite any specific issue or PR numbers.
+9. **P2 Recommendations** — table: ID | Title | Effort (hours/days) | Risk Reduction (Low/Medium/High) | Notes
    Estimate effort as engineer-hours for a mid-level contributor. Risk reduction is the severity of the gap being closed.
-8. **Remediation Status table** — list all findings; cite a commit or PR reference ONLY if it appears in the collected git log / GitHub evidence, otherwise write "not yet fixed (no commit in scanned history)". Never invent a fix reference.
-9. **Verification Checklist** — numbered list of copy-paste commands, one per finding
-10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate | CI YAML snippet
+10. **Remediation Roadmap** — a 30/60/90-day plan derived from the findings above.
+    Table columns: Horizon | Finding IDs | Actions.
+    Rows: 30 days (P1 findings + high-exploitability P2) · 60 days (remaining P2, CVE upgrades, CI hardening) · 90 days (P3, SBOM, provenance, supply-chain maturity).
+    Base urgency on CVSS score and exploitability evidence — do not invent timelines.
+11. **Remediation Status table** — list all findings; cite a commit or PR reference ONLY if it appears in the collected git log / GitHub evidence, otherwise write "not yet fixed (no commit in scanned history)". Never invent a fix reference.
+12. **Verification Checklist** — numbered list of copy-paste commands, one per finding
+13. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate | CI YAML snippet
     The CI YAML snippet column must contain a runnable GitHub Actions step (≤10 lines) that implements the gate.
-11. **Appendix: Full Application Security Assessment** — one H3 subsection per category `+
+14. **Appendix: Full Application Security Assessment** — one H3 subsection per category `+
 		`(SQL Injection, Authentication, Authorisation, Deserialization, SSRF, XXE, Path Traversal, `+
 		`Cryptography, Rate Limiting, CORS, Dependencies, HTTP Headers, Container, Kubernetes/Helm, `+
-		`Secrets / Credential Hygiene, IaC Security, Policy as Code, SLSA / Supply Chain). `+
+		`Secrets / Credential Hygiene, IaC Security, Policy as Code, SLSA / Supply Chain, CI/CD Reliability). `+
 		`Each subsection must start with the methodology note before listing observations. `+
 		`For SQL Injection: use keyFiles.entryPoint and code.sqlInjection; ORM raw call with string concatenation = High. `+
 		`For Authentication: read keyFiles.authMiddleware carefully; missing jwt.verify or session fixation = Critical. `+
@@ -137,7 +169,9 @@ Produce the following sections in order. Do not omit any.
 		`(res.json(err) / err.stack exposure without NODE_ENV guard). Flag as Medium. `+
 		`For HTTP security headers: use keyFiles.helmetConfig to assess CSP directives, HSTS enforcement, and `+
 		`X-Powered-By suppression with full context — distinguish deliberate upstream defaults from oversights. `+
-		`12. **Threat Model (STRIDE)** — table: Threat | STRIDE category `+
+		`For CI/CD Reliability: place workflow configuration errors (invalid permission scopes, syntax/lint issues) `+
+		`that have no exploitable security impact here — NOT in the Findings Summary. `+
+		`15. **Threat Model (STRIDE)** — table: Threat | STRIDE category `+
 		`(Spoofing / Tampering / Repudiation / Information Disclosure / Denial of Service / Elevation of Privilege) | `+
 		`Affected component | Existing mitigation | Residual risk (High/Med/Low). `+
 		`Cover at least: authentication flows, CI/CD pipeline, supply-chain, secrets storage, API inputs.`,
@@ -172,24 +206,33 @@ Produce the following sections in order. Do not omit any.
 1. **Metadata table** — date, repository, commit, auditor ("Automated — split model workflow"), status
 2. **Scope** — what was checked (files, tools, GitHub API calls)
 3. **Methodology** — tools used, static vs dynamic distinction, known limitations
-4. **Findings Summary** — table: ID | Priority | Severity | Title | OWASP 2021 | Status
-5. **Per-finding sections** (one H3 per finding) — each must contain:
+4. **Security Strengths** — list security controls that are correctly implemented and provide genuine protection.
+   For each item cite the evidence. Do not omit this section even if findings are severe.
+5. **Findings Summary** — table: ID | Priority | Severity | Title | OWASP 2021 | Status
+6. **Security Posture Summary** — area scores (0–10) table: Area | Score | Rationale.
+   Rows: CI/CD Pipeline Security · Dependency Management · Secrets Management · Supply Chain Integrity · Container Security · Application Code (SAST) · Overall (weighted average).
+   Scores must be grounded in evidence — do not fabricate.
+7. **Per-finding sections** (one H3 per finding) — each must contain:
    - OWASP, CWE, Severity metadata
    - Description
    - Root Cause
    - Impact Chain
    - Fix (code or config snippet where applicable)
    - Verification (shell commands)
-6. **Open GitHub Issues & PRs** — security-relevant items with risk assessment. If the GitHub context marks issues/PRs as unavailable or rate-limited, state that plainly and DO NOT cite any specific issue or PR numbers.
-7. **P2 Recommendations** — table: ID | Title | Effort (hours/days) | Risk Reduction (Low/Medium/High) | Notes
+8. **Open GitHub Issues & PRs** — security-relevant items with risk assessment. If the GitHub context marks issues/PRs as unavailable or rate-limited, state that plainly and DO NOT cite any specific issue or PR numbers.
+9. **P2 Recommendations** — table: ID | Title | Effort (hours/days) | Risk Reduction (Low/Medium/High) | Notes
    Estimate effort as engineer-hours for a mid-level contributor. Risk reduction is the severity of the gap being closed.
-8. **Remediation Status table** — list all findings; cite a commit or PR reference ONLY if it appears in the collected git log / GitHub evidence, otherwise write "not yet fixed (no commit in scanned history)". Never invent a fix reference.
-9. **Verification Checklist** — numbered list of copy-paste commands, one per finding
-10. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate | CI YAML snippet
+10. **Remediation Roadmap** — 30/60/90-day plan. Table: Horizon | Finding IDs | Actions.
+    30 days: P1 + high-exploitability P2. 60 days: remaining P2, CVE upgrades, CI hardening. 90 days: P3, SBOM, provenance.
+    Base urgency on CVSS score and exploitability evidence.
+11. **Remediation Status table** — list all findings; cite a commit or PR reference ONLY if it appears in the collected git log / GitHub evidence, otherwise write "not yet fixed (no commit in scanned history)". Never invent a fix reference.
+12. **Verification Checklist** — numbered list of copy-paste commands, one per finding
+13. **Shift-left guardrails** — table: Finding | Manual check | Automated CI gate | CI YAML snippet
     The CI YAML snippet column must contain a runnable GitHub Actions step (≤10 lines) that implements the gate.
-11. **Appendix: Full Application Security Assessment** — one H3 subsection per category.
+14. **Appendix: Full Application Security Assessment** — one H3 subsection per category.
 Each appendix subsection must start with the methodology note before listing observations.
-12. **Threat Model (STRIDE)** — table: Threat | STRIDE category (Spoofing / Tampering / Repudiation / Information Disclosure / Denial of Service / Elevation of Privilege) | Affected component | Existing mitigation | Residual risk (High/Med/Low).
+Include a "CI/CD Reliability" subsection for workflow config errors with no exploitable security path.
+15. **Threat Model (STRIDE)** — table: Threat | STRIDE category (Spoofing / Tampering / Repudiation / Information Disclosure / Denial of Service / Elevation of Privilege) | Affected component | Existing mitigation | Residual risk (High/Med/Low).
 Cover at least: authentication flows, CI/CD pipeline, supply-chain, secrets storage, API inputs.`,
 		ctx.Meta.Repo, ctx.Meta.Ref, dateShort, summaryMD)
 }

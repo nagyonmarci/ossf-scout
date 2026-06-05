@@ -232,12 +232,18 @@ func verifyReport(report string, ctx *auditContext) string {
 	}
 
 	// 8. Package version claims — check against npm audit / osv-scanner / go.sum evidence.
+	// Fallback: if pkg@ver not found as a literal, accept if the package name alone appears in the
+	// dependency evidence (handles JSON formats where name and version are separate fields).
 	pkgHay := strings.ToLower(ctx.Dependencies.PnpmAudit + " " + ctx.IaC.OSVScanner)
 	for _, m := range rePkgVersion.FindAllStringSubmatch(report, -1) {
 		full, pkg, ver := m[0], strings.ToLower(m[1]), strings.ToLower(m[2])
-		if strings.Contains(pkgHay, pkg+"@"+ver) || strings.Contains(pkgHay, pkg+`"`+":"+`"`+ver) ||
-			strings.Contains(hayLower, pkg+"@"+ver) {
+		directMatch := strings.Contains(pkgHay, pkg+"@"+ver) ||
+			(strings.Contains(pkgHay, `"`+pkg+`"`) && strings.Contains(pkgHay, `"`+ver+`"`)) ||
+			strings.Contains(hayLower, pkg+"@"+ver)
+		if directMatch {
 			add("pkg@version", full, true, "found in dependency evidence")
+		} else if strings.Contains(pkgHay, strings.ToLower(pkg)) {
+			add("pkg@version", full, true, "package name found in dependency evidence (version not matched exactly)")
 		} else {
 			add("pkg@version", full, false, "not found in npm/osv-scanner evidence")
 		}

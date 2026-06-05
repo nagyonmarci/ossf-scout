@@ -276,7 +276,7 @@ func generateTemplateReport(ctx *auditContext) string {
 	w("")
 	w("## Dependencies")
 	w("")
-	w("### pnpm / npm audit")
+	w("### Dependency audit (pnpm/npm/yarn)")
 	w("")
 	w("```")
 	w("%s", ctx.Dependencies.PnpmAudit)

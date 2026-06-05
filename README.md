@@ -145,9 +145,9 @@ Enter `owner/repo` (e.g. `directus/directus`), choose a provider, and click **Ru
 | Provider | Cost | Setup |
 |----------|------|-------|
 | **Static snapshot** | Free | No key needed — returns structured raw data |
-| **Anthropic** | Paid | API key via UI or `ANTHROPIC_API_KEY`; models: Opus 4, Sonnet 4, Haiku 4 |
-| **OpenAI** | Paid | API key via UI or `OPENAI_API_KEY`; models: GPT-4o, GPT-4o mini, o3-mini |
-| **Gemini** | Paid | API key via UI or `GEMINI_API_KEY`; models: Gemini 2.0 Flash, 1.5 Pro, 1.5 Flash |
+| **Anthropic** | Paid | API key via UI or `ANTHROPIC_API_KEY`; models: Opus 4.8, Sonnet 4.6, Haiku 4.5, Opus 4.7, Opus 4.6, Sonnet 4.5, Opus 4.5 |
+| **OpenAI** | Paid | API key via UI or `OPENAI_API_KEY`; models: GPT-5.5, GPT-5.4, GPT-5.4 mini, GPT-4.1 family, GPT-4o family, o-series (o1/o3/o4-mini) |
+| **Gemini** | Paid | API key via UI or `GEMINI_API_KEY`; models: Gemini 3.5 Flash, 3.1 Flash Lite, 2.5 Pro/Flash/Flash-Lite, 2.0 Flash, 1.5 Pro/Flash |
 | **Ollama** | Free/local | `OLLAMA_BASE_URL` on the server; model name selected in the UI |
 
 Approximate per-run costs are shown in the UI after each audit based on recorded input/output tokens and the configured model price table. Static snapshots and Ollama runs are treated as free.

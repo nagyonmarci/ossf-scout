@@ -73,26 +73,40 @@ const (
 
 // modelPrices maps model name → [input $/1M tokens, output $/1M tokens]
 var modelPrices = map[string][2]float64{
-	// Anthropic
-	"claude-opus-4-8":           {15.0, 75.0},
+	// Anthropic — current
+	"claude-opus-4-8":           {5.0, 25.0},
 	"claude-sonnet-4-6":         {3.0, 15.0},
-	"claude-haiku-4-5-20251001": {0.80, 4.0},
-	// OpenAI
+	"claude-haiku-4-5-20251001": {1.0, 5.0},
+	// Anthropic — legacy (still available)
+	"claude-opus-4-7":           {5.0, 25.0},
+	"claude-opus-4-6":           {5.0, 25.0},
+	"claude-sonnet-4-5-20250929": {3.0, 15.0},
+	"claude-opus-4-5-20251101":   {5.0, 25.0},
+	// OpenAI — GPT-5.x
+	"gpt-5.5":      {5.0, 30.0},
+	"gpt-5.4":      {2.5, 15.0},
+	"gpt-5.4-mini": {0.75, 4.50},
+	// OpenAI — GPT-4.x
 	"gpt-4.1":      {2.0, 8.0},
 	"gpt-4.1-mini": {0.40, 1.60},
 	"gpt-4.1-nano": {0.10, 0.40},
 	"gpt-4o":       {2.5, 10.0},
 	"gpt-4o-mini":  {0.15, 0.60},
-	"o1":           {15.0, 60.0},
-	"o3":           {10.0, 40.0},
-	"o3-mini":      {1.10, 4.40},
-	"o4-mini":      {1.10, 4.40},
-	// Gemini
-	"gemini-2.5-pro":   {1.25, 10.0},
-	"gemini-2.5-flash": {0.30, 2.50},
-	"gemini-2.0-flash": {0.10, 0.40},
-	"gemini-1.5-pro":   {1.25, 5.0},
-	"gemini-1.5-flash": {0.075, 0.30},
+	// OpenAI — o-series
+	"o1":      {15.0, 60.0},
+	"o3":      {10.0, 40.0},
+	"o3-mini": {1.10, 4.40},
+	"o4-mini": {1.10, 4.40},
+	// Gemini — current
+	"gemini-3.5-flash":      {1.50, 9.0},
+	"gemini-3.1-flash-lite": {0.25, 1.50},
+	"gemini-2.5-pro":        {1.25, 10.0},
+	"gemini-2.5-flash":      {0.30, 2.50},
+	"gemini-2.5-flash-lite": {0.10, 0.40},
+	"gemini-2.0-flash":      {0.10, 0.40},
+	// Gemini — legacy
+	"gemini-1.5-pro":        {1.25, 5.0},
+	"gemini-1.5-flash":      {0.075, 0.30},
 }
 
 // Scheduler

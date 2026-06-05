@@ -924,13 +924,19 @@ func extractZizmortFindings(sarifJSON string) string {
 	var sarif struct {
 		Runs []struct {
 			Results []struct {
-				RuleID    string `json:"ruleId"`
-				Level     string `json:"level"`
-				Message   struct{ Text string `json:"text"` } `json:"message"`
+				RuleID  string `json:"ruleId"`
+				Level   string `json:"level"`
+				Message struct {
+					Text string `json:"text"`
+				} `json:"message"`
 				Locations []struct {
 					PhysicalLocation struct {
-						ArtifactLocation struct{ URI string `json:"uri"` } `json:"artifactLocation"`
-						Region           struct{ StartLine int `json:"startLine"` } `json:"region"`
+						ArtifactLocation struct {
+							URI string `json:"uri"`
+						} `json:"artifactLocation"`
+						Region struct {
+							StartLine int `json:"startLine"`
+						} `json:"region"`
 					} `json:"physicalLocation"`
 				} `json:"locations"`
 			} `json:"results"`
@@ -1799,5 +1805,8 @@ func runAuditGenerate(db *sql.DB, id string, auditCtx *auditContext, provider, a
 			generateTemplateReport(auditCtx))
 		return
 	}
+	// Ground every concrete claim against the collected evidence and append the
+	// verification appendix; unverifiable claims flip the report to DRAFT.
+	report = verifyReport(report, auditCtx)
 	_ = dbUpdateAuditDone(db, id, report, inputTokens, outputTokens)
 }

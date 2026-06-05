@@ -42,6 +42,7 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("GET /api/audits/{id}/supply-chain", handleSupplyChainGraph(db))
 	mux.HandleFunc("GET /api/audits/{id}/export.json", handleExportAuditJSON(db))
 	mux.HandleFunc("GET /api/audits/{id}/export.sarif", handleExportAuditSARIF(db))
+	mux.HandleFunc("GET /api/audits/{id}/export.pdf", handleExportAuditPDF(db))
 	mux.Handle("DELETE /api/audits/{id}", requireAdmin(handleDeleteAudit(db)))
 
 	mux.HandleFunc("GET /api/schedules", handleListSchedules(db))

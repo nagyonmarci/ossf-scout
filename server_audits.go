@@ -162,13 +162,28 @@ func extractAndCreateFindings(db *sql.DB, auditID, repo, reportMD string) int {
 	}
 	sevNorm := map[string]string{"informational": "info"}
 
+	// Only parse rows inside the "Findings Summary" section to avoid false
+	// positives from other tables (P2 Recommendations, Sprint Backlog, etc.)
+	// that also contain severity words in their Risk Reduction / Story Points columns.
+	inFindings := false
 	for _, line := range strings.Split(reportMD, "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "|") || strings.Contains(line, "---") {
+		trimmed := strings.TrimSpace(line)
+
+		// Track section boundaries
+		if strings.HasPrefix(trimmed, "#") {
+			lower := strings.ToLower(trimmed)
+			inFindings = strings.Contains(lower, "findings summary")
 			continue
 		}
-		cols := strings.Split(line, "|")
-		if len(cols) < 4 {
+		if !inFindings {
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "|") || strings.Contains(trimmed, "---") {
+			continue
+		}
+
+		cols := strings.Split(trimmed, "|")
+		if len(cols) < 6 {
 			continue
 		}
 		cells := make([]string, 0, len(cols))
@@ -176,33 +191,43 @@ func extractAndCreateFindings(db *sql.DB, auditID, repo, reportMD string) int {
 			cells = append(cells, strings.TrimSpace(c))
 		}
 
-		// Find severity cell and the adjacent title cell
+		// Expected column order: "" | ID | Priority | Severity | Title | OWASP | Status | ""
+		// Find severity column index, then title is at index+1.
 		sev, title := "", ""
 		for i, c := range cells {
 			cl := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(c, "**", ""), "`", ""))
-			if knownSev[cl] {
-				sev = cl
-				// Look for title in adjacent non-empty cells
-				for _, offset := range []int{-1, 1, -2, 2} {
-					j := i + offset
-					if j >= 0 && j < len(cells) && cells[j] != "" &&
-						!knownSev[strings.ToLower(cells[j])] &&
-						!strings.HasPrefix(cells[j], "P") &&
-						len(cells[j]) > 3 {
-						title = cells[j]
-						break
-					}
+			if !knownSev[cl] {
+				continue
+			}
+			sev = cl
+			// Title is the next non-empty, non-severity, non-FIND-ID, non-P-priority cell
+			for _, offset := range []int{1, 2, -1} {
+				j := i + offset
+				if j < 0 || j >= len(cells) {
+					continue
 				}
+				cand := cells[j]
+				candLower := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(cand, "**", ""), "`", ""))
+				if cand == "" || knownSev[candLower] || len(cand) <= 3 {
+					continue
+				}
+				// Skip priority (P0–P3) and FIND-ID cells
+				if strings.HasPrefix(candLower, "p") && len(cand) <= 3 {
+					continue
+				}
+				if strings.HasPrefix(strings.ToUpper(cand), "FIND-") {
+					continue
+				}
+				title = cand
 				break
 			}
+			break
 		}
 
 		if sev == "" || title == "" {
 			continue
 		}
-		// Strip markdown formatting from title
-		title = strings.ReplaceAll(title, "**", "")
-		title = strings.ReplaceAll(title, "`", "")
+		title = strings.ReplaceAll(strings.ReplaceAll(title, "**", ""), "`", "")
 		if norm, ok := sevNorm[sev]; ok {
 			sev = norm
 		}
@@ -437,6 +462,26 @@ func handleSupplyChainGraph(db *sql.DB) http.HandlerFunc {
 			"repo":  ctx.Meta.Repo,
 			"nodes": nodes,
 		})
+	}
+}
+
+func handleExportAuditPDF(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		audit, err := dbGetAudit(db, id)
+		if err != nil || audit == nil || audit.Report == nil || *audit.Report == "" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		pdfBytes, err := renderMarkdownToPDF(*audit.Report, audit.Repo)
+		if err != nil {
+			http.Error(w, "pdf render failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		filename := "audit-" + strings.ReplaceAll(audit.Repo, "/", "-") + ".pdf"
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+		w.Write(pdfBytes) //nolint:errcheck
 	}
 }
 

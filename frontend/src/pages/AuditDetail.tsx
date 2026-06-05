@@ -242,9 +242,9 @@ export default function AuditDetail() {
                   <button className="btn btn-primary" onClick={downloadReport}>
                     Download .md
                   </button>
-                  <button className="btn no-print" onClick={() => window.print()}>
-                    Print / PDF
-                  </button>
+                  <a className="btn no-print" href={`/api/audits/${audit.id}/export.pdf`} download>
+                    Download PDF
+                  </a>
                 </>
               )}
               {audit.has_context && (

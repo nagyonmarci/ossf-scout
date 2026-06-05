@@ -3,11 +3,12 @@
 # Stage 1: frontend build
 FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS frontend
 WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+RUN npm install -g pnpm@8
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 COPY frontend/ ./
-RUN npm run build
+RUN pnpm run build
 
 # Stage 2: Go build + Go-based security tools
 FROM golang:1.25-alpine@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931 AS builder

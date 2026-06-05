@@ -92,9 +92,12 @@ export interface CreateAuditParams {
   repo: string;
   github_token?: string;
   anthropic_key?: string;
+  openai_key?: string;
+  gemini_key?: string;
   model?: string;
   analysis_model?: string;
   split_generation?: boolean;
+  skip_secrets?: boolean;
   provider?: string;
   ollama_url?: string;
 }
@@ -102,10 +105,84 @@ export interface CreateAuditParams {
 export interface GenerateAuditParams {
   provider?: string;
   anthropic_key?: string;
+  openai_key?: string;
+  gemini_key?: string;
   model?: string;
   analysis_model?: string;
   split_generation?: boolean;
   ollama_url?: string;
+}
+
+// ── Schedules ─────────────────────────────────────────────────────────────────
+
+export interface Schedule {
+  id: string;
+  repo: string;
+  interval_h: number;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  time_window_start: number;
+  time_window_end: number;
+  cli_fallback: boolean;
+  auto_detected: boolean;
+  detect_reason?: string;
+  last_run_at: string | null;
+  next_run_at: string;
+  created_at: string;
+}
+
+export interface CreateScheduleParams {
+  repo: string;
+  interval_h?: number;
+  provider?: string;
+  model?: string;
+  time_window_start?: number;
+  time_window_end?: number;
+  cli_fallback?: boolean;
+}
+
+export interface UpdateScheduleParams {
+  interval_h: number;
+  provider: string;
+  model: string;
+  enabled: boolean;
+  time_window_start: number;
+  time_window_end: number;
+}
+
+// ── Cost stats ────────────────────────────────────────────────────────────────
+
+export interface CostStats {
+  total_usd: number;
+  by_model: Record<string, number>;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  audit_count: number;
+}
+
+export interface RemediationItem {
+  id: string;
+  audit_id: string;
+  repo: string;
+  title: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  status: 'open' | 'in_progress' | 'resolved';
+  due_date: string | null;
+  resolved_at: string | null;
+  notes: string;
+  created_at: string;
+}
+
+export interface PortfolioRepo {
+  repo: string;
+  latest_score: number;
+  stars: number;
+  weak_checks: string[];
+  audit_count: number;
+  last_audit_at: string;
+  provider: string;
+  language: string;
 }
 
 export const api = {
@@ -119,6 +196,45 @@ export const api = {
   createAudit: (params: CreateAuditParams) => request<Audit>('POST', '/api/audits', params),
   generateAudit: (id: string, params: GenerateAuditParams) => request<Audit>('POST', `/api/audits/${id}/generate`, params),
   deleteAudit: (id: string) => request<void>('DELETE', `/api/audits/${id}`),
+  extractFindings: (id: string) => request<{ created: number }>('POST', `/api/audits/${id}/extract-findings`, {}),
+  compareAudit: (id: string, a: CreateAuditParams, b: CreateAuditParams) =>
+    request<{
+      a: { report: string; input_tokens: number; output_tokens: number; error?: string; provider: string; model: string };
+      b: { report: string; input_tokens: number; output_tokens: number; error?: string; provider: string; model: string };
+    }>('POST', `/api/audits/${id}/compare`, { a, b }),
+  listSchedules: () => request<Schedule[]>('GET', '/api/schedules'),
+  createSchedule: (params: CreateScheduleParams) => request<Schedule>('POST', '/api/schedules', params),
+  updateSchedule: (id: string, params: UpdateScheduleParams) => request<void>('PUT', `/api/schedules/${id}`, params),
+  deleteSchedule: (id: string) => request<void>('DELETE', `/api/schedules/${id}`),
+  triggerSchedule: (id: string) => request<void>('POST', `/api/schedules/${id}/run`, {}),
+  getCostStats: (days?: number) => request<CostStats>('GET', `/api/stats/costs${days ? `?days=${days}` : ''}`),
+  listOrgRepos: (org: string, opts?: { min_stars?: number; exclude_forks?: boolean; exclude_archived?: boolean }) => {
+    const q = new URLSearchParams()
+    if (opts?.min_stars) q.set('min_stars', String(opts.min_stars))
+    if (opts?.exclude_forks) q.set('exclude_forks', '1')
+    if (opts?.exclude_archived) q.set('exclude_archived', '1')
+    const qs = q.toString()
+    return request<Array<{ full_name: string; description: string; stargazers_count: number; language: string; archived: boolean; fork: boolean }>>('GET', `/api/orgs/${org}/repos${qs ? '?' + qs : ''}`)
+  },
+  getIssuesPRs: (owner: string, repo: string, refresh?: boolean) =>
+    request<{ repo: string; summary: string; cached: string }>('GET', `/api/issues-prs/${owner}/${repo}${refresh ? '?refresh=true' : ''}`),
+  getPortfolio: (repos?: string[]) =>
+    request<PortfolioRepo[]>('GET', `/api/stats/portfolio${repos?.length ? `?repos=${repos.join(',')}` : ''}`),
+  getScoreTrend: (repo: string, limit?: number) =>
+    request<Array<{ scanned_at: string; score: number; stars: number }>>('GET', `/api/stats/trend?repo=${encodeURIComponent(repo)}${limit ? `&limit=${limit}` : ''}`),
+  listRemediation: (params?: { audit_id?: string; repo?: string; status?: string }) => {
+    const q = new URLSearchParams()
+    if (params?.audit_id) q.set('audit_id', params.audit_id)
+    if (params?.repo) q.set('repo', params.repo)
+    if (params?.status) q.set('status', params.status)
+    const qs = q.toString()
+    return request<RemediationItem[]>('GET', `/api/remediation${qs ? '?' + qs : ''}`)
+  },
+  createRemediationItem: (auditId: string, repo: string, title: string, severity: string) =>
+    request<RemediationItem>('POST', '/api/remediation', { audit_id: auditId, repo, title, severity }),
+  updateRemediationItem: (id: string, patch: Partial<Pick<RemediationItem, 'title' | 'severity' | 'status' | 'notes'> & { due_date: string }>) =>
+    request<void>('PUT', `/api/remediation/${id}`, patch),
+  deleteRemediationItem: (id: string) => request<void>('DELETE', `/api/remediation/${id}`),
   getTrending: (params: GetTrendingParams) => {
     const q = new URLSearchParams()
     if (params.language) q.set('language', params.language)

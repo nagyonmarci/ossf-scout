@@ -4,11 +4,88 @@ import Markdown from 'react-markdown';
 import { api, Audit } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
-const ANTHROPIC_MODELS = [
-  { id: 'claude-opus-4-8',           label: 'Opus 4'   },
-  { id: 'claude-sonnet-4-6',         label: 'Sonnet 4' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4'  },
-];
+interface SCNode { action: string; tag: string; sha: string; resolved: boolean; files: string[] }
+
+function SupplyChainGraph({ auditId }: { auditId: string }) {
+  const [nodes, setNodes] = useState<SCNode[] | null>(null);
+  const [repo, setRepo] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/audits/${auditId}/supply-chain`)
+      .then(r => r.json())
+      .then(d => { setNodes(d.nodes ?? []); setRepo(d.repo ?? ''); })
+      .catch(() => setNodes([]))
+      .finally(() => setLoading(false));
+  }, [auditId]);
+
+  if (loading) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>Loading supply chain…</p>;
+  if (!nodes || nodes.length === 0) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>No GitHub Actions dependencies found in context.</p>;
+
+  const NODE_W = 220, NODE_H = 44, GAP_X = 40, GAP_Y = 20;
+  const ROOT_W = 160, ROOT_H = 36;
+  const svgW = ROOT_W + GAP_X + NODE_W + 32;
+  const svgH = Math.max(ROOT_H + 20, nodes.length * (NODE_H + GAP_Y));
+  const rootX = 8, rootY = svgH / 2 - ROOT_H / 2;
+  const nodesX = rootX + ROOT_W + GAP_X;
+
+  return (
+    <div style={{ overflowX: 'auto', marginTop: 8 }}>
+      <svg width={svgW} height={svgH} style={{ display: 'block', fontFamily: 'monospace' }}>
+        {/* Root node */}
+        <rect x={rootX} y={rootY} width={ROOT_W} height={ROOT_H} rx={6}
+          fill="rgba(100,149,237,0.15)" stroke="rgba(100,149,237,0.6)" strokeWidth={1.5} />
+        <text x={rootX + ROOT_W / 2} y={rootY + ROOT_H / 2 + 5} textAnchor="middle"
+          fill="var(--fg, #e0e0e0)" fontSize={12} fontWeight={600}>
+          {repo.split('/')[1] || repo}
+        </text>
+
+        {nodes.map((n, i) => {
+          const ny = i * (NODE_H + GAP_Y) + GAP_Y / 2;
+          const color = n.resolved ? 'rgba(76,175,80,0.15)' : 'rgba(255,152,0,0.15)';
+          const stroke = n.resolved ? 'rgba(76,175,80,0.6)' : 'rgba(255,152,0,0.6)';
+          const cy = ny + NODE_H / 2;
+          return (
+            <g key={n.action + n.tag + i}>
+              <line x1={rootX + ROOT_W} y1={rootY + ROOT_H / 2} x2={nodesX} y2={cy}
+                stroke="var(--border, #444)" strokeWidth={1} strokeDasharray="4 3" />
+              <rect x={nodesX} y={ny} width={NODE_W} height={NODE_H} rx={5}
+                fill={color} stroke={stroke} strokeWidth={1.5} />
+              <text x={nodesX + 8} y={ny + 16} fill="var(--fg, #e0e0e0)" fontSize={11} fontWeight={600}>
+                {n.action.length > 28 ? '…' + n.action.slice(-27) : n.action}
+              </text>
+              <text x={nodesX + 8} y={ny + 30} fill="var(--muted, #888)" fontSize={10}>
+                {n.tag ? `@${n.tag.slice(0, 20)}` : '(no tag)'}{' '}
+                {n.resolved ? `· ${n.sha.slice(0, 8)}` : '· unresolved'}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+        Green = SHA resolved · Orange = tag still mutable · {nodes.length} action dependencies
+      </p>
+    </div>
+  );
+}
+
+const ALL_MODELS: Record<string, { id: string; label: string }[]> = {
+  anthropic: [
+    { id: 'claude-opus-4-8',           label: 'Opus 4'   },
+    { id: 'claude-sonnet-4-6',         label: 'Sonnet 4' },
+    { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4'  },
+  ],
+  openai: [
+    { id: 'gpt-4o',      label: 'GPT-4o'      },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+    { id: 'o3-mini',     label: 'o3-mini'     },
+  ],
+  gemini: [
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+    { id: 'gemini-1.5-pro',   label: 'Gemini 1.5 Pro'   },
+    { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash'  },
+  ],
+};
 
 const LS = {
   get: (k: string, fallback: string) => localStorage.getItem(k) ?? fallback,
@@ -26,13 +103,17 @@ export default function AuditDetail() {
   const [showGenForm, setShowGenForm] = useState(false);
   const [genProvider, setGenProvider] = useState(() => LS.get('audit.provider', 'ollama'));
   const [genApiKey, setGenApiKey] = useState(() => LS.get('audit.anthropicKey', ''));
-  const [genModel, setGenModel] = useState(() => LS.get('audit.model', ANTHROPIC_MODELS[0].id));
+  const [genOpenAIKey, setGenOpenAIKey] = useState(() => LS.get('audit.openaiKey', ''));
+  const [genGeminiKey, setGenGeminiKey] = useState(() => LS.get('audit.geminiKey', ''));
+  const [genModel, setGenModel] = useState(() => LS.get('audit.model', ALL_MODELS.anthropic[0].id));
   const [genOllamaURL, setGenOllamaURL] = useState(() => LS.get('audit.ollamaURL', ''));
   const [genOllamaModel, setGenOllamaModel] = useState(() => LS.get('audit.ollamaModel', ''));
-  const [genSplitGeneration, setGenSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'false') === 'true');
+  const [genSplitGeneration, setGenSplitGeneration] = useState(() => LS.get('audit.splitGeneration', 'true') === 'true');
   const [genAnalysisModel, setGenAnalysisModel] = useState(() => LS.get('audit.analysisModel', ''));
   const [genSubmitting, setGenSubmitting] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractMsg, setExtractMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -74,11 +155,15 @@ export default function AuditDetail() {
       await api.generateAudit(audit.id, {
         provider: genProvider || undefined,
         anthropic_key: genProvider === 'anthropic' ? genApiKey || undefined : undefined,
+        openai_key:    genProvider === 'openai'    ? genOpenAIKey || undefined : undefined,
+        gemini_key:    genProvider === 'gemini'    ? genGeminiKey || undefined : undefined,
         model: genProvider === 'anthropic' ? genModel || undefined
-             : genProvider === 'ollama'     ? genOllamaModel || undefined
+             : genProvider === 'openai'    ? genModel || undefined
+             : genProvider === 'gemini'    ? genModel || undefined
+             : genProvider === 'ollama'    ? genOllamaModel || undefined
              : undefined,
-        split_generation: genProvider === 'ollama' ? genSplitGeneration : undefined,
-        analysis_model: genProvider === 'ollama' && genSplitGeneration ? genAnalysisModel || undefined : undefined,
+        split_generation: (genProvider === 'anthropic' || genProvider === 'ollama') ? genSplitGeneration : undefined,
+        analysis_model: genSplitGeneration ? genAnalysisModel || undefined : undefined,
         ollama_url: genProvider === 'ollama' ? genOllamaURL || undefined : undefined,
       });
       setShowGenForm(false);
@@ -128,6 +213,10 @@ export default function AuditDetail() {
                   ? `Ollama · ${audit.model || '?'}`
                   : audit.provider === 'anthropic'
                   ? audit.model || 'Anthropic'
+                  : audit.provider === 'openai'
+                  ? audit.model || 'OpenAI'
+                  : audit.provider === 'gemini'
+                  ? audit.model || 'Gemini'
                   : 'Static snapshot'}
               </span>
               {(audit.input_tokens ?? 0) > 0 && (
@@ -153,9 +242,59 @@ export default function AuditDetail() {
                 </button>
               )}
               {audit.has_context && (
-                <a className="btn" href={`/api/audits/${audit.id}/context.md`} download>
-                  Download AI context
-                </a>
+                <>
+                  <a className="btn" href={`/api/audits/${audit.id}/context.md`} download>
+                    Download AI context
+                  </a>
+                  <Link
+                    to={`/audits/${audit.id}/compare`}
+                    className="btn"
+                    style={{ background: 'transparent', border: '1px solid var(--border)' }}
+                  >
+                    Compare models
+                  </Link>
+                </>
+              )}
+              {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
+                <>
+                  <a className="btn" href={`/api/audits/${audit.id}/export.sarif`} download>
+                    Export SARIF
+                  </a>
+                  <a className="btn" href={`/api/audits/${audit.id}/export.json`} download>
+                    Export JSON
+                  </a>
+                </>
+              )}
+              {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
+                <>
+                  <Link
+                    to={`/remediation?audit_id=${audit.id}`}
+                    className="btn"
+                    style={{ background: 'transparent', border: '1px solid var(--border)' }}
+                  >
+                    Track findings
+                  </Link>
+                  <button
+                    className="btn"
+                    style={{ background: 'transparent', border: '1px solid var(--border)' }}
+                    disabled={extracting}
+                    onClick={async () => {
+                      setExtracting(true);
+                      setExtractMsg(null);
+                      try {
+                        const r = await api.extractFindings(audit!.id);
+                        setExtractMsg(`${r.created} finding${r.created !== 1 ? 's' : ''} added to tracker`);
+                      } catch (e) {
+                        setExtractMsg('Extract failed: ' + String(e));
+                      } finally {
+                        setExtracting(false);
+                      }
+                    }}
+                  >
+                    {extracting ? 'Extracting…' : 'Extract to tracker'}
+                  </button>
+                  {extractMsg && <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{extractMsg}</span>}
+                </>
               )}
               {canRunWithAI && (
                 audit.has_context ? (
@@ -183,35 +322,57 @@ export default function AuditDetail() {
                 <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)' }}>
                   Re-generates the report using saved context — no re-cloning needed.
                 </p>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                  {(['ollama', 'anthropic', ''] as const).map(p => (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                  {(['ollama', 'anthropic', 'openai', 'gemini', ''] as const).map(p => (
                     <button
                       key={p}
                       className={`btn${genProvider === p ? ' btn-primary' : ''}`}
                       style={{ padding: '4px 12px', fontSize: 13, background: genProvider === p ? undefined : 'transparent', border: '1px solid var(--border)', color: genProvider === p ? undefined : 'var(--muted)' }}
                       onClick={() => { setGenProvider(p); LS.set('audit.provider', p); }}
                     >
-                      {p === '' ? 'Static snapshot' : p === 'anthropic' ? 'Anthropic' : 'Ollama'}
+                      {p === '' ? 'Snapshot' : p === 'anthropic' ? 'Anthropic' : p === 'openai' ? 'OpenAI' : p === 'gemini' ? 'Gemini' : 'Ollama'}
                     </button>
                   ))}
                 </div>
                 {genProvider === 'anthropic' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
-                    <input
-                      type="password"
-                      className="input"
-                      placeholder="Anthropic API key"
-                      value={genApiKey}
-                      onChange={e => { setGenApiKey(e.target.value); LS.set('audit.anthropicKey', e.target.value); }}
-                    />
-                    <select
-                      className="input"
-                      value={genModel}
-                      onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}
-                    >
-                      {ANTHROPIC_MODELS.map(m => (
-                        <option key={m.id} value={m.id}>{m.label}</option>
-                      ))}
+                    <input type="password" className="input" placeholder="Anthropic API key" value={genApiKey}
+                      onChange={e => { setGenApiKey(e.target.value); LS.set('audit.anthropicKey', e.target.value); }} />
+                    <select className="input" value={genModel}
+                      onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}>
+                      {ALL_MODELS.anthropic.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={genSplitGeneration}
+                        onChange={e => { setGenSplitGeneration(e.target.checked); LS.set('audit.splitGeneration', String(e.target.checked)); }}
+                      />
+                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>Split generation into section summaries before the final report</span>
+                    </label>
+                    {genSplitGeneration && (
+                      <input type="text" className="input" placeholder="Analysis model (optional — empty uses final model)"
+                        value={genAnalysisModel} onChange={e => { setGenAnalysisModel(e.target.value); LS.set('audit.analysisModel', e.target.value); }} />
+                    )}
+                  </div>
+                )}
+                {genProvider === 'openai' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+                    <input type="password" className="input" placeholder="OpenAI API key" value={genOpenAIKey}
+                      onChange={e => { setGenOpenAIKey(e.target.value); LS.set('audit.openaiKey', e.target.value); }} />
+                    <select className="input" value={genModel}
+                      onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}>
+                      {ALL_MODELS.openai.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                    </select>
+                  </div>
+                )}
+                {genProvider === 'gemini' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+                    <input type="password" className="input" placeholder="Gemini API key" value={genGeminiKey}
+                      onChange={e => { setGenGeminiKey(e.target.value); LS.set('audit.geminiKey', e.target.value); }} />
+                    <select className="input" value={genModel}
+                      onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}>
+                      {ALL_MODELS.gemini.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                     </select>
                   </div>
                 )}
@@ -275,6 +436,16 @@ export default function AuditDetail() {
           {audit.report && (audit.status === 'done' || audit.status === 'error') && (
             <div className="card audit-report">
               <Markdown>{audit.report}</Markdown>
+            </div>
+          )}
+
+          {audit.has_context && (audit.status === 'done' || audit.status === 'error') && (
+            <div className="card">
+              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Supply Chain Graph</h3>
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 8px' }}>
+                GitHub Actions dependencies detected in this repo's workflows.
+              </p>
+              <SupplyChainGraph auditId={audit.id} />
             </div>
           )}
         </>

@@ -14,7 +14,7 @@ Available as a **CLI tool** or a **web server** with a browser UI, scan history,
 > ### 🔎 Generate a full DevSecOps audit
 > Point ossf-scout at **any public repo** and it clones it, runs 30+ security tools, and produces a formal Markdown report — findings with CVSS scores and OWASP/STRIDE mapping, fix commands, and ready-to-paste CI guardrails. Free as a static snapshot, or AI-synthesised via Anthropic, OpenAI, Gemini, or Ollama.
 >
-> **📄 See real samples** — AI-synthesised report → [`examples/directus-audit-report-ai.md`](examples/directus-audit-report-ai.md) &nbsp;·&nbsp; static snapshot → [`examples/directus-audit-report.md`](examples/directus-audit-report.md) &nbsp;·&nbsp; raw evidence context → [`examples/directus-audit-context.md`](examples/directus-audit-context.md)
+> **📄 See real samples** — AI-synthesised report → [`examples/audit-directus-directus-2026-06-05_1.md`](examples/audit-directus-directus-2026-06-05_1.md) &nbsp;·&nbsp; PDF export → [`examples/audit-directus-directus.pdf`](examples/audit-directus-directus.pdf) &nbsp;·&nbsp; raw evidence context → [`examples/context-directus-directus-2026-06-05.md`](examples/context-directus-directus-2026-06-05.md)
 
 ---
 
@@ -129,9 +129,9 @@ The scan history is stored in `./data/ossf-scout.db` and persists across restart
 ### Audit Tab
 
 > **📄 Sample output** for `directus/directus`:
-> - **AI-synthesised report** → [`examples/directus-audit-report-ai.md`](examples/directus-audit-report-ai.md) — a derived security-posture score, calibrated findings (Evidence + Observation/Risk/Recommendation, CVSS), severity/exploitability/effort triage, a "not assessed" scope boundary, a phased remediation roadmap, CI-automated verification, and a STRIDE threat model (the full audit format)
-> - **Static snapshot** → [`examples/directus-audit-report.md`](examples/directus-audit-report.md) — free, no-AI raw data dump
-> - **AI input context** → [`examples/directus-audit-context.md`](examples/directus-audit-context.md) — the evidence fed to the model
+> - **AI-synthesised report** → [`examples/audit-directus-directus-2026-06-05_1.md`](examples/audit-directus-directus-2026-06-05_1.md) — 17-section report: executive summary, security strengths, posture scores, CVSS findings, sprint backlog, remediation roadmap, STRIDE threat model
+> - **PDF export** → [`examples/audit-directus-directus.pdf`](examples/audit-directus-directus.pdf) — the same report as a formatted PDF (pure-Go renderer)
+> - **AI input context** → [`examples/context-directus-directus-2026-06-05.md`](examples/context-directus-directus-2026-06-05.md) — the evidence fed to the model
 
 Open the **Audit** tab in the web UI:
 

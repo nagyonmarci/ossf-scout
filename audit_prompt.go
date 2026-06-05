@@ -126,7 +126,12 @@ Produce the following sections in order. Do not omit any.
    Examples: CodeQL enabled, secret scanning active, multi-stage Docker build, IP blocklist present, Dependabot configured.
    For each item cite the evidence (file, workflow name, or tool output).
    This section demonstrates audit balance — do not omit it even if findings are severe.
-6. **Findings Summary** — table: ID | Priority | Severity | Title | OWASP 2021 | Status
+6. **Findings Summary** — table with EXACT column headers: ID | Priority | Severity | Title | OWASP 2021 | Status.
+   Format rules: ID = plain text (FIND-001), no bold, no backticks.
+   Priority = exactly P0/P1/P2/P3.
+   Severity = exactly one word: Critical, High, Medium, Low, or Informational — never "Medium (5.3)" or any number.
+   CVSS scores belong only in per-finding sections, not in this summary table.
+   Status = Open / Resolved / "Potential — Requires Confirmation" / "Open — By Design".
 7. **Security Posture Summary** — a table with area scores (0–10) derived from the findings above.
    Scores must be grounded in evidence — do not fabricate.
    Columns: Area | Score | Rationale.
@@ -223,7 +228,12 @@ Produce the following sections in order. Do not omit any.
 4. **Methodology** — tools used, static vs dynamic distinction, known limitations
 5. **Security Strengths** — list security controls that are correctly implemented and provide genuine protection.
    For each item cite the evidence. Do not omit this section even if findings are severe.
-6. **Findings Summary** — table: ID | Priority | Severity | Title | OWASP 2021 | Status
+6. **Findings Summary** — table with EXACT column headers: ID | Priority | Severity | Title | OWASP 2021 | Status.
+   Format rules: ID = plain text (FIND-001), no bold, no backticks.
+   Priority = exactly P0/P1/P2/P3.
+   Severity = exactly one word: Critical, High, Medium, Low, or Informational — never "Medium (5.3)" or any number.
+   CVSS scores belong only in per-finding sections, not in this summary table.
+   Status = Open / Resolved / "Potential — Requires Confirmation" / "Open — By Design".
 7. **Security Posture Summary** — area scores (0–10) table: Area | Score | Rationale.
    Rows: CI/CD Pipeline Security · Dependency Management · Secrets Management · Supply Chain Integrity · Container Security · Application Code (SAST) · Overall (weighted average).
    Scores must be grounded in evidence — do not fabricate.

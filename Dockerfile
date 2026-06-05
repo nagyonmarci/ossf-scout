@@ -3,7 +3,7 @@
 # Stage 1: frontend build
 FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS frontend
 WORKDIR /app/frontend
-RUN npm install -g pnpm@8
+RUN npm install -g pnpm@11
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
@@ -67,7 +67,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git nodejs npm ca-certificates python3 python3-pip \
     && pip3 install --no-cache-dir --break-system-packages semgrep \
     && rm -rf /var/lib/apt/lists/*
-RUN npm install -g pnpm@8
+RUN npm install -g pnpm@11
 
 WORKDIR /app
 COPY --from=builder /app/ossf-scout .

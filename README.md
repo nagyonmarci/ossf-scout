@@ -66,6 +66,7 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Split generation** — lets a cheaper/fast model summarise evidence sections before a stronger final model writes the report
 - **Saved evidence context** — stores the compact Markdown/JSON context so reports can be regenerated later with another provider or model
 - **Context caching** — reuses a recent audit context when the repo HEAD SHA has not changed
+- **Automatic context compaction** — if a provider rejects the prompt as too large (token-per-minute limit or context window exceeded), automatically retries with a compacted context; applies to all providers (Anthropic, OpenAI, Gemini, Ollama)
 - **Skip-secrets option** — skips the slower `gitleaks`/`trufflehog` passes when speed matters
 - **Audit compare** — generates two reports from the same saved context and compares providers/models side-by-side
 - **Supply-chain graph** — visualizes GitHub Actions pinning suggestions and unresolved action references from saved audit context
@@ -162,7 +163,7 @@ ollama serve
 ollama pull llama3.2   # or qwen2.5, deepseek-r1:8b, etc.
 ```
 
-For Ollama, set `OLLAMA_BASE_URL` on the server. When running via Docker, the default (`http://host.docker.internal:11434`) is pre-configured in `docker-compose.yml`; for native use set it to `http://localhost:11434`. If the model's context window is too small, the tool automatically retries with a compacted context.
+For Ollama, set `OLLAMA_BASE_URL` on the server. When running via Docker, the default (`http://host.docker.internal:11434`) is pre-configured in `docker-compose.yml`; for native use set it to `http://localhost:11434`. If the model's context window is too small, the tool automatically retries with a compacted context (verbose tool outputs truncated).
 
 For an offline/local profile:
 

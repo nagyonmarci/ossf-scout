@@ -52,7 +52,7 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Persistent SQLite history** — scans, results, audits, audit contexts, schedules, issue/PR summaries, remediation items, and trend data survive restarts
 - **Portfolio dashboard** — aggregates watched repos with latest score, stars, weak checks, audit counts, provider, language, and score sparklines
 - **Score trend API/UI** — tracks Scorecard score and star history per repo across repeated scans
-- **Remediation board** — extracts findings from audit reports, creates remediation cards, and tracks status, severity, notes, due dates, and resolution
+- **Remediation board** — extracts findings from audit reports, creates remediation cards, and tracks status, severity, notes, due dates, and resolution; card titles link directly to the source audit
 - **Schedules** — run recurring audits at configurable intervals, enable/disable jobs, trigger now, and constrain runs to UTC time windows
 - **Auto-detected audit schedules** — suggests schedules for repos that repeatedly appear weak or are already being audited
 - **Issues/PR intelligence** — caches security-relevant open/closed issues and PR summaries for a repo; `?refresh=true` forces a live re-fetch
@@ -70,7 +70,7 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Skip-secrets option** — skips the slower `gitleaks`/`trufflehog` passes when speed matters
 - **Audit compare** — generates two reports from the same saved context and compares providers/models side-by-side
 - **Supply-chain graph** — visualizes GitHub Actions pinning suggestions and unresolved action references from saved audit context
-- **Export formats** — download Markdown reports, AI context Markdown, full JSON exports, or SARIF suitable for GitHub Code Scanning
+- **Export formats** — download Markdown reports, AI context Markdown, full JSON exports, SARIF suitable for GitHub Code Scanning, or a formatted **PDF** (pure-Go renderer, no external dependencies)
 - **Reasoning-model output cleaning** — strips `<think>…</think>` blocks emitted by reasoning models (DeepSeek-R1, QwQ, etc.) before saving the report
 - **Ground-truth claim verification** — after generation, every concrete claim (commit/pin SHA, `file:line`, `#PR`, CVE, `pkg@version`, workflow file, CVSS band/vector) is checked against the collected evidence and the CVSS base score recomputed; unverifiable claims are listed in an appendix and the report is marked **DRAFT**
 - **Cost tracking and guardrails** — records input/output tokens, estimates per-model cost, aggregates 30-day spend, and can reject audits above `MAX_AUDIT_COST_USD`
@@ -175,7 +175,7 @@ The Markdown report appears in the browser when complete (~1–3 min for AI, ~30
 
 A **Download AI context** button is available for every audit (including static snapshots) once the repo has been cloned and analysed. It downloads the compact Markdown that would be sent to the AI — useful for pasting into any LLM manually or for inspecting exactly what evidence was collected.
 
-Audit detail pages also expose a supply-chain graph for GitHub Actions pinning, JSON export, SARIF export, and a remediation extraction action that turns report findings into trackable remediation items.
+Audit detail pages expose a supply-chain graph for GitHub Actions pinning, JSON export, SARIF export, PDF download, and a remediation extraction action that turns report findings into trackable remediation items.
 
 **What it collects**
 
@@ -197,18 +197,25 @@ All tools are **bundled in the Docker image** (amd64 + arm64) — no separate in
 
 **Report structure**
 
-The generated Markdown document follows a fixed structure:
+The generated Markdown document follows a fixed 17-section structure:
 
 1. Metadata table — date, repo, commit, auditor, status
-2. Scope & Methodology
-3. Findings Summary — table with ID, Priority (P0–P2), CVSS Severity, OWASP 2021 category
-4. Per-finding sections — Root Cause · Impact Chain · Fix · Verification shell commands
-5. Open GitHub Issues & PRs — security-relevant items with risk assessment
-6. Remediation Status table & Verification Checklist
-7. P2 Recommendations — table with Effort (hours/days) and Risk Reduction estimates
-8. Shift-left guardrails — maps each finding to an automated CI gate with a runnable GitHub Actions YAML snippet
-9. Threat Model (STRIDE) — table covering Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege across auth flows, CI/CD, supply chain, secrets, and API inputs
-10. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm
+2. Executive Summary — 3–5 sentence non-technical overview for managers and CISOs
+3. Scope — what was checked (files, tools, GitHub API calls)
+4. Methodology — tools used, static vs dynamic distinction, known limitations
+5. Security Strengths — correctly implemented controls with evidence citations
+6. Findings Summary — table: ID · Priority (P0–P3) · Severity · Title · OWASP 2021 · Status
+7. Security Posture Summary — area scores (0–10) for CI/CD, Dependencies, Secrets, Supply Chain, Container, App Code
+8. Per-finding sections — Root Cause · Impact Chain · Fix · Verification shell commands
+9. Open GitHub Issues & PRs — security-relevant items with risk assessment
+10. P2 Recommendations — table with Effort (hours/days) and Risk Reduction estimates
+11. Remediation Roadmap — 30/60/90-day horizon plan mapped to Finding IDs
+12. Sprint Backlog — every P2 finding as a user story with acceptance criteria and story points
+13. Remediation Status table
+14. Verification Checklist — copy-paste shell commands, one per finding
+15. Shift-left guardrails — CI gate per finding with a runnable GitHub Actions YAML snippet
+16. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm, CI/CD Reliability
+17. Threat Model (STRIDE) — Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege across auth flows, CI/CD, supply chain, secrets, and API inputs
 
 **Cost:** Free without an API key (static snapshot). With a paid provider, token counts and estimated cost are shown in the audit history table and the cost dashboard. Set `MAX_AUDIT_COST_USD` to reject runs whose pre-flight estimate is above your budget.
 

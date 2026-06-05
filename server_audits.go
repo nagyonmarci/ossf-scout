@@ -179,7 +179,7 @@ func extractAndCreateFindings(db *sql.DB, auditID, repo, reportMD string) int {
 		// Find severity cell and the adjacent title cell
 		sev, title := "", ""
 		for i, c := range cells {
-			cl := strings.ToLower(c)
+			cl := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(c, "**", ""), "`", ""))
 			if knownSev[cl] {
 				sev = cl
 				// Look for title in adjacent non-empty cells

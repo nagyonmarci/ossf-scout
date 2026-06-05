@@ -427,7 +427,21 @@ else echo 'no package manager available'; fi`),
 				return "skipped (SkipSecrets=true)"
 			}
 			return shIn(tmpDir, "trufflehog not installed — skipped",
-				"trufflehog filesystem . --json --no-update 2>&1 | head -200 || echo 'trufflehog not installed — skipped'")
+				`out=$(trufflehog filesystem . --json --no-update 2>/dev/null) || echo 'trufflehog not installed — skipped'; `+
+					`if [ -n "$out" ] && command -v python3 >/dev/null 2>&1; then `+
+					`echo "$out" | python3 -c "`+
+					`import sys,json`+"\n"+
+					`for line in sys.stdin:`+"\n"+
+					`    try:`+"\n"+
+					`        d=json.loads(line.strip())`+"\n"+
+					`        fm=d.get('SourceMetadata',{}).get('Data',{}).get('Filesystem',{})`+"\n"+
+					`        f,l=fm.get('file','?'),fm.get('line','?')`+"\n"+
+					`        det=d.get('DetectorName','?')`+"\n"+
+					`        ver=d.get('Verified',False)`+"\n"+
+					`        print(f'{f}:{l} | {det} | verified:{ver}')`+"\n"+
+					`    except: pass`+
+					`" 2>/dev/null | head -60; `+
+					`elif [ -n "$out" ]; then echo "$out" | head -100; fi`)
 		}(),
 		PrivateKeyHeaders: shIn(tmpDir, "none",
 			"grep -rn '-----BEGIN.*PRIVATE KEY-----' . --include='*.pem' --include='*.key' --include='*.env' | grep -v node_modules | head -20 || echo 'none'"),

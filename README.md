@@ -44,6 +44,7 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Notifications** — in-app toast + browser Notification API on scan completion
 - **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
 - **AI-powered Audit tab** — clones any public GitHub repo, runs static analysis, generates a formal DevSecOps report ([sample](examples/directus-audit-report-ai.md)); choose Anthropic (Opus 4 / Sonnet 4 / Haiku 4), a local **Ollama** model, or run for free as a static data snapshot
+- **Ground-truth claim verification** — after generation, every concrete claim (commit/pin SHA, `file:line`, `#PR`, CVE, `pkg@version`, workflow file, CVSS band/vector) is checked against the collected evidence and the CVSS base score recomputed; unverifiable claims are listed in an appendix and the report is marked **DRAFT**
 
 ---
 

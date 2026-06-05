@@ -453,9 +453,10 @@ func (r *pdfRenderer) textOf(n *html.Node) string {
 
 func (r *pdfRenderer) collectText(n *html.Node, sb *strings.Builder) {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type == html.TextNode {
+		switch c.Type {
+		case html.TextNode:
 			sb.WriteString(c.Data)
-		} else if c.Type == html.ElementNode {
+		case html.ElementNode:
 			r.collectText(c, sb)
 			if c.Data == "br" {
 				sb.WriteString("\n")
@@ -513,9 +514,10 @@ func cellText(n *html.Node) string {
 	var collect func(*html.Node)
 	collect = func(node *html.Node) {
 		for c := node.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.TextNode {
+			switch c.Type {
+			case html.TextNode:
 				sb.WriteString(c.Data)
-			} else if c.Type == html.ElementNode {
+			case html.ElementNode:
 				collect(c)
 			}
 		}

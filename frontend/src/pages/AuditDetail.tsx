@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { api, Audit } from '../api';
 import StatusBadge from '../components/StatusBadge';
 
@@ -440,7 +441,7 @@ export default function AuditDetail() {
 
           {audit.report && (audit.status === 'done' || audit.status === 'error') && (
             <div className="card audit-report">
-              <Markdown>{audit.report}</Markdown>
+              <Markdown remarkPlugins={[remarkGfm]}>{audit.report}</Markdown>
             </div>
           )}
 

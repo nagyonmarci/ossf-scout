@@ -587,6 +587,9 @@ td.description {
 /* Pending badge */
 .badge-pending { background: rgba(234,179,8,0.15); color: var(--yellow); }
 
+/* Remediation card title link */
+.remediation-title-link:hover { text-decoration: underline; }
+
 /* ── Print / PDF ──────────────────────────────────────────────────────────── */
 .no-print { display: initial; }
 
@@ -599,15 +602,18 @@ td.description {
 
   /* full-width, white background */
   body { background: #fff !important; color: #000 !important; font-size: 11pt; }
-  .prose, .audit-content, main, [class*="content"] {
+  .prose, .audit-content, .audit-report, main, [class*="content"] {
     width: 100% !important;
     max-width: none !important;
     padding: 0 !important;
     margin: 0 !important;
+    color: #000 !important;
   }
 
-  /* headings: avoid orphaned heading at page bottom */
-  h1, h2, h3, h4 { page-break-after: avoid; color: #000 !important; }
+  /* headings: avoid orphaned heading at page bottom; H2 sections start on new page */
+  h1, h3, h4 { page-break-after: avoid; color: #000 !important; }
+  h2 { page-break-before: always; page-break-after: avoid; color: #000 !important; }
+  h2:first-of-type { page-break-before: avoid; }
 
   /* tables and code blocks: avoid splitting across pages */
   table, pre, figure { page-break-inside: avoid; }

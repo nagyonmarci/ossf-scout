@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 
 const PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama', ''] as const;
@@ -132,7 +133,7 @@ function ResultPanel({ result, label }: { result: CompareResult; label: string }
         <p className="error-msg">{result.error}</p>
       ) : (
         <div className="card audit-report" style={{ flex: 1, overflow: 'auto', maxHeight: '80vh' }}>
-          <Markdown>{result.report}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]}>{result.report}</Markdown>
         </div>
       )}
     </div>

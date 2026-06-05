@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { api, RemediationItem } from '../api';
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
@@ -124,11 +124,22 @@ function ItemCard({
       ) : (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6, marginBottom: 6 }}>
-            <span style={{ fontSize: 13, lineHeight: 1.4, flex: 1 }}>{item.title}</span>
+            <Link
+              to={`/audits/${item.audit_id}`}
+              className="remediation-title-link"
+              style={{ fontSize: 13, lineHeight: 1.4, flex: 1, color: 'inherit', textDecoration: 'none' }}
+            >
+              {item.title}
+            </Link>
             <SeverityBadge sev={item.severity} />
           </div>
           {item.repo && (
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4, fontFamily: 'monospace' }}>{item.repo}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2, fontFamily: 'monospace' }}>{item.repo}</div>
+          )}
+          {item.audit_id && (
+            <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 4, fontFamily: 'monospace', opacity: 0.6 }}>
+              {item.audit_id.slice(0, 8)}
+            </div>
           )}
           {item.notes && (
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, whiteSpace: 'pre-wrap' }}>{item.notes}</div>

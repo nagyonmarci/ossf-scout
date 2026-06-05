@@ -109,7 +109,12 @@ func generateReport(ctx *auditContext, apiKey, model string) (report string, inp
 	if model == "" {
 		model = defaultModel
 	}
-	return callClaude(auditSystemPrompt, buildUserPrompt(ctx), apiKey, model, 8192)
+	report, inputTokens, outputTokens, err = callClaude(auditSystemPrompt, buildUserPrompt(ctx), apiKey, model, defaultMaxTokens)
+	if err != nil && isContextTooLarge(err) {
+		compact := compactForOllama(ctx)
+		report, inputTokens, outputTokens, err = callClaude(auditSystemPrompt, buildUserPrompt(compact), apiKey, model, defaultMaxTokens)
+	}
+	return
 }
 
 func generateSplitClaudeReport(ctx *auditContext, apiKey, analysisModel, finalModel string) (report string, inputTokens, outputTokens int, err error) {

@@ -97,5 +97,10 @@ func generateGeminiReport(ctx *auditContext, apiKey, model string) (report strin
 	if model == "" {
 		model = defaultGeminiModel
 	}
-	return callGemini(auditSystemPrompt, buildUserPrompt(ctx), apiKey, model, 8192)
+	report, inputTokens, outputTokens, err = callGemini(auditSystemPrompt, buildUserPrompt(ctx), apiKey, model, defaultMaxTokens)
+	if err != nil && isContextTooLarge(err) {
+		compact := compactForOllama(ctx)
+		report, inputTokens, outputTokens, err = callGemini(auditSystemPrompt, buildUserPrompt(compact), apiKey, model, defaultMaxTokens)
+	}
+	return
 }

@@ -517,6 +517,22 @@ func mustUnmarshalContext(contextJSON string) *auditContext {
 	return &ctx
 }
 
+// isContextTooLarge returns true when an AI provider error indicates the prompt
+// exceeded the model's context window or token-per-minute rate limit.
+func isContextTooLarge(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "too large") ||
+		strings.Contains(msg, "too long") ||
+		strings.Contains(msg, "context_length_exceeded") ||
+		strings.Contains(msg, "tokens per min") ||
+		strings.Contains(msg, "maximum context") ||
+		strings.Contains(msg, "resource_exhausted") ||
+		strings.Contains(msg, "prompt is too long")
+}
+
 // estimateAuditCost returns a rough pre-run cost estimate in USD based on
 // context length and the target model's pricing.
 func estimateAuditCost(contextJSON, model string) float64 {

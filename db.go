@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -60,6 +61,14 @@ type scanResultRow struct {
 	RepoURL      string   `json:"repo_url"`
 }
 
+const (
+	scanColumns = `id, created_at, finished_at, status, error_msg,
+	        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword, single_repo,
+	        total_repos, result_count`
+	resultColumns = `id, scan_id, repo, stars, open_issues, score, language, description,
+	        weak_checks, scorecard_url, repo_url`
+)
+
 const schema = `
 CREATE TABLE IF NOT EXISTS scans (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,7 +114,7 @@ func openDB(path string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec("PRAGMA foreign_keys = ON;PRAGMA journal_mode = WAL;"); err != nil {
+	if _, err := db.Exec("PRAGMA foreign_keys = ON;PRAGMA journal_mode = WAL;PRAGMA synchronous = NORMAL;PRAGMA wal_autocheckpoint = 1000;PRAGMA cache_size = -65536;PRAGMA temp_store = MEMORY;"); err != nil {
 		return nil, err
 	}
 	if _, err := db.Exec(schema); err != nil {
@@ -139,6 +148,48 @@ CREATE TABLE IF NOT EXISTS audits (
 	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN model TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN provider TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN context_json TEXT`)
+	_, _ = db.Exec(`ALTER TABLE audits ADD COLUMN head_sha TEXT NOT NULL DEFAULT ''`)
+
+	const scheduleSchema = `
+CREATE TABLE IF NOT EXISTS audit_schedules (
+    id                TEXT PRIMARY KEY,
+    repo              TEXT NOT NULL,
+    interval_h        INTEGER NOT NULL DEFAULT 168,
+    provider          TEXT NOT NULL DEFAULT '',
+    model             TEXT NOT NULL DEFAULT '',
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    time_window_start INTEGER NOT NULL DEFAULT -1,
+    time_window_end   INTEGER NOT NULL DEFAULT -1,
+    cli_fallback      INTEGER NOT NULL DEFAULT 1,
+    auto_detected     INTEGER NOT NULL DEFAULT 0,
+    detect_reason     TEXT NOT NULL DEFAULT '',
+    last_run_at       DATETIME,
+    next_run_at       DATETIME NOT NULL,
+    created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_schedules_next_run ON audit_schedules(next_run_at);
+CREATE INDEX IF NOT EXISTS idx_schedules_repo ON audit_schedules(repo);`
+	if _, err := db.Exec(scheduleSchema); err != nil {
+		return nil, fmt.Errorf("create audit_schedules table: %w", err)
+	}
+
+	const issuePRsSchema = `
+CREATE TABLE IF NOT EXISTS repo_issues_prs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo       TEXT NOT NULL,
+    fetched_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    data_json  TEXT NOT NULL,
+    summary_md TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_repo_issues_prs_repo ON repo_issues_prs(repo);`
+	if _, err := db.Exec(issuePRsSchema); err != nil {
+		return nil, fmt.Errorf("create repo_issues_prs table: %w", err)
+	}
+
+	if err := dbEnsureRemediationTable(db); err != nil {
+		return nil, fmt.Errorf("create remediation_items table: %w", err)
+	}
+
 	// Mark any scans that were running when the server last died
 	_, _ = db.Exec(`UPDATE scans SET status='error', error_msg='server restarted' WHERE status='running'`)
 	return db, nil
@@ -204,10 +255,7 @@ func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
 
 func dbListScans(db *sql.DB) ([]scanRow, error) {
 	rows, err := db.Query(
-		`SELECT id, created_at, finished_at, status, error_msg,
-		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword, single_repo,
-		        total_repos, result_count
-		 FROM scans ORDER BY id DESC`,
+		`SELECT ` + scanColumns + ` FROM scans ORDER BY id DESC`,
 	)
 	if err != nil {
 		return nil, err
@@ -218,10 +266,7 @@ func dbListScans(db *sql.DB) ([]scanRow, error) {
 
 func dbGetScan(db *sql.DB, id int64) (*scanRow, error) {
 	rows, err := db.Query(
-		`SELECT id, created_at, finished_at, status, error_msg,
-		        language, min_stars, max_score, limit_, workers, check_filter, cli_fallback, pushed_after, min_maintained, topic, keyword, single_repo,
-		        total_repos, result_count
-		 FROM scans WHERE id=?`, id,
+		`SELECT `+scanColumns+` FROM scans WHERE id=?`, id,
 	)
 	if err != nil {
 		return nil, err
@@ -236,9 +281,7 @@ func dbGetScan(db *sql.DB, id int64) (*scanRow, error) {
 
 func dbGetResults(db *sql.DB, scanID int64) ([]scanResultRow, error) {
 	rows, err := db.Query(
-		`SELECT id, scan_id, repo, stars, open_issues, score, language, description,
-		        weak_checks, scorecard_url, repo_url
-		 FROM scan_results WHERE scan_id=? ORDER BY score ASC`,
+		`SELECT `+resultColumns+` FROM scan_results WHERE scan_id=? ORDER BY score ASC`,
 		scanID,
 	)
 	if err != nil {
@@ -373,6 +416,293 @@ func dbDeleteAudit(db *sql.DB, id string) error {
 	return err
 }
 
+// ── SHA-cache ────────────────────────────────────────────────────────────────
+
+func dbUpdateAuditHeadSHA(db *sql.DB, id, sha string) error {
+	_, err := db.Exec(`UPDATE audits SET head_sha=? WHERE id=?`, sha, id)
+	return err
+}
+
+// dbFindRecentContext returns context_json for the most recent completed audit
+// of the same repo+SHA within maxAge, or nil if none found.
+func dbFindRecentContext(db *sql.DB, repo, sha string, maxAge time.Duration) (*string, error) {
+	if sha == "" {
+		return nil, nil
+	}
+	cutoff := time.Now().UTC().Add(-maxAge)
+	var ctx string
+	err := db.QueryRow(
+		`SELECT context_json FROM audits
+		 WHERE repo=? AND head_sha=? AND context_json IS NOT NULL
+		   AND created_at >= ?
+		 ORDER BY created_at DESC LIMIT 1`,
+		repo, sha, cutoff.Format(time.RFC3339),
+	).Scan(&ctx)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &ctx, nil
+}
+
+// ── Cost stats ───────────────────────────────────────────────────────────────
+
+type costStats struct {
+	TotalUSD      float64            `json:"total_usd"`
+	ByModel       map[string]float64 `json:"by_model"`
+	InputTokens   int                `json:"total_input_tokens"`
+	OutputTokens  int                `json:"total_output_tokens"`
+	AuditCount    int                `json:"audit_count"`
+}
+
+func dbGetCostStats(db *sql.DB, days int) (costStats, error) {
+	cutoff := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+	rows, err := db.Query(
+		`SELECT model, COALESCE(input_tokens,0), COALESCE(output_tokens,0)
+		 FROM audits
+		 WHERE status='done' AND created_at >= ?`, cutoff,
+	)
+	if err != nil {
+		return costStats{}, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	s := costStats{ByModel: make(map[string]float64)}
+	for rows.Next() {
+		var model string
+		var in, out int
+		if err := rows.Scan(&model, &in, &out); err != nil {
+			return costStats{}, err
+		}
+		s.InputTokens += in
+		s.OutputTokens += out
+		s.AuditCount++
+		if prices, ok := modelPrices[model]; ok {
+			cost := float64(in)/1_000_000*prices[0] + float64(out)/1_000_000*prices[1]
+			s.ByModel[model] += cost
+			s.TotalUSD += cost
+		}
+	}
+	return s, rows.Err()
+}
+
+// ── Schedules ────────────────────────────────────────────────────────────────
+
+type scheduleRow struct {
+	ID              string     `json:"id"`
+	Repo            string     `json:"repo"`
+	IntervalH       int        `json:"interval_h"`
+	Provider        string     `json:"provider"`
+	Model           string     `json:"model"`
+	Enabled         bool       `json:"enabled"`
+	TimeWindowStart int        `json:"time_window_start"`
+	TimeWindowEnd   int        `json:"time_window_end"`
+	CliFallback     bool       `json:"cli_fallback"`
+	AutoDetected    bool       `json:"auto_detected"`
+	DetectReason    string     `json:"detect_reason,omitempty"`
+	LastRunAt       *time.Time `json:"last_run_at"`
+	NextRunAt       time.Time  `json:"next_run_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+}
+
+const scheduleColumns = `id, repo, interval_h, provider, model, enabled,
+	time_window_start, time_window_end, cli_fallback, auto_detected, detect_reason,
+	last_run_at, next_run_at, created_at`
+
+func scheduleRowsFromSQL(rows *sql.Rows) ([]scheduleRow, error) {
+	var out []scheduleRow
+	for rows.Next() {
+		var s scheduleRow
+		var enabled, cliFallback, autoDetected int
+		if err := rows.Scan(
+			&s.ID, &s.Repo, &s.IntervalH, &s.Provider, &s.Model, &enabled,
+			&s.TimeWindowStart, &s.TimeWindowEnd, &cliFallback, &autoDetected, &s.DetectReason,
+			&s.LastRunAt, &s.NextRunAt, &s.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		s.Enabled = enabled != 0
+		s.CliFallback = cliFallback != 0
+		s.AutoDetected = autoDetected != 0
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func dbListSchedules(db *sql.DB) ([]scheduleRow, error) {
+	rows, err := db.Query(`SELECT ` + scheduleColumns + ` FROM audit_schedules ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return scheduleRowsFromSQL(rows)
+}
+
+func dbListDueSchedules(db *sql.DB, now time.Time) ([]scheduleRow, error) {
+	rows, err := db.Query(
+		`SELECT `+scheduleColumns+` FROM audit_schedules
+		 WHERE enabled=1 AND next_run_at <= ?`,
+		now.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return scheduleRowsFromSQL(rows)
+}
+
+func dbCreateSchedule(db *sql.DB, id, repo string, intervalH int, provider, model string, timeWindowStart, timeWindowEnd int, cliFallback, autoDetected bool, detectReason string) error {
+	nextRun := time.Now().UTC().Add(time.Duration(intervalH) * time.Hour)
+	_, err := db.Exec(
+		`INSERT OR IGNORE INTO audit_schedules
+		 (id, repo, interval_h, provider, model, time_window_start, time_window_end, cli_fallback, auto_detected, detect_reason, next_run_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, repo, intervalH, provider, model, timeWindowStart, timeWindowEnd,
+		boolToInt(cliFallback), boolToInt(autoDetected), detectReason,
+		nextRun.Format(time.RFC3339),
+	)
+	return err
+}
+
+func dbUpdateSchedule(db *sql.DB, id string, intervalH int, provider, model string, enabled bool, timeWindowStart, timeWindowEnd int) error {
+	_, err := db.Exec(
+		`UPDATE audit_schedules SET interval_h=?, provider=?, model=?, enabled=?, time_window_start=?, time_window_end=? WHERE id=?`,
+		intervalH, provider, model, boolToInt(enabled), timeWindowStart, timeWindowEnd, id,
+	)
+	return err
+}
+
+func dbUpdateScheduleLastRun(db *sql.DB, id string, now time.Time, nextRun time.Time) error {
+	_, err := db.Exec(
+		`UPDATE audit_schedules SET last_run_at=?, next_run_at=? WHERE id=?`,
+		now.UTC().Format(time.RFC3339), nextRun.UTC().Format(time.RFC3339), id,
+	)
+	return err
+}
+
+func dbDeleteSchedule(db *sql.DB, id string) error {
+	_, err := db.Exec(`DELETE FROM audit_schedules WHERE id=?`, id)
+	return err
+}
+
+func dbTriggerScheduleNow(db *sql.DB, id string) error {
+	_, err := db.Exec(`UPDATE audit_schedules SET next_run_at=? WHERE id=?`,
+		time.Now().UTC().Add(-time.Second).Format(time.RFC3339), id)
+	return err
+}
+
+// dbAutoDetectSchedules creates schedule suggestions for repos that warrant monitoring.
+// Rule 1: scan_results with score < 5.0 AND stars > 500 → enabled=1, weekly
+// Rule 2: repos with 3+ audits in 90 days → enabled=0 suggestion
+func dbAutoDetectSchedules(db *sql.DB) error {
+	// Rule 1: high-star, low-score repos from scan_results
+	rows, err := db.Query(
+		`SELECT DISTINCT repo FROM scan_results
+		 WHERE score < 5.0 AND stars > 500
+		   AND repo NOT IN (SELECT repo FROM audit_schedules)
+		 LIMIT 50`,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close() //nolint:errcheck
+	var repos []string
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return err
+		}
+		repos = append(repos, r)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, repo := range repos {
+		id := repo // deterministic ID to avoid duplicates across restarts
+		reason := "high-star repo with low Scorecard score (auto-detected)"
+		if err := dbCreateSchedule(db, "auto-"+hashStr(id), repo,
+			defaultScheduleIntervalH, "", "", -1, -1, true, true, reason); err != nil {
+			continue
+		}
+	}
+
+	// Rule 2: repos audited 3+ times in 90 days → suggest (enabled=0)
+	cutoff := time.Now().UTC().AddDate(0, 0, -90).Format(time.RFC3339)
+	rows2, err := db.Query(
+		`SELECT repo, COUNT(*) as cnt FROM audits
+		 WHERE created_at >= ?
+		   AND repo NOT IN (SELECT repo FROM audit_schedules)
+		 GROUP BY repo HAVING cnt >= 3 LIMIT 20`, cutoff,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows2.Close() //nolint:errcheck
+	for rows2.Next() {
+		var repo string
+		var cnt int
+		if err := rows2.Scan(&repo, &cnt); err != nil {
+			return err
+		}
+		reason := fmt.Sprintf("audited %d times in the last 90 days (suggested)", cnt)
+		sid := "suggest-" + hashStr(repo)
+		_ = dbCreateSchedule(db, sid, repo, defaultScheduleIntervalH, "", "", -1, -1, false, true, reason)
+		// disable the suggestion
+		_, _ = db.Exec(`UPDATE audit_schedules SET enabled=0 WHERE id=?`, sid)
+	}
+	return rows2.Err()
+}
+
+// ── Issues/PR index ──────────────────────────────────────────────────────────
+
+func dbStoreIssuesPRs(db *sql.DB, repo, dataJSON, summaryMD string) error {
+	_, err := db.Exec(
+		`INSERT INTO repo_issues_prs (repo, data_json, summary_md) VALUES (?, ?, ?)`,
+		repo, dataJSON, summaryMD,
+	)
+	return err
+}
+
+// dbGetRecentIssuesPRsSummary returns the most recent summary_md for repo
+// if fetched within maxAge, otherwise nil.
+func dbGetRecentIssuesPRsSummary(db *sql.DB, repo string, maxAge time.Duration) (*string, error) {
+	cutoff := time.Now().UTC().Add(-maxAge)
+	var summary string
+	err := db.QueryRow(
+		`SELECT summary_md FROM repo_issues_prs
+		 WHERE repo=? AND fetched_at >= ? AND summary_md IS NOT NULL
+		 ORDER BY fetched_at DESC LIMIT 1`,
+		repo, cutoff.Format(time.RFC3339),
+	).Scan(&summary)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &summary, nil
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// hashStr returns a short deterministic hex string for use as ID suffix.
+func hashStr(s string) string {
+	h := uint32(2166136261)
+	for i := 0; i < len(s); i++ {
+		h ^= uint32(s[i])
+		h *= 16777619
+	}
+	return fmt.Sprintf("%08x", h)
+}
+
 func scanRowsFromSQL(rows *sql.Rows) ([]scanRow, error) {
 	var out []scanRow
 	for rows.Next() {
@@ -386,6 +716,249 @@ func scanRowsFromSQL(rows *sql.Rows) ([]scanRow, error) {
 			return nil, err
 		}
 		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// ── Portfolio stats ───────────────────────────────────────────────────────────
+
+type portfolioRepo struct {
+	Repo         string   `json:"repo"`
+	LatestScore  float64  `json:"latest_score"`
+	Stars        int      `json:"stars"`
+	WeakChecks   []string `json:"weak_checks"`
+	AuditCount   int      `json:"audit_count"`
+	LastAuditAt  string   `json:"last_audit_at"`
+	Provider     string   `json:"provider"`
+	Language     string   `json:"language"`
+}
+
+// dbGetPortfolio returns per-repo stats for the given repos (from scan_results
+// and audits tables). If repos is empty it returns the top 20 by audit count.
+func dbGetPortfolio(db *sql.DB, repos []string) ([]portfolioRepo, error) {
+	var rows *sql.Rows
+	var err error
+	if len(repos) == 0 {
+		rows, err = db.Query(`
+			SELECT r.repo,
+			       MAX(r.score) AS score,
+			       MAX(r.stars) AS stars,
+			       r.weak_checks,
+			       COUNT(DISTINCT a.id) AS audit_count,
+			       MAX(a.created_at) AS last_audit_at,
+			       MAX(a.provider) AS provider,
+			       r.language
+			FROM scan_results r
+			LEFT JOIN audits a ON a.repo = r.repo
+			GROUP BY r.repo
+			ORDER BY audit_count DESC, score ASC
+			LIMIT 20`)
+	} else {
+		placeholders := make([]string, len(repos))
+		args := make([]interface{}, len(repos))
+		for i, r := range repos {
+			placeholders[i] = "?"
+			args[i] = r
+		}
+		rows, err = db.Query(`
+			SELECT r.repo,
+			       MAX(r.score) AS score,
+			       MAX(r.stars) AS stars,
+			       r.weak_checks,
+			       COUNT(DISTINCT a.id) AS audit_count,
+			       MAX(a.created_at) AS last_audit_at,
+			       MAX(a.provider) AS provider,
+			       r.language
+			FROM scan_results r
+			LEFT JOIN audits a ON a.repo = r.repo
+			WHERE r.repo IN (`+strings.Join(placeholders, ",")+`)
+			GROUP BY r.repo
+			ORDER BY score ASC`, args...)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var out []portfolioRepo
+	for rows.Next() {
+		var p portfolioRepo
+		var weakRaw sql.NullString
+		var lastAudit sql.NullString
+		var provider sql.NullString
+		if err := rows.Scan(&p.Repo, &p.LatestScore, &p.Stars, &weakRaw,
+			&p.AuditCount, &lastAudit, &provider, &p.Language); err != nil {
+			return nil, err
+		}
+		if weakRaw.Valid && weakRaw.String != "" {
+			_ = json.Unmarshal([]byte(weakRaw.String), &p.WeakChecks)
+		}
+		if lastAudit.Valid {
+			p.LastAuditAt = lastAudit.String
+		}
+		if provider.Valid {
+			p.Provider = provider.String
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// ── Remediation tracker ───────────────────────────────────────────────────────
+
+type remediationItem struct {
+	ID         string  `json:"id"`
+	AuditID    string  `json:"audit_id"`
+	Repo       string  `json:"repo"`
+	Title      string  `json:"title"`
+	Severity   string  `json:"severity"`
+	Status     string  `json:"status"` // open | in_progress | resolved
+	DueDate    *string `json:"due_date"`
+	ResolvedAt *string `json:"resolved_at"`
+	Notes      string  `json:"notes"`
+	CreatedAt  string  `json:"created_at"`
+}
+
+func dbEnsureRemediationTable(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS remediation_items (
+    id          TEXT PRIMARY KEY,
+    audit_id    TEXT NOT NULL REFERENCES audits(id) ON DELETE CASCADE,
+    repo        TEXT NOT NULL DEFAULT '',
+    title       TEXT NOT NULL,
+    severity    TEXT NOT NULL DEFAULT 'medium',
+    status      TEXT NOT NULL DEFAULT 'open',
+    due_date    TEXT,
+    resolved_at TEXT,
+    notes       TEXT NOT NULL DEFAULT '',
+    created_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_remediation_audit ON remediation_items(audit_id);
+CREATE INDEX IF NOT EXISTS idx_remediation_repo  ON remediation_items(repo);
+CREATE INDEX IF NOT EXISTS idx_remediation_status ON remediation_items(status);`)
+	return err
+}
+
+func dbListRemediationByAudit(db *sql.DB, auditID string) ([]remediationItem, error) {
+	rows, err := db.Query(
+		`SELECT id,audit_id,repo,title,severity,status,due_date,resolved_at,notes,created_at
+		 FROM remediation_items WHERE audit_id=? ORDER BY
+		 CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at`,
+		auditID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return remediationRowsFromSQL(rows)
+}
+
+func dbListRemediationByRepo(db *sql.DB, repo string) ([]remediationItem, error) {
+	rows, err := db.Query(
+		`SELECT id,audit_id,repo,title,severity,status,due_date,resolved_at,notes,created_at
+		 FROM remediation_items WHERE repo=? ORDER BY
+		 CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, status, created_at`,
+		repo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return remediationRowsFromSQL(rows)
+}
+
+func dbListAllRemediation(db *sql.DB, status string) ([]remediationItem, error) {
+	var rows *sql.Rows
+	var err error
+	if status != "" {
+		rows, err = db.Query(
+			`SELECT id,audit_id,repo,title,severity,status,due_date,resolved_at,notes,created_at
+			 FROM remediation_items WHERE status=? ORDER BY
+			 CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at`,
+			status)
+	} else {
+		rows, err = db.Query(
+			`SELECT id,audit_id,repo,title,severity,status,due_date,resolved_at,notes,created_at
+			 FROM remediation_items ORDER BY
+			 CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, status, created_at`)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	return remediationRowsFromSQL(rows)
+}
+
+func dbCreateRemediationItem(db *sql.DB, id, auditID, repo, title, severity string) error {
+	_, err := db.Exec(
+		`INSERT INTO remediation_items (id,audit_id,repo,title,severity) VALUES (?,?,?,?,?)`,
+		id, auditID, repo, title, severity)
+	return err
+}
+
+func dbUpdateRemediationItem(db *sql.DB, id, title, severity, status, notes, dueDate string) error {
+	var due interface{}
+	if dueDate != "" {
+		due = dueDate
+	}
+	var resolvedAt interface{}
+	if status == "resolved" {
+		t := time.Now().UTC().Format(time.RFC3339)
+		resolvedAt = t
+	}
+	_, err := db.Exec(
+		`UPDATE remediation_items SET title=?,severity=?,status=?,notes=?,due_date=?,resolved_at=? WHERE id=?`,
+		title, severity, status, notes, due, resolvedAt, id)
+	return err
+}
+
+func dbDeleteRemediationItem(db *sql.DB, id string) error {
+	_, err := db.Exec(`DELETE FROM remediation_items WHERE id=?`, id)
+	return err
+}
+
+func remediationRowsFromSQL(rows *sql.Rows) ([]remediationItem, error) {
+	var out []remediationItem
+	for rows.Next() {
+		var r remediationItem
+		if err := rows.Scan(&r.ID, &r.AuditID, &r.Repo, &r.Title, &r.Severity,
+			&r.Status, &r.DueDate, &r.ResolvedAt, &r.Notes, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ── Score trend ───────────────────────────────────────────────────────────────
+
+type scoreTrendPoint struct {
+	ScannedAt string  `json:"scanned_at"`
+	Score     float64 `json:"score"`
+	Stars     int     `json:"stars"`
+}
+
+// dbGetScoreTrend returns score history for a repo, ordered by scan date.
+func dbGetScoreTrend(db *sql.DB, repo string, limit int) ([]scoreTrendPoint, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := db.Query(`
+		SELECT s.created_at, r.score, r.stars
+		FROM scan_results r
+		JOIN scans s ON s.id = r.scan_id
+		WHERE r.repo = ?
+		ORDER BY s.created_at ASC
+		LIMIT ?`, repo, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+	var out []scoreTrendPoint
+	for rows.Next() {
+		var p scoreTrendPoint
+		if err := rows.Scan(&p.ScannedAt, &p.Score, &p.Stars); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }

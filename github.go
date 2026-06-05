@@ -30,7 +30,7 @@ func ghGet(rawURL, token string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("X-GitHub-Api-Version", gitHubAPIVersion)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -89,7 +89,7 @@ func searchGitHub(cfg config) ([]ghRepo, error) {
 	params.Set("q", query)
 	params.Set("sort", "stars")
 	params.Set("order", "desc")
-	params.Set("per_page", "100")
+	params.Set("per_page", fmt.Sprint(defaultPageSize))
 
 	var all []ghRepo
 	page := 1
@@ -110,7 +110,7 @@ func searchGitHub(cfg config) ([]ghRepo, error) {
 		}
 		all = append(all, sr.Items...)
 		page++
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(searchPageDelay)
 	}
 	if len(all) > cfg.limit {
 		all = all[:cfg.limit]

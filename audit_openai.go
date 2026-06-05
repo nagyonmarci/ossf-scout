@@ -16,9 +16,9 @@ type openAIMessage struct {
 }
 
 type openAIRequest struct {
-	Model     string          `json:"model"`
-	MaxTokens int             `json:"max_tokens"`
-	Messages  []openAIMessage `json:"messages"`
+	Model               string          `json:"model"`
+	MaxCompletionTokens int             `json:"max_completion_tokens"`
+	Messages            []openAIMessage `json:"messages"`
 }
 
 type openAIResponse struct {
@@ -46,7 +46,7 @@ func callOpenAI(systemPrompt, userPrompt, apiKey, model string, maxTokens int) (
 	}
 	payload := openAIRequest{
 		Model:     model,
-		MaxTokens: maxTokens,
+		MaxCompletionTokens: maxTokens,
 		Messages: []openAIMessage{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
@@ -92,7 +92,7 @@ func generateOpenAIReport(ctx *auditContext, apiKey, model string) (report strin
 	report, inputTokens, outputTokens, err = callOpenAI(auditSystemPrompt, buildUserPrompt(ctx), apiKey, model, defaultMaxTokens)
 	if err != nil && isContextTooLarge(err) {
 		compact := compactForOllama(ctx)
-		report, inputTokens, outputTokens, err = callOpenAI(auditSystemPrompt, buildUserPrompt(compact), apiKey, model, defaultMaxTokens)
+		report, inputTokens, outputTokens, err = callOpenAI(auditSystemPrompt, buildUserPrompt(compact), apiKey, model, defaultMaxTokens/2)
 	}
 	return
 }

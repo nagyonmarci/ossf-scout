@@ -36,10 +36,14 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install pnpm
+        if: matrix.language == 'go'
+        run: npm install -g pnpm@11
+
       - name: Frontend build
         if: matrix.language == 'go'
         working-directory: frontend
-        run: npm ci && npm run build
+        run: pnpm install --frozen-lockfile && pnpm run build
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@87557b9c84dde89fdd9b10e88954ac2f4248e463 # v4.36.1

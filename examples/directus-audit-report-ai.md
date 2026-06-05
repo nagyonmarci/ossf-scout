@@ -26,7 +26,7 @@
 | Domain | Score | Rationale (evidence) |
 |--------|------:|----------------------|
 | CI/CD security | 70 | CodeQL workflow present, but 50+ unpinned actions incl. third-party (F-002); `actionlint`/`zizmor` not run |
-| Dependency management | 70 | Git history shows CVE-update commits + changesets, but `npm audit` couldn't run (`ENOLOCK`) and Dependabot status not captured |
+| Dependency management | 70 | Git history shows CVE-update commits + changesets, but SCA didn't run in this snapshot (`ENOLOCK`; now fixed — collector runs `pnpm audit`) and Dependabot status not captured — **re-run required** |
 | Secrets management | 95 | No hardcoded secrets; only a JWT **test fixture**; scanners (`gitleaks`/`trufflehog`) unavailable so not fully verified |
 | Supply-chain security | 60 | Unpinned actions + no SBOM/provenance (F-002), offset by `cosign` in release and GPG-signed HEAD |
 | Repository governance | 70 | Signed commits present; branch protection + security policy **not captured** (rate-limited) |
@@ -45,7 +45,7 @@ were **out of scope / unavailable** this run.
 
 - **Tools that ran:** ripgrep pattern sweeps (eval, raw SQL, SSRF, crypto, secrets, headers), `git log`, GPG signature check on HEAD.
 - **Tools unavailable this run (not captured):** `actionlint`, `zizmor`, `gitleaks`, `trufflehog`, `checkov`, `trivy`, `helm`, `kube-linter` — all reported *not found*. Findings that would normally come from these tools are marked accordingly; their absence is **not** evidence of safety.
-- **Dependency audit:** `npm audit` failed with `ENOLOCK` (directus is a pnpm workspace with no npm lockfile). No dependency CVE data was collected — re-run with `pnpm audit`.
+- **Dependency audit (SCA):** in **this** snapshot `npm audit` failed with `ENOLOCK` (directus is a pnpm workspace with no npm lockfile), so no dependency-CVE data was collected. This was a collector bug — it is **now fixed**: the audit tool detects `pnpm-lock.yaml` and runs `pnpm audit --json` (falling back to npm/yarn by lockfile), so a re-run yields real SCA results. Ignoring third-party/transitive package CVEs on a Node stack is not acceptable for a final audit; re-run before sign-off.
 - **GitHub API:** open issues, open PRs, branch-protection and secret-scanning queries all returned **HTTP 403 rate-limit** (unauthenticated). Per audit policy, no specific issue/PR numbers are cited from GitHub below.
 - **No-fabrication:** no action pin SHA is asserted — the context contains no authoritative resolved-SHA block, so fixes reference the resolution command instead of a literal SHA.
 
@@ -57,7 +57,7 @@ were **out of scope / unavailable** this run.
 | F-002 | P1 | **4.8 Medium** | Unpinned GitHub Actions (incl. third-party, mutable tags) | A08 Integrity Failures | Open |
 | F-003 | P2 | **3.9 Low** | Production Docker base image not digest-pinned | A08 Integrity Failures | Open |
 | F-004 | P3 | **0.0 Informational** | `X-Powered-By: Directus` header explicitly set | A05 Misconfiguration | Open |
-| F-005 | P3 | **0.0 Informational** | Sandboxed `eval` in the `exec` flow operation | A03 Injection | By design |
+| F-005 | P2 | **Low (residual)** | Admin-reachable code execution via the `exec` flow operation | A03 Injection | Hardening |
 
 > P-labels are fix-urgency, not severity. No Critical/High findings were identified in the captured evidence.
 
@@ -69,7 +69,7 @@ were **out of scope / unavailable** this run.
 | F-002 Unpinned actions | Medium | Low (needs upstream compromise) | Low (~3 h) |
 | F-003 Docker base not pinned | Low | Low | Low (~1 h) |
 | F-004 `X-Powered-By` | Informational | n/a | Low (minutes) |
-| F-005 `exec` sandbox | Informational | Low (admin-gated, by design) | n/a |
+| F-005 `exec` code execution | Low (residual) | Low (admin-only, but RCE surface) | Low (disable via env if unused) |
 
 ## 5. Findings
 
@@ -120,6 +120,13 @@ async function assertPublic(url: string) {
 Apply before each `axios.get`/`fetch` above as **defense-in-depth** — covering the sites
 `IMPORT_IP_DENY_LIST` misses — and keep the check on the resolved IP to defeat DNS rebinding. Also
 harden the `IMPORT_IP_DENY_LIST` default to include the full RFC-1918 / link-local ranges.
+
+**Network-layer control (more robust).** App-level validation is necessary but not sufficient against
+DNS rebinding (TOCTOU between the check and the socket). Enforce it at the network too: restrict the
+container/pod **egress** (deny RFC-1918, link-local `169.254.0.0/16` incl. cloud metadata, and
+`localhost`) via an egress NetworkPolicy / firewall, and route outbound fetches through a **forward
+proxy / reverse-proxy allow-list** so the host set is enforced outside the application process. On
+cloud, also require IMDSv2 (or block `169.254.169.254`) so SSRF can't read instance credentials.
 
 **Verification.**
 ```bash
@@ -206,25 +213,36 @@ information only — no direct security impact, hence Informational.
 curl -sI http://localhost:8055/server/ping | grep -i x-powered-by   # expect no output
 ```
 
-### F-005 · Sandboxed `eval` in the `exec` flow operation
-**OWASP:** A03:2021 · **CWE:** CWE-95 · **Severity:** CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:L/I:L/A:L → **0.0 Informational (by design)**
+### F-005 · Admin-reachable code execution via the `exec` flow operation
+**OWASP:** A03:2021 · **CWE:** CWE-95 · **Severity:** CVSS base **4.1 Medium** (`CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:L/I:L/A:L`) → **Low (residual)** after compensating controls
 
-**Evidence.** File `api/src/operations/exec/index.ts` · Line `49` · Issue: `context.eval(code, …)` — but `context` is an isolated-vm sandbox and `code` is admin-authored (by design).
+**Evidence.** File `api/src/operations/exec/index.ts` · Line `49` · Issue: `context.eval(code, { timeout: scriptTimeoutMs })` runs caller-authored script.
 
-**Description.** `api/src/operations/exec/index.ts:49` runs `context.eval(code, { timeout: scriptTimeoutMs })`.
-The `context` is an isolated-vm sandbox and the executed `code` comes from a Flow's "Run Script"
-operation, which only an **administrator** can author. This is a documented platform feature, not an
-injection bug — listed for transparency.
+**Description.** `api/src/operations/exec/index.ts:49` executes a Flow's "Run Script" operation. The
+`context` is an `isolated-vm` sandbox and authoring is **admin-only** — strong compensating controls.
+But this is **not "informational by design"**: admin-reachable code execution is a real attack surface
+(a compromised admin token, a stored-XSS-to-admin chain, or an over-broad role becomes RCE), and the
+sandbox/`os`/`process` boundary is only as strong as its configuration. Rated **Low residual**, not
+dismissed.
 
-**Recommendation.** Keep flow-creation restricted to trusted admin roles; document the sandbox boundary
-and timeout in the security docs.
+**Recommendation.** Don't rely on documentation alone. If the deployment doesn't need user scripts,
+**disable the operation** rather than trust the sandbox — e.g. restrict `FLOWS_RUN_SCRIPT_MAX_MEMORY`/
+`FLOWS_RUN_SCRIPT_TIMEOUT` and lock down the modules/env exposed to it via the `FLOWS_EXEC_*` env
+allow-list, or remove the `exec` operation from the enabled set. Keep flow-creation restricted to a
+minimal set of trusted admins and monitor flow changes in the audit log.
 
 ## 6. Open GitHub issues & PRs
 
-**Not assessable this run.** The GitHub REST queries for open issues, open PRs and branch-protection
-all returned HTTP 403 (unauthenticated rate limit). No specific issue or PR numbers are cited.
-Re-run with a `GITHUB_TOKEN` to populate this section. *(Note from git history: commit `eab59d9`
-"CVE dependency updates (#27589)" indicates the project does track and merge CVE fixes.)*
+**Not assessable this run.** The GitHub REST queries for open issues, open PRs, branch-protection and
+secret-scanning all returned HTTP 403 (unauthenticated rate limit). No specific issue or PR numbers are
+cited. *(Note from git history: commit `eab59d9` "CVE dependency updates (#27589)" indicates the project
+does track and merge CVE fixes.)*
+
+> **This is a blocking gap, not a footnote.** Without authenticated metadata the **CI/CD integrity**
+> story is unverified — branch protection, required reviews/status checks, and who can push to `main`
+> are exactly where supply-chain risk concentrates (see F-002). An audit of a live repository **cannot
+> be considered final** until a `GITHUB_TOKEN` re-run confirms branch-protection rules, reviews open
+> PRs/issues for security-relevant changes, and reads secret-scanning alerts.
 
 ## Not assessed (scope boundary)
 
@@ -237,7 +255,8 @@ not reachable** this run and carry no assurance either way:
 - **Production infrastructure** — load balancers, WAF, secrets managers, runtime env vars.
 - **Third-party SaaS integrations** — the external providers Directus can call (storage, AI, OAuth) were not tested.
 - **Authenticated GitHub metadata** — issues/PRs, branch protection, secret-scanning alerts (HTTP 403 rate-limit).
-- **Dependency CVEs** — `npm audit` failed (`ENOLOCK`); no SCA data collected.
+- **Dependency CVEs (SCA)** — not collected in this snapshot (`ENOLOCK`); the collector is now `pnpm`-aware, so a re-run produces SCA data. Treat third-party/transitive CVEs as **unknown** until then.
+- **Dynamic / runtime (DAST)** — this is a **baseline static assessment**; a running instance must be exercised (auth, SSRF, injection at runtime) before sign-off.
 
 ## 7. P2 recommendations
 
@@ -347,7 +366,7 @@ jobs:
 - **Rate limiting** — Implemented: `api/src/middleware/rate-limiter-global.ts` (RateLimiterRedis/Memory, `Retry-After` header). Positive.
 - **CORS** — `api/src/middleware/cors.ts` uses the `cors` middleware (env-driven). Exact origin policy *(not captured)* — verify `CORS_ORIGIN` is not `*` in production.
 - **HTTP headers** — `helmet` CSP, HSTS and COOP configured in `api/src/app.ts`. Positive; offset by **F-004**.
-- **Dependencies** — *(not captured)* — `npm audit` failed (`ENOLOCK`); run `pnpm audit`.
+- **Dependencies** — *(not captured in this snapshot)* — `npm audit` failed (`ENOLOCK`); the collector now runs `pnpm audit` for pnpm workspaces, so a re-run produces SCA data.
 - **Container** — See **F-003**; non-root `USER node` is a positive.
 - **Kubernetes / Helm** — No chart found (`helm not installed`); no manifests in repo.
 - **Secrets / credential hygiene** — No hardcoded secrets found; the only token match is a JWT **test fixture** (`app/src/utils/jwt-payload.test.ts:6`). `gitleaks`/`trufflehog` *(not captured — not installed)*.
@@ -357,29 +376,30 @@ jobs:
 
 ---
 
-> *Editor's note: the block below is the **actual `verifyReport()` output** for this report — not hand-written — so the sample shows 1:1 what the tool appends. The three "unverified" rows are forward-looking **fix suggestions** (pinned versions `pm2@5.4.3` / `corepack@0.32.0` from the F-003 fix, and the proposed `hardening.yml` workflow); the verifier flags them because they aren't in the **current** evidence — exactly the strictness the check is designed to enforce.*
+> *Editor's note: the block below is the **actual `verifyReport()` output** for this report — not hand-written — so the sample shows 1:1 what the tool appends. The "unverified" rows are forward-looking **fix suggestions** (pinned versions and a proposed CI workflow), not fabricated findings; the verifier flags them because they aren't in the **current** evidence — exactly the strictness the check is designed to enforce.*
 
 > ⚠️ **DRAFT — 3 unverified claim(s).** Concrete specifics below could not be grounded in the collected evidence. Resolve every item in "Appendix: Claim Verification" before publishing or disclosing.
 
 ## Appendix: Claim Verification
 
-Automated post-generation check of concrete claims against collected evidence. Method: SHAs and `file:line` matched against `grep -rn` output; `#PR` against GitHub/commit evidence; CVEs and pkg@version against the dependency audit; workflow files against the collected workflow list; CVSS bands recomputed. No live network calls.
+Automated post-generation check of concrete claims against collected evidence. Method: SHAs matched against resolved pin set and git evidence; `file:line` against `grep -rn` output; `#PR` against GitHub/commit evidence; CVEs against Dependabot/osv-scanner; workflow files against WorkflowList; pkg@version against npm audit/osv-scanner; CVSS bands recomputed. No live network calls.
 
 | Claim | Type | Status | Detail |
 |---|---|---|---|
-| `pm2@5.4.3` | pkg@version | ❌ unverified | not found in dependency-audit evidence |
-| `corepack@0.32.0` | pkg@version | ❌ unverified | not found in dependency-audit evidence |
+| `pm2@5.4.3` | pkg@version | ❌ unverified | not found in npm/osv-scanner evidence |
+| `corepack@0.32.0` | pkg@version | ❌ unverified | not found in npm/osv-scanner evidence |
 | `.github/workflows/hardening.yml` | workflow file | ❌ unverified | not in collected workflow list — may not exist |
 | `4.3 (Medium)` | CVSS band | ✓ verified | band correct |
 | `4.8 (Medium)` | CVSS band | ✓ verified | band correct |
 | `3.9 (Low)` | CVSS band | ✓ verified | band correct |
+| `4.1 (Medium)` | CVSS band | ✓ verified | band correct |
 | `CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N` | CVSS vector | ✓ verified | computed 4.3 (Medium) |
 | `CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:N` | CVSS vector | ✓ verified | computed 4.8 (Medium) |
 | `CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N` | CVSS vector | ✓ verified | computed 4.2 (Medium) |
 | `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N` | CVSS vector | ✓ verified | computed 0.0 (None) |
 | `CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:L/I:L/A:L` | CVSS vector | ✓ verified | computed 4.1 (Medium) |
 | `#27589` | PR/issue | ✓ verified | present in GitHub/commit evidence |
-| `d358376d91385256285b80a566c5ee0ae7bbcc32` | SHA | ✓ verified | present in collected evidence |
+| `d358376d91385256285b80a566c5ee0ae7bbcc32` | commit SHA | ✓ verified | present in git/evidence |
 | `api/src/services/files.ts:285` | file:line | ✓ verified | found in grep evidence |
 | `api/src/services/mcp-oauth/cimd.ts:277` | file:line | ✓ verified | found in grep evidence |
 | `api/src/permissions/utils/fetch-dynamic-variable-data.ts:118` | file:line | ✓ verified | found in grep evidence |
@@ -399,4 +419,5 @@ Automated post-generation check of concrete claims against collected evidence. M
 | `.github/workflows/claude-code-review.yml` | workflow file | ✓ verified | matches collected workflow list |
 | `.github/workflows/security-verify.yml` | workflow file | ✓ verified | matches collected workflow list |
 
-**Summary:** 28 verified, 3 unverified.
+**Summary:** 29 verified, 3 unverified.
+

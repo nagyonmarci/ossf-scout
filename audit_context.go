@@ -382,8 +382,15 @@ func collectContext(repo, ghToken string, opts collectOptions) (*auditContext, s
 				"cat Dockerfile 2>/dev/null || echo '(not found)'"),
 		},
 		Dependencies: auditDeps{
-			PnpmAudit: shIn(tmpDir, "no package manager available",
-				"npm audit --json 2>&1 | head -300 || pnpm audit --json 2>&1 | head -300 || echo 'no package manager available'"),
+			// Pick the right tool by lockfile. The previous one-liner piped npm
+			// audit into `head` (exit 0), so the `|| pnpm` fallback never fired and
+			// pnpm workspaces returned the npm ENOLOCK error instead of real data.
+			PnpmAudit: shIn(tmpDir, "no package manager available", `
+if [ -f pnpm-lock.yaml ]; then pnpm audit --json 2>&1 | head -400;
+elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm audit --json 2>&1 | head -400;
+elif [ -f yarn.lock ]; then yarn audit --json 2>&1 | head -400;
+elif [ -f package.json ]; then pnpm audit --json 2>&1 | head -400 || npm audit --json 2>&1 | head -400;
+else echo 'no package manager available'; fi`),
 			WorkspaceOverrides: shIn(tmpDir, "none",
 				"grep -A 40 '^overrides:' pnpm-workspace.yaml 2>/dev/null || echo 'none'"),
 		},

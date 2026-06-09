@@ -69,6 +69,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@11
 
+RUN groupadd --system --gid 10001 scout \
+    && useradd --system --uid 10001 --gid 10001 --no-create-home scout
+
 WORKDIR /app
 COPY --from=builder /app/ossf-scout .
 COPY --from=builder /go/bin/scorecard      /usr/local/bin/scorecard
@@ -80,6 +83,10 @@ COPY --from=bintools /usr/local/bin/helm       /usr/local/bin/helm
 COPY --from=bintools /usr/local/bin/zizmor     /usr/local/bin/zizmor
 COPY --from=bintools /usr/local/bin/kube-linter  /usr/local/bin/kube-linter
 COPY --from=bintools /usr/local/bin/trufflehog   /usr/local/bin/trufflehog
+
+RUN chown scout:scout /app
+
+USER 10001:10001
 
 EXPOSE 7878
 CMD ["./ossf-scout", "-serve"]

@@ -55,6 +55,7 @@ type auditInfra struct {
 	HelmSecretTemplate string `json:"helmSecretTemplate"`
 	HelmValues         string `json:"helmValues"`
 	Dockerfile         string `json:"dockerfile"`
+	DockerfileFindings string `json:"dockerfileFindings"`
 }
 
 type auditDeps struct {
@@ -289,7 +290,7 @@ func collectContext(repo, ghToken string, opts collectOptions) (*auditContext, s
 	ref := shIn(tmpDir, "unknown", "git rev-parse --short HEAD")
 
 	// Detect IaC presence to skip expensive tools on non-IaC repos
-	hasDockerfile := shIn(tmpDir, "", "test -f Dockerfile && echo 1") == "1"
+	hasDockerfile := shIn(tmpDir, "", "find . -name 'Dockerfile' -not -path '*/node_modules/*' -not -path '*/vendor/*' | head -1") != ""
 	hasTerraform  := shIn(tmpDir, "", "find . -maxdepth 5 -name '*.tf' -not -path '*/node_modules/*' | head -1") != ""
 	hasHelmChart  := shIn(tmpDir, "", "find . -maxdepth 6 -name 'Chart.yaml' | head -1") != ""
 	hasK8s        := shIn(tmpDir, "", "find . -name '*.yaml' -not -path '*/node_modules/*' | xargs grep -l 'kind:' 2>/dev/null | head -1") != ""
@@ -389,7 +390,34 @@ done`),
 			HelmValues: shIn(tmpDir, "(not found)",
 				"find . -path '*/helm/*/values.yaml' | head -1 | xargs cat 2>/dev/null || echo '(not found)'"),
 			Dockerfile: shIn(tmpDir, "(not found)",
-				"cat Dockerfile 2>/dev/null || echo '(not found)'"),
+				"find . -name 'Dockerfile' -not -path '*/node_modules/*' -not -path '*/vendor/*' | head -3 | while read f; do echo \"=== $f ===\"; cat \"$f\"; echo; done 2>/dev/null || echo '(not found)'"),
+			DockerfileFindings: shIn(tmpDir, "no Dockerfile found", `
+find . -name 'Dockerfile' -not -path '*/node_modules/*' -not -path '*/vendor/*' | head -5 | while read f; do
+  echo "=== $f ==="
+  # Missing USER directive or explicit root
+  if ! grep -qE '^USER ' "$f"; then
+    echo "MISSING_USER: no USER directive — final stage runs as root"
+  elif grep -qE '^USER (root|0)\b' "$f"; then
+    echo "USER_ROOT: explicit USER root/0 in final stage"
+  fi
+  # Unpinned base images (no @sha256 digest)
+  grep -nE '^FROM ' "$f" | grep -v '@sha256:' | grep -v '^FROM scratch' | while read line; do
+    echo "UNPINNED_FROM: $line"
+  done
+  # :latest tag
+  grep -nE '^FROM .*:latest' "$f" | while read line; do
+    echo "LATEST_TAG: $line"
+  done
+  # Hardcoded secrets in ENV/ARG lines
+  grep -nE '^(ENV|ARG)\s+\S*(PASSWORD|SECRET|TOKEN|API_KEY|PASSWD|PWD)\S*\s*=' "$f" | grep -vE '=\s*$' | grep -vE '""\s*$' | while read line; do
+    echo "HARDCODED_SECRET_HINT: $line"
+  done
+  # Dangerous network/shell tools installed in any stage
+  grep -nE 'install.*(^|\s)(netcat|ncat|nc\s|openssh-client|ssh-client|curl|wget)(\s|$)' "$f" | while read line; do
+    echo "DANGEROUS_PACKAGE: $line"
+  done
+  echo
+done`),
 		},
 		Dependencies: auditDeps{
 			// Pick the right tool by lockfile. The previous one-liner piped npm

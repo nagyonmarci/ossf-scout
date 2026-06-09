@@ -95,7 +95,8 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 ### Packaging
 
 - **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
-- **Docker image with bundled tools** — ships `scorecard`, `gitleaks`, `actionlint`, `osv-scanner`, `trivy`, `helm`, `zizmor`, `kube-linter`, `trufflehog`, `semgrep`, Node/npm, and `pnpm`
+- **Docker image with bundled tools** — ships `scorecard`, `gitleaks`, `actionlint`, `osv-scanner`, `trivy`, `helm`, `zizmor`, `kube-linter`, `trufflehog`, `semgrep`, Node/npm, and `pnpm`; amd64 + arm64
+- **Hardened image** — [Wolfi](https://github.com/wolfi-dev/os) base (near-zero OS CVEs), non-root user (UID 10001), SHA256-verified binary downloads, static Go build, `dumb-init` PID 1, `HEALTHCHECK`, OCI labels
 - **Offline-friendly Ollama profile** — Docker Compose can run an Ollama sidecar for local AI generation
 
 ---

@@ -24,7 +24,7 @@ services:
       MAX_AUDIT_COST_USD: ${MAX_AUDIT_COST_USD:-}
       # Auth: set to "true" to require Authentik forward-auth headers (X-Authentik-Username)
       AUTH_REQUIRED: ${AUTH_REQUIRED:-false}
-    command: ["./ossf-scout", "-serve", "-port", "7878", "-db", "/app/data/ossf-scout.db"]
+    command: ["ossf-scout", "-serve", "-port", "7878", "-db", "/app/data/ossf-scout.db"]
 
   # Offline/air-gapped profile: Ollama sidecar — enable with:
   #   OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile offline up

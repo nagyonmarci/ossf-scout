@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"time"
 )
 
 //go:embed frontend/dist
@@ -84,7 +85,14 @@ func startServer(port int, dbPath string, serverToken string) {
 
 	addr := fmt.Sprintf(":%d", port)
 	fmt.Fprintf(os.Stderr, "ossf-scout web UI running at http://localhost%s\n", addr)
-	if err := http.ListenAndServe(addr, authMiddleware(mux)); err != nil {
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      authMiddleware(mux),
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 180 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		os.Exit(1)
 	}

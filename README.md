@@ -11,16 +11,46 @@ Searches GitHub for popular repositories, queries the [OpenSSF Scorecard](https:
 
 Available as a **CLI tool** or a **web server** with a browser UI, scan history, scheduled audits, remediation tracking, and portfolio views.
 
-> ### 🔎 Generate a full DevSecOps audit
-> Point ossf-scout at **any public repo** and it clones it, runs 30+ security tools, and produces a formal Markdown report — findings with CVSS scores and OWASP/STRIDE mapping, fix commands, and ready-to-paste CI guardrails. Free as a static snapshot, or AI-synthesised via Anthropic, OpenAI, Gemini, or Ollama.
->
-> **📄 See real samples** — AI-synthesised report → [`examples/audit-directus-directus-2026-06-05_1.md`](examples/audit-directus-directus-2026-06-05_1.md) &nbsp;·&nbsp; PDF export → [`examples/audit-directus-directus.pdf`](examples/audit-directus-directus.pdf) &nbsp;·&nbsp; raw evidence context → [`examples/context-directus-directus-2026-06-05.md`](examples/context-directus-directus-2026-06-05.md)
+Point ossf-scout at **any public repo** and it clones it, runs 30+ security tools, and produces a formal Markdown report — findings with CVSS scores and OWASP/STRIDE mapping, fix commands, and ready-to-paste CI guardrails. Free as a static snapshot, or AI-synthesised via Anthropic, OpenAI, Gemini, or Ollama.
+
+**Sample output for `directus/directus`:** [AI report](examples/audit-directus-directus-2026-06-05_1.md) · [PDF](examples/audit-directus-directus.pdf) · [raw evidence context](examples/context-directus-directus-2026-06-05.md)
+
+---
+
+## Quick Start
+
+### CLI
+
+```bash
+export GITHUB_TOKEN=ghp_...
+go run . -lang go -min-stars 1000 -max-score 5 -limit 50
+```
+
+### Web Server
+
+```bash
+go run . -serve
+# Open http://localhost:7878
+```
+
+### Docker
+
+```bash
+GITHUB_TOKEN=ghp_... docker compose up --build
+# Open http://localhost:7878
+```
+
+Scan history is stored in `./data/ossf-scout.db` and persists across restarts.
+
+### Run an audit
+
+Open the **Audit** tab in the web UI, enter `owner/repo`, choose a provider, and click **Run Audit**. The report appears in the browser when complete (~1–3 min for AI, ~30s for static snapshot).
 
 ---
 
 ## How it compares
 
-Most OpenSSF Scorecard tooling answers *"how secure is **this** repo?"* or *"how is **my org** trending?"*. ossf-scout asks the inverse question: **which popular repositories are weakest right now, so I know where a contribution lands hardest?**
+Most OpenSSF Scorecard tooling answers *"how secure is **this** repo?"* or *"how is **my org** trending?"*. ossf-scout asks the inverse: **which popular repositories are weakest right now, so I know where a contribution lands hardest?**
 
 | Tool | Focus | Where ossf-scout differs |
 |------|-------|--------------------------|
@@ -42,39 +72,25 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Single-repo mode** — score any public repo directly by `owner/repo` without running a GitHub Search query
 - **GitHub Trending scanner** — scrapes trending repositories by language/time window and scores them against OpenSSF data
 - **Organization scan queue** — lists public repos for a GitHub org, filters forks/archived repos/min stars, and queues selected repos for audit
-- **Open issues count** — enriches scan rows through GitHub Search API without requiring extra token scopes
 - **Flexible filters** — language, topic, keyword, pushed-after date, min stars, max Scorecard score, min Maintained score, and highlighted checks
-- **Quick presets** — DevSecOps opportunities, AI/LLM, MCP/Agents, Cloud Native, and Security tooling
 
 ### Web workspace
 
-- **Browser UI** — scan form, scan history, result details, sortable/filterable results, resizable columns, sticky headers, and Scorecard check docs links
-- **Persistent SQLite history** — scans, results, audits, audit contexts, schedules, issue/PR summaries, remediation items, and trend data survive restarts
-- **Portfolio dashboard** — aggregates watched repos with latest score, stars, weak checks, audit counts, provider, language, and score sparklines
-- **Score trend API/UI** — tracks Scorecard score and star history per repo across repeated scans
-- **Remediation board** — extracts findings from audit reports, creates remediation cards, and tracks status, severity, notes, due dates, and resolution; card titles link directly to the source audit
-- **Schedules** — run recurring audits at configurable intervals, enable/disable jobs, trigger now, and constrain runs to UTC time windows
-- **Auto-detected audit schedules** — suggests schedules for repos that repeatedly appear weak or are already being audited
-- **Issues/PR intelligence** — caches security-relevant open/closed issues and PR summaries for a repo; `?refresh=true` forces a live re-fetch
-- **Notifications** — in-app toast and browser Notification API on scan completion; optional outbound webhook after audit completion (`NOTIFY_WEBHOOK_URL`)
-- **Authentik-compatible access control** — optional forward-auth mode with read/write/admin group checks
+- **Browser UI** — scan form, scan history, result details, sortable/filterable results, resizable columns, sticky headers
+- **Persistent SQLite history** — scans, results, audits, audit contexts, schedules, remediation items, and trend data survive restarts
+- **Portfolio dashboard** — aggregates watched repos with latest score, stars, weak checks, audit counts, and score sparklines
+- **Remediation board** — extracts findings from audit reports into trackable cards with severity, status, notes, and due dates
+- **Schedules** — run recurring audits at configurable intervals; auto-suggested for repos that repeatedly appear weak
+- **Notifications** — in-app toast and browser Notification API on scan completion; optional outbound webhook (`NOTIFY_WEBHOOK_URL`)
 
 ### DevSecOps audits
 
-- **Static snapshot mode** — runs for free without an AI key and returns the collected evidence as a structured Markdown report
+- **Static snapshot mode** — runs for free without an AI key; returns the collected evidence as a structured Markdown report
 - **AI report generation** — supports Anthropic, OpenAI, Gemini, and local/remote Ollama models
-- **Split generation** — lets a cheaper/fast model summarise evidence sections before a stronger final model writes the report
-- **Saved evidence context** — stores the compact Markdown/JSON context so reports can be regenerated later with another provider or model
-- **Context caching** — reuses a recent audit context when the repo HEAD SHA has not changed
-- **Automatic context compaction** — if a provider rejects the prompt as too large (token-per-minute limit or context window exceeded), automatically retries with a compacted context; applies to all providers (Anthropic, OpenAI, Gemini, Ollama)
-- **Skip-secrets option** — skips the slower `gitleaks`/`trufflehog` passes when speed matters
-- **Audit compare** — generates two reports from the same saved context and compares providers/models side-by-side
-- **Supply-chain graph** — visualizes GitHub Actions pinning suggestions and unresolved action references from saved audit context
-- **Export formats** — download Markdown reports, AI context Markdown, full JSON exports, SARIF suitable for GitHub Code Scanning, or a formatted **PDF** (pure-Go renderer, no external dependencies)
-- **Reasoning-model output cleaning** — strips `<think>…</think>` blocks emitted by reasoning models (DeepSeek-R1, QwQ, etc.) before saving the report
-- **Ground-truth claim verification** — after generation, every concrete claim (commit/pin SHA, `file:line`, `#PR`, CVE, `pkg@version`, workflow file, CVSS band/vector) is checked against the collected evidence and the CVSS base score recomputed; unverifiable claims are listed in an appendix and the report is marked **DRAFT**
-- **Cost tracking and guardrails** — records input/output tokens, estimates per-model cost, aggregates 30-day spend, and can reject audits above `MAX_AUDIT_COST_USD`
-- **GitHub webhook audits** — signed GitHub `pull_request`/`push` webhooks can automatically run a free static audit when security-sensitive files change
+- **Split generation** — a cheaper model summarises evidence sections; a stronger model writes the final report
+- **Ground-truth claim verification** — every concrete claim (commit SHA, `file:line`, `#PR`, CVE, `pkg@version`, CVSS vector) is checked against the evidence; unverifiable claims are listed in an appendix and the report is marked **DRAFT**
+- **Cost tracking and guardrails** — records tokens, estimates per-model cost, and can reject audits above `MAX_AUDIT_COST_USD`
+- **GitHub webhook audits** — signed `pull_request`/`push` webhooks trigger a free static audit when security-sensitive files change
 
 ### Packaging
 
@@ -100,61 +116,21 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 
 ---
 
-## Quick Start
+## DevSecOps Audit
 
-### CLI
-
-```bash
-export GITHUB_TOKEN=ghp_...
-
-go run . -lang go -min-stars 1000 -max-score 5 -limit 50
-```
-
-### Web Server
-
-```bash
-go run . -serve
-# Open http://localhost:7878
-```
-
-### Docker
-
-```bash
-GITHUB_TOKEN=ghp_... docker compose up --build
-# Open http://localhost:7878
-```
-
-The scan history is stored in `./data/ossf-scout.db` and persists across restarts.
-
-### Audit Tab
-
-> **📄 Sample output** for `directus/directus`:
-> - **AI-synthesised report** → [`examples/audit-directus-directus-2026-06-05_1.md`](examples/audit-directus-directus-2026-06-05_1.md) — 17-section report: executive summary, security strengths, posture scores, CVSS findings, sprint backlog, remediation roadmap, STRIDE threat model
-> - **PDF export** → [`examples/audit-directus-directus.pdf`](examples/audit-directus-directus.pdf) — the same report as a formatted PDF (pure-Go renderer)
-> - **AI input context** → [`examples/context-directus-directus-2026-06-05.md`](examples/context-directus-directus-2026-06-05.md) — the evidence fed to the model
-
-Open the **Audit** tab in the web UI:
-
-```bash
-go run . -serve
-# Navigate to http://localhost:7878 → Audit tab
-```
-
-Enter `owner/repo` (e.g. `directus/directus`), choose a provider, and click **Run Audit**:
+### Providers
 
 | Provider | Cost | Setup |
 |----------|------|-------|
-| **Static snapshot** | Free | No key needed — returns structured raw data |
-| **Anthropic** | Paid | API key via UI or `ANTHROPIC_API_KEY`; models: Opus 4.8, Sonnet 4.6, Haiku 4.5, Opus 4.7, Opus 4.6, Sonnet 4.5, Opus 4.5 |
-| **OpenAI** | Paid | API key via UI or `OPENAI_API_KEY`; models: GPT-5.5, GPT-5.4, GPT-5.4 mini, GPT-4.1 family, GPT-4o family, o-series (o1/o3/o4-mini) |
-| **Gemini** | Paid | API key via UI or `GEMINI_API_KEY`; models: Gemini 3.5 Flash, 3.1 Flash Lite, 2.5 Pro/Flash/Flash-Lite, 2.0 Flash, 1.5 Pro/Flash |
+| **Static snapshot** | Free | No key needed — returns structured raw evidence |
+| **Anthropic** | Paid | API key via UI or `ANTHROPIC_API_KEY`; models: Opus 4.8, Sonnet 4.6, Haiku 4.5 and earlier |
+| **OpenAI** | Paid | API key via UI or `OPENAI_API_KEY`; models: GPT-5.5, GPT-4.1 family, GPT-4o family, o-series |
+| **Gemini** | Paid | API key via UI or `GEMINI_API_KEY`; models: Gemini 2.5 Pro/Flash, 2.0 Flash, 1.5 Pro/Flash |
 | **Ollama** | Free/local | `OLLAMA_BASE_URL` on the server; model name selected in the UI |
 
-Approximate per-run costs are shown in the UI after each audit based on recorded input/output tokens and the configured model price table. Static snapshots and Ollama runs are treated as free.
+Per-run token counts and estimated cost are shown in the audit history. Set `MAX_AUDIT_COST_USD` to reject runs above your budget.
 
-The tool sends **Markdown context** to the AI instead of raw JSON — the Zizmor SARIF output (which can be 40 000+ lines) is replaced with a compact findings table, reducing input tokens by ~90% compared to the JSON approach. AI paths use this format for single-stage generation, split section analysis, split synthesis, and later re-generation from a saved context.
-
-Enable **Split generation** in the UI to have an analysis model summarise each evidence section first; the selected final model then synthesises the report. Recommended for large monorepos where per-section analysis improves finding quality. Split mode is currently implemented for Anthropic and Ollama.
+**Split generation:** enable in the UI to have a fast model summarise each evidence section first; the selected model synthesises the final report. Recommended for large monorepos. Implemented for Anthropic and Ollama.
 
 **Ollama setup:**
 
@@ -163,31 +139,23 @@ ollama serve
 ollama pull llama3.2   # or qwen2.5, deepseek-r1:8b, etc.
 ```
 
-For Ollama, set `OLLAMA_BASE_URL` on the server. When running via Docker, the default (`http://host.docker.internal:11434`) is pre-configured in `docker-compose.yml`; for native use set it to `http://localhost:11434`. If the model's context window is too small, the tool automatically retries with a compacted context (verbose tool outputs truncated).
-
-For an offline/local profile:
+For Docker: the default `http://host.docker.internal:11434` is pre-configured in `docker-compose.yml`. For offline use:
 
 ```bash
 OLLAMA_BASE_URL=http://ollama:11434 docker compose --profile offline up --build
 ```
 
-The Markdown report appears in the browser when complete (~1–3 min for AI, ~30s for snapshot) and can be downloaded as a `.md` file. If AI generation fails, the static snapshot is saved as a fallback — a **Run with AI** button on the detail page lets you re-run the same saved context with a different provider.
-
-A **Download AI context** button is available for every audit (including static snapshots) once the repo has been cloned and analysed. It downloads the compact Markdown that would be sent to the AI — useful for pasting into any LLM manually or for inspecting exactly what evidence was collected.
-
-Audit detail pages expose a supply-chain graph for GitHub Actions pinning, JSON export, SARIF export, PDF download, and a remediation extraction action that turns report findings into trackable remediation items.
-
-**What it collects**
+### What it collects
 
 | Category | Checks |
 |----------|--------|
 | CI/CD | Unpinned GitHub Actions, `zizmor` workflow analysis, `actionlint` workflow linting, workflow file list |
-| Code | `eval()`, `Math.random()`, raw SQL, `X-Powered-By`, hardcoded secrets, weak crypto, `process.exit`/`os.Exit`, SQL injection (`knex.raw`/`whereRaw`), SSRF (`fetch`/`axios`/`got`), path traversal, XXE, deserialization, rate limiting, CORS config, Semgrep auto findings |
-| Key files | Entry point (first 150 lines), auth middleware, permission system, security config (`helmet`/`cors`/`session`), startup validation checks, `CODEOWNERS` file |
-| Infrastructure | `helm lint`, Helm secret templates + values, `Dockerfile` |
+| Code | `eval()`, `Math.random()`, raw SQL, hardcoded secrets, weak crypto, SQL injection (`knex.raw`/`whereRaw`), SSRF (`fetch`/`axios`/`got`) with surrounding context, path traversal, XXE, deserialization, rate limiting, CORS config, Semgrep auto findings |
+| Key files | Entry point (first 150 lines), auth middleware, permission system, security config (`helmet`/`cors`/`session`), startup validation, `CODEOWNERS` |
+| Infrastructure | Dockerfile(s) with static analysis (missing USER, unpinned FROM, hardcoded secrets in ENV/ARG, dangerous packages), `helm lint`, Helm secret templates + values |
 | Dependencies | `pnpm audit` / `npm audit` / `yarn audit` JSON, workspace `overrides` |
 | Git history | Last 30 commits, files changed in the last 10 commits |
-| GitHub API | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts, branch protection rules, Dependabot alerts (requires `security_events` scope), release history |
+| GitHub API | Open issues (up to 50), open PRs (up to 20), secret-scanning alerts, branch protection rules, Dependabot alerts, release history |
 | Secrets | `gitleaks`, `trufflehog`, private key headers, `.env` file contents, AWS/JWT/GH token regex patterns |
 | IaC | Terraform file list, `trivy config`, `osv-scanner`, Kubernetes manifest list, `kube-linter` |
 | Policy as Code | OPA `.rego` files, Kyverno `ClusterPolicy`/`Policy` YAMLs, Falco rule detection |
@@ -195,29 +163,17 @@ Audit detail pages expose a supply-chain graph for GitHub Actions pinning, JSON 
 
 All tools are **bundled in the Docker image** (amd64 + arm64) — no separate installation needed.
 
-**Report structure**
+### Report structure
 
-The generated Markdown document follows a fixed 17-section structure:
+The generated Markdown document follows a fixed structure:
 
-1. Metadata table — date, repo, commit, auditor, status
-2. Executive Summary — 3–5 sentence non-technical overview for managers and CISOs
-3. Scope — what was checked (files, tools, GitHub API calls)
-4. Methodology — tools used, static vs dynamic distinction, known limitations
-5. Security Strengths — correctly implemented controls with evidence citations
-6. Findings Summary — table: ID · Priority (P0–P3) · Severity · Title · OWASP 2021 · Status
-7. Security Posture Summary — area scores (0–10) for CI/CD, Dependencies, Secrets, Supply Chain, Container, App Code
-8. Per-finding sections — Root Cause · Impact Chain · Fix · Verification shell commands
-9. Open GitHub Issues & PRs — security-relevant items with risk assessment
-10. P2 Recommendations — table with Effort (hours/days) and Risk Reduction estimates
-11. Remediation Roadmap — 30/60/90-day horizon plan mapped to Finding IDs
-12. Sprint Backlog — every P2 finding as a user story with acceptance criteria and story points
-13. Remediation Status table
-14. Verification Checklist — copy-paste shell commands, one per finding
-15. Shift-left guardrails — CI gate per finding with a runnable GitHub Actions YAML snippet
-16. Appendix — full assessment across SQL Injection, Auth, Authorisation, SSRF, XXE, Path Traversal, Cryptography, Rate Limiting, Dependencies, HTTP Headers, Container, Kubernetes/Helm, CI/CD Reliability
-17. Threat Model (STRIDE) — Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege across auth flows, CI/CD, supply chain, secrets, and API inputs
-
-**Cost:** Free without an API key (static snapshot). With a paid provider, token counts and estimated cost are shown in the audit history table and the cost dashboard. Set `MAX_AUDIT_COST_USD` to reject runs whose pre-flight estimate is above your budget.
+- **Executive summary** — 3–5 sentence non-technical overview for managers and CISOs
+- **Findings summary** — table: ID · Priority (P0–P3) · CVSS severity · Title · OWASP 2021 · Status
+- **Per-finding sections** — Root Cause · Impact Chain · Fix · Verification shell commands
+- **Security posture scores** — area scores (0–10) for CI/CD, Dependencies, Secrets, Supply Chain, Container, App Code
+- **Remediation roadmap** — 30/60/90-day horizon mapped to Finding IDs; Sprint Backlog with story points
+- **Shift-left guardrails** — CI gate per finding with a runnable GitHub Actions YAML snippet
+- **Appendix + Threat model** — full STRIDE assessment across auth flows, CI/CD, supply chain, secrets, and API inputs
 
 ---
 
@@ -250,24 +206,22 @@ The generated Markdown document follows a fixed 17-section structure:
 | Variable | Description |
 |----------|-------------|
 | `GITHUB_TOKEN` | GitHub PAT. Without it, GitHub limits unauthenticated requests to 60/hour. |
-| `ANTHROPIC_API_KEY` | Anthropic API key for the Audit tab. Can also be provided per-audit in the web UI (overrides the server-level key). |
+| `ANTHROPIC_API_KEY` | Anthropic API key for the Audit tab. Can also be provided per-audit in the web UI. |
 | `OPENAI_API_KEY` | OpenAI API key for the Audit tab. Can also be provided per-audit in the web UI. |
 | `GEMINI_API_KEY` | Google Gemini API key for the Audit tab. Can also be provided per-audit in the web UI. |
 | `OLLAMA_BASE_URL` | Base URL for a local/remote Ollama instance (e.g. `http://localhost:11434`). Defaults to `http://host.docker.internal:11434` in Docker. |
 | `MAX_AUDIT_COST_USD` | Optional budget cap. Audits whose pre-flight cost estimate exceeds this value are rejected before any tokens are sent. |
-| `GITHUB_WEBHOOK_SECRET` | Optional. If set, incoming GitHub webhook payloads are validated against the `X-Hub-Signature-256` header — unsigned requests are rejected. |
-| `NOTIFY_WEBHOOK_URL` | Optional. A URL to POST a JSON notification to after each audit completes (repo, status, audit ID). |
-| `AUTH_REQUIRED` | Set to `true` to enable Authentik forward-auth mode. Requests missing `X-Authentik-Username` return 401; write/admin endpoints additionally check `ossf-write`/`ossf-admin` groups. |
-
-The GitHub token and AI API keys can also be provided per-scan/per-audit in the web UI (override the server-level values).
+| `GITHUB_WEBHOOK_SECRET` | If set, incoming GitHub webhook payloads are validated against the `X-Hub-Signature-256` header — unsigned requests are rejected. |
+| `NOTIFY_WEBHOOK_URL` | A URL to POST a JSON notification to after each audit completes (repo, status, audit ID). |
+| `AUTH_REQUIRED` | Set to `true` to enable Authentik forward-auth mode. Requests missing `X-Authentik-Username` return 401; write/admin endpoints check `ossf-write`/`ossf-admin` groups. |
 
 ### Token scopes
 
 | Mode | Required scopes |
 |------|----------------|
-| Default (REST API via `api.securityscorecards.dev`) | None — any valid token is enough to raise the rate limit |
-| `-cli-fallback` (scorecard CLI) | Classic PAT with **`public_repo`** scope — needed for the `Branch-Protection` check (GraphQL query) |
-| Dependabot alerts collection (audit) | **`security_events`** scope — needed to read Dependabot vulnerability alerts via the GitHub API |
+| Default (REST API via `api.securityscorecards.dev`) | None — any valid token raises the rate limit |
+| `-cli-fallback` (scorecard CLI) | Classic PAT with **`public_repo`** — needed for the `Branch-Protection` check (GraphQL query) |
+| Dependabot alerts collection (audit) | **`security_events`** — needed to read Dependabot vulnerability alerts via the GitHub API |
 
 To create a classic PAT: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → tick **`public_repo`** under _repo_.
 
@@ -300,11 +254,11 @@ PRs welcome. Run `make dev` to build locally. The web server embeds the frontend
 
 ---
 
-## Eating Our Own Dog Food
+## Track Record
 
 ossf-scout exists to surface open-source projects with weak security postures so contributors can improve them — so we ran it against this repo too. Applying its own findings took the Scorecard score from **5.2 → 7.7 / 10** through 11 documented fixes (broken Scorecard CI, branch protection, license, security policy, Dockerfile digest pinning, fuzz tests, CodeQL, and more).
 
-📖 **Full running log:** [docs/SCORECARD-JOURNEY.md](docs/SCORECARD-JOURNEY.md)
+📖 Full running log: [docs/SCORECARD-JOURNEY.md](docs/SCORECARD-JOURNEY.md)
 
 ---
 

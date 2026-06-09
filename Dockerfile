@@ -68,7 +68,8 @@ RUN apk add --no-cache git nodejs npm ca-certificates python3 py3-pip \
     && apk del py3-pip
 RUN npm install -g pnpm@11
 
-RUN addgroup -S -g 10001 scout && adduser -S -u 10001 -G scout -H -D scout
+RUN addgroup -S -g 10001 scout && adduser -S -u 10001 -G scout -H -D scout \
+    && mkdir -p /home/scout && chown scout:scout /home/scout
 
 WORKDIR /app
 COPY --from=builder /app/ossf-scout .

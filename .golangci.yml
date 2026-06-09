@@ -9,6 +9,14 @@ linters:
   settings:
     errcheck:
       check-type-assertions: false
+    gosec:
+      excludes:
+        - G104 # errors unhandled — covered by errcheck
+        - G107 # HTTP request with variable URL — intentional (webhooks, Scorecard API)
+        - G114 # net/http serve without timeout — separate concern
+        - G202 # SQL string concatenation — false positive (parameterized placeholders)
+        - G204 # subprocess with variable args — intentional (scorecard, git CLI)
+        - G704 # SSRF via taint analysis — intentional (Scorecard API calls)
   exclusions:
     rules:
       - path: _test\.go

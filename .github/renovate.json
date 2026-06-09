@@ -1,0 +1,42 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["every weekend"],
+  "regexManagers": [
+    {
+      "fileMatch": ["(^|/)Dockerfile$"],
+      "matchStrings": ["ARG TRIVY_VERSION=(?<currentValue>[\\d.]+)"],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "fileMatch": ["(^|/)Dockerfile$"],
+      "matchStrings": ["ARG HELM_VERSION=(?<currentValue>[\\d.]+)"],
+      "depNameTemplate": "helm/helm",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "fileMatch": ["(^|/)Dockerfile$"],
+      "matchStrings": ["ARG ZIZMOR_VERSION=(?<currentValue>[\\d.]+)"],
+      "depNameTemplate": "zizmorcore/zizmor",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "fileMatch": ["(^|/)Dockerfile$"],
+      "matchStrings": ["ARG KUBELINTER_VERSION=(?<currentValue>[\\d.]+)"],
+      "depNameTemplate": "stackrox/kube-linter",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    },
+    {
+      "fileMatch": ["(^|/)Dockerfile$"],
+      "matchStrings": ["ARG TRUFFLEHOG_VERSION=(?<currentValue>[\\d.]+)"],
+      "depNameTemplate": "trufflesecurity/trufflehog",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    }
+  ]
+}

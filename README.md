@@ -72,6 +72,8 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Single-repo mode** — score any public repo directly by `owner/repo` without running a GitHub Search query
 - **GitHub Trending scanner** — scrapes trending repositories by language/time window and scores them against OpenSSF data
 - **Organization scan queue** — lists public repos for a GitHub org, filters forks/archived repos/min stars, and queues selected repos for audit
+- **Open issues count** — enriches scan rows through GitHub Search API without requiring extra token scopes
+- **Quick presets** — DevSecOps opportunities, AI/LLM, MCP/Agents, Cloud Native, and Security tooling
 - **Flexible filters** — language, topic, keyword, pushed-after date, min stars, max Scorecard score, min Maintained score, and highlighted checks
 
 ### Web workspace
@@ -79,15 +81,27 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Browser UI** — scan form, scan history, result details, sortable/filterable results, resizable columns, sticky headers
 - **Persistent SQLite history** — scans, results, audits, audit contexts, schedules, remediation items, and trend data survive restarts
 - **Portfolio dashboard** — aggregates watched repos with latest score, stars, weak checks, audit counts, and score sparklines
+- **Score trend API/UI** — tracks Scorecard score and star history per repo across repeated scans
 - **Remediation board** — extracts findings from audit reports into trackable cards with severity, status, notes, and due dates
 - **Schedules** — run recurring audits at configurable intervals; auto-suggested for repos that repeatedly appear weak
+- **Auto-detected audit schedules** — suggests schedules for repos that repeatedly appear weak or are already being audited
+- **Issues/PR intelligence** — caches security-relevant open/closed issues and PR summaries for a repo; `?refresh=true` forces a live re-fetch
 - **Notifications** — in-app toast and browser Notification API on scan completion; optional outbound webhook (`NOTIFY_WEBHOOK_URL`)
+- **Authentik-compatible access control** — optional forward-auth mode with read/write/admin group checks
 
 ### DevSecOps audits
 
 - **Static snapshot mode** — runs for free without an AI key; returns the collected evidence as a structured Markdown report
 - **AI report generation** — supports Anthropic, OpenAI, Gemini, and local/remote Ollama models
 - **Split generation** — a cheaper model summarises evidence sections; a stronger model writes the final report
+- **Saved evidence context** — stores the compact Markdown context so reports can be regenerated later with another provider or model
+- **Context caching** — reuses a recent audit context when the repo HEAD SHA has not changed
+- **Automatic context compaction** — if a provider rejects the prompt as too large, automatically retries with a compacted context; applies to all providers
+- **Skip-secrets option** — skips the slower `gitleaks`/`trufflehog` passes when speed matters
+- **Audit compare** — generates two reports from the same saved context and compares providers/models side-by-side
+- **Supply-chain graph** — visualizes GitHub Actions pinning suggestions from saved audit context
+- **Export formats** — Markdown, AI context, full JSON, SARIF (GitHub Code Scanning), and PDF (pure-Go renderer, no external dependencies)
+- **Reasoning-model output cleaning** — strips `<think>…</think>` blocks emitted by reasoning models (DeepSeek-R1, QwQ, etc.) before saving
 - **Ground-truth claim verification** — every concrete claim (commit SHA, `file:line`, `#PR`, CVE, `pkg@version`, CVSS vector) is checked against the evidence; unverifiable claims are listed in an appendix and the report is marked **DRAFT**
 - **Cost tracking and guardrails** — records tokens, estimates per-model cost, and can reject audits above `MAX_AUDIT_COST_USD`
 - **GitHub webhook audits** — signed `pull_request`/`push` webhooks trigger a free static audit when security-sensitive files change
@@ -97,6 +111,7 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Self-contained binary** — React frontend embedded via `//go:embed`, SQLite via pure-Go driver
 - **Docker image with bundled tools** — ships `scorecard`, `gitleaks`, `actionlint`, `osv-scanner`, `trivy`, `helm`, `zizmor`, `kube-linter`, `trufflehog`, `semgrep`, Node/npm, and `pnpm`; amd64 + arm64
 - **Hardened image** — [Wolfi](https://github.com/wolfi-dev/os) base (near-zero OS CVEs), non-root user (UID 10001), SHA256-verified binary downloads, static Go build, `dumb-init` PID 1, `HEALTHCHECK`, OCI labels
+- **Signed and attested** — Docker image is cosign-signed and SBOM-attested on every release; verify with `cosign verify ghcr.io/nagyonmarci/ossf-scout:latest --certificate-identity-regexp="https://github.com/nagyonmarci/ossf-scout" --certificate-oidc-issuer="https://token.actions.githubusercontent.com"`
 - **Offline-friendly Ollama profile** — Docker Compose can run an Ollama sidecar for local AI generation
 
 ---

@@ -70,10 +70,13 @@ Non-negotiable principles:
 	`"Exploitability depends on a prior RBAC bypass not observed in this audit." ` +
 	`Elevate to P1/P2 only if evidence shows a non-admin code path directly reaches the dangerous function.
 15. CONFIRMED vs SUSPECTED — A static grep match (fetch(), axios.get(), URL construction) identifies an ` +
-	`attack surface, not a confirmed vulnerability. If you cannot trace the data flow from a user-controlled ` +
-	`input to the dangerous call using evidence in the context, label the finding ` +
-	`"Potential Attack Surface — Requires Confirmation", assign CVSS ≤ 5.0, and add: ` +
-	`"Requires dynamic validation or manual code-path review to confirm exploitability." ` +
+	`attack surface, not a confirmed vulnerability. Surrounding code context (±10–15 lines) is provided ` +
+	`for each SSRF candidate below the grep output — use it to determine whether the URL argument ` +
+	`originates from a request parameter (req.query, ctx.Param, c.Query, req.body), env var, or a ` +
+	`hardcoded/internal value before falling back to "Requires Confirmation". ` +
+	`If you cannot trace the data flow from a user-controlled input to the dangerous call using evidence ` +
+	`in the context, label the finding "Potential Attack Surface — Requires Confirmation", assign CVSS ≤ 5.0, ` +
+	`and add: "Requires dynamic validation or manual code-path review to confirm exploitability." ` +
 	`Do not assign CVSS 7.0+ to an unconfirmed pattern match.
 16. RELIABILITY vs SECURITY — Workflow configuration errors that cause pipeline failure ` +
 	`(invalid/unknown permission scopes, syntax errors, actionlint warnings with no exploitable path) ` +

@@ -334,8 +334,18 @@ func collectContext(repo, ghToken string, opts collectOptions) (*auditContext, s
 				"grep -rn 'process\\.exit\\|os\\.Exit' --include='*.ts' --include='*.go' . | grep -v node_modules | grep -v '\\.test\\.' | head -20 || echo 'none'"),
 			SqlInjection: shIn(tmpDir, "none",
 				"grep -rn 'knex\\.raw\\|whereRaw\\|sequelize\\.query\\|\\.db\\.query' --include='*.ts' . | grep -v node_modules | grep -v '\\.test\\.' | head -40 || echo 'none'"),
-			SSRF: shIn(tmpDir, "none",
-				"grep -rn 'fetch(\\|axios\\.get\\|axios\\.post\\|got(\\|http\\.get\\|https\\.get' --include='*.ts' --include='*.go' . | grep -v node_modules | grep -v '\\.test\\.' | head -40 || echo 'none'"),
+			SSRF: shIn(tmpDir, "none", `
+matches=$(grep -rn 'fetch(\|axios\.get\|axios\.post\|got(\|http\.get\|https\.get' --include='*.ts' --include='*.go' . | grep -v node_modules | grep -v '\.test\.' | head -8)
+[ -z "$matches" ] && echo 'none' && exit 0
+echo "$matches"
+echo
+echo '--- context ---'
+echo "$matches" | while IFS=: read -r f l rest; do
+  if [ -z "$f" ] || [ -z "$l" ]; then continue; fi
+  echo "=== $f:$l ==="
+  awk -v s=$(( l > 10 ? l - 10 : 1 )) -v e=$(( l + 15 )) 'NR>=s && NR<=e' "$f" 2>/dev/null
+  echo
+done`),
 			PathTraversal: shIn(tmpDir, "none",
 				"grep -rn 'readFile\\|readFileSync\\|createReadStream\\|path\\.join' --include='*.ts' . | grep -v node_modules | grep -v '\\.test\\.' | head -30 || echo 'none'"),
 			XXE: shIn(tmpDir, "none",
@@ -385,11 +395,28 @@ func collectContext(repo, ghToken string, opts collectOptions) (*auditContext, s
 			// Pick the right tool by lockfile. The previous one-liner piped npm
 			// audit into `head` (exit 0), so the `|| pnpm` fallback never fired and
 			// pnpm workspaces returned the npm ENOLOCK error instead of real data.
+			// _audit_clean strips tool-internal crash JSON ({"error": ...}) so the
+			// LLM never sees a JS stack trace instead of vulnerability data.
 			PnpmAudit: shIn(tmpDir, "no package manager available", `
-if [ -f pnpm-lock.yaml ]; then pnpm audit --json 2>&1 | head -400;
-elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm audit --json 2>&1 | head -400;
-elif [ -f yarn.lock ]; then yarn audit --json 2>&1 | head -400;
-elif [ -f package.json ]; then pnpm audit --json 2>&1 | head -400 || npm audit --json 2>&1 | head -400;
+_audit_clean() {
+  python3 -c '
+import sys,json
+raw=sys.stdin.read()
+try:
+    d=json.loads(raw)
+    if isinstance(d,dict) and "error" in d and "vulnerabilities" not in d:
+        msg=(d.get("error") or {}).get("message") or str(d["error"])
+        print("audit tool error (not a vulnerability finding): "+msg)
+    else:
+        print(raw)
+except Exception:
+    print(raw)
+' 2>/dev/null || cat
+}
+if [ -f pnpm-lock.yaml ]; then pnpm audit --json 2>&1 | head -400 | _audit_clean;
+elif [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm audit --json 2>&1 | head -400 | _audit_clean;
+elif [ -f yarn.lock ]; then yarn audit --json 2>&1 | head -400 | _audit_clean;
+elif [ -f package.json ]; then pnpm audit --json 2>&1 | head -400 | _audit_clean || npm audit --json 2>&1 | head -400 | _audit_clean;
 else echo 'no package manager available'; fi`),
 			WorkspaceOverrides: shIn(tmpDir, "none",
 				"grep -A 40 '^overrides:' pnpm-workspace.yaml 2>/dev/null || echo 'none'"),
@@ -409,18 +436,33 @@ else echo 'no package manager available'; fi`),
 			if opts.SkipSecrets {
 				return "skipped (SkipSecrets=true)"
 			}
-			return shIn(tmpDir, "gitleaks not installed — skipped",
-				`out=$(gitleaks detect --source . --no-git --report-format json 2>/dev/null) || echo 'gitleaks not installed — skipped'; `+
-					`if [ -n "$out" ] && command -v python3 >/dev/null 2>&1; then `+
-					`echo "$out" | python3 -c "`+
-					`import sys,json`+"\n"+
-					`try:`+"\n"+
-					`    d=json.load(sys.stdin)`+"\n"+
-					`    [print(f\"{f.get('RuleID','?')} | {f.get('File','?')}:{f.get('StartLine','?')} | {str(f.get('Secret',''))[:25]}\") for f in d[:40]]`+"\n"+
-					`    print(f'total: {len(d)} finding(s)')`+"\n"+
-					`except Exception as e: print(f'parse error: {e}')`+
-					`" 2>/dev/null; `+
-					`elif [ -n "$out" ]; then echo "$out" | head -100; fi`)
+			// gitleaks v8+ writes JSON to --report-path (not stdout), so capturing
+			// stdout into $out always returned empty, triggering the "not installed"
+			// fallback even when secrets were found. We now use a temp file and
+			// --exit-code 0 to decouple findings from non-zero exit codes.
+			return shIn(tmpDir, "gitleaks not installed — skipped", `
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo 'gitleaks not installed — skipped'
+else
+  tf=$(mktemp /tmp/gl-XXXXXX.json)
+  gitleaks detect --source . --no-git --report-format json --report-path "$tf" --exit-code 0 2>/dev/null
+  if [ -s "$tf" ] && command -v python3 >/dev/null 2>&1; then
+    python3 -c '
+import sys,json
+with open(sys.argv[1]) as fh:
+    d=json.load(fh)
+findings=d if isinstance(d,list) else d.get("findings",d.get("Findings",[]))
+for f in findings[:40]:
+    print(str(f.get("RuleID","?"))+" | "+str(f.get("File","?"))+":"+str(f.get("StartLine","?"))+" | "+str(f.get("Secret",""))[:25])
+print("total: "+str(len(findings))+" finding(s)")
+' "$tf" 2>/dev/null
+  elif [ -s "$tf" ]; then
+    head -100 "$tf"
+  else
+    echo 'no secrets found'
+  fi
+  rm -f "$tf"
+fi`)
 		}(),
 		TruffleHog: func() string {
 			if opts.SkipSecrets {

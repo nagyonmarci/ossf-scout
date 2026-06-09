@@ -5,6 +5,7 @@ linters:
     - errcheck
     - staticcheck
     - govet
+    - gosec
   settings:
     errcheck:
       check-type-assertions: false

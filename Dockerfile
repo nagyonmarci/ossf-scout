@@ -30,10 +30,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go install github.com/google/osv-scanner/cmd/osv-scanner@v1.9.2
 
 # Stage 3: download arch-aware binary tools
-FROM --platform=$BUILDPLATFORM debian:12-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb AS bintools
+# Wolfi uses glibc (not musl), so all pre-built glibc binaries are compatible.
+FROM --platform=$BUILDPLATFORM cgr.dev/chainguard/wolfi-base@sha256:b78bb982194828b6c9c214230bf34d51944e2102ea8468f01ac21e5f99328efd AS bintools
 ARG TARGETARCH
-RUN apt-get update && apt-get install -y --no-install-recommends curl tar ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache curl ca-certificates && mkdir -p /usr/local/bin
 
 # trivy
 RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "ARM64" || echo "64bit") && \
@@ -61,16 +61,14 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
     curl -sfL "https://github.com/trufflesecurity/trufflehog/releases/download/v3.95.5/trufflehog_3.95.5_linux_${ARCH}.tar.gz" \
     | tar xz -C /usr/local/bin trufflehog
 
-# Stage 4: runtime — all tools bundled, debian for glibc compatibility
-FROM debian:12-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git nodejs npm ca-certificates python3 python3-pip \
-    && pip3 install --no-cache-dir --break-system-packages semgrep \
-    && rm -rf /var/lib/apt/lists/*
+# Stage 4: runtime — Wolfi base for near-zero OS CVE surface
+FROM cgr.dev/chainguard/wolfi-base@sha256:b78bb982194828b6c9c214230bf34d51944e2102ea8468f01ac21e5f99328efd
+RUN apk add --no-cache git nodejs npm ca-certificates python3 py3-pip \
+    && pip3 install --no-cache-dir semgrep==1.165.0 \
+    && apk del py3-pip
 RUN npm install -g pnpm@11
 
-RUN groupadd --system --gid 10001 scout \
-    && useradd --system --uid 10001 --gid 10001 --no-create-home scout
+RUN addgroup -S -g 10001 scout && adduser -S -u 10001 -G scout -H -D scout
 
 WORKDIR /app
 COPY --from=builder /app/ossf-scout .

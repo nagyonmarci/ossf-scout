@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: frontend build
-FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS frontend
+FROM node:24-alpine@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14 AS frontend
 WORKDIR /app/frontend
 RUN npm install -g pnpm@11
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./

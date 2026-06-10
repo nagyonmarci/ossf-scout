@@ -3,37 +3,42 @@
   "extends": ["config:recommended"],
   "configMigration": true,
   "schedule": ["every weekend"],
-  "regexManagers": [
+  "customManagers": [
     {
-      "fileMatch": ["(^|/)Dockerfile$"],
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
       "matchStrings": ["ARG TRIVY_VERSION=(?<currentValue>[\\d.]+)"],
       "depNameTemplate": "aquasecurity/trivy",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "semver"
     },
     {
-      "fileMatch": ["(^|/)Dockerfile$"],
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
       "matchStrings": ["ARG HELM_VERSION=(?<currentValue>[\\d.]+)"],
       "depNameTemplate": "helm/helm",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "semver"
     },
     {
-      "fileMatch": ["(^|/)Dockerfile$"],
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
       "matchStrings": ["ARG ZIZMOR_VERSION=(?<currentValue>[\\d.]+)"],
       "depNameTemplate": "zizmorcore/zizmor",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "semver"
     },
     {
-      "fileMatch": ["(^|/)Dockerfile$"],
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
       "matchStrings": ["ARG KUBELINTER_VERSION=(?<currentValue>[\\d.]+)"],
       "depNameTemplate": "stackrox/kube-linter",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "semver"
     },
     {
-      "fileMatch": ["(^|/)Dockerfile$"],
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
       "matchStrings": ["ARG TRUFFLEHOG_VERSION=(?<currentValue>[\\d.]+)"],
       "depNameTemplate": "trufflesecurity/trufflehog",
       "datasourceTemplate": "github-releases",

@@ -116,7 +116,7 @@ jobs:
 
       # 5. Scan image for OS-level CVEs; upload to GitHub Security tab
       - name: Scan Docker image with Trivy
-        uses: aquasecurity/trivy-action@bfa4b33a029b9aa80ddb784b45574c30e072c59e # master
+        uses: aquasecurity/trivy-action@476e4fdcdc675b65ce75e8c3440b48d7a494f0e5 # master
         with:
           image-ref: ghcr.io/${{ github.repository }}@${{ steps.build-and-push.outputs.digest }}
           format: sarif

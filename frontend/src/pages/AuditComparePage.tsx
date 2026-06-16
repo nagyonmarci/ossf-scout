@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
+import { useLang } from '../i18n';
 
 const PROVIDERS = ['anthropic', 'openai', 'gemini', 'ollama', ''] as const;
 type Provider = typeof PROVIDERS[number];
@@ -38,6 +39,7 @@ function ProviderForm({ label, cfg, onChange }: {
   cfg: ProviderConfig;
   onChange: (c: ProviderConfig) => void;
 }) {
+  const { t } = useLang();
   const set = (patch: Partial<ProviderConfig>) => onChange({ ...cfg, ...patch });
   return (
     <div className="card" style={{ flex: 1, minWidth: 0 }}>
@@ -50,14 +52,14 @@ function ProviderForm({ label, cfg, onChange }: {
             style={{ padding: '3px 10px', fontSize: 12, background: cfg.provider === p ? undefined : 'transparent', border: '1px solid var(--border)' }}
             onClick={() => set({ provider: p, model: MODELS[p]?.[0] || '' })}
           >
-            {p || 'Snapshot'}
+            {p || t('auditCompare.snapshot')}
           </button>
         ))}
       </div>
       {cfg.provider === 'anthropic' && (
         <>
           <input className="input" style={{ marginBottom: 6, fontSize: 12 }} type="password"
-            placeholder="Anthropic API key" value={cfg.anthropicKey}
+            placeholder={t('auditDetail.anthropicApiKeyPlaceholder')} value={cfg.anthropicKey}
             onChange={e => { set({ anthropicKey: e.target.value }); localStorage.setItem('audit.anthropicKey', e.target.value); }} />
           <select className="input" style={{ fontSize: 12 }} value={cfg.model}
             onChange={e => set({ model: e.target.value })}>
@@ -68,7 +70,7 @@ function ProviderForm({ label, cfg, onChange }: {
       {cfg.provider === 'openai' && (
         <>
           <input className="input" style={{ marginBottom: 6, fontSize: 12 }} type="password"
-            placeholder="OpenAI API key" value={cfg.openaiKey}
+            placeholder={t('auditDetail.openaiApiKeyPlaceholder')} value={cfg.openaiKey}
             onChange={e => { set({ openaiKey: e.target.value }); localStorage.setItem('audit.openaiKey', e.target.value); }} />
           <select className="input" style={{ fontSize: 12 }} value={cfg.model}
             onChange={e => set({ model: e.target.value })}>
@@ -79,7 +81,7 @@ function ProviderForm({ label, cfg, onChange }: {
       {cfg.provider === 'gemini' && (
         <>
           <input className="input" style={{ marginBottom: 6, fontSize: 12 }} type="password"
-            placeholder="Gemini API key" value={cfg.geminiKey}
+            placeholder={t('auditDetail.geminiApiKeyPlaceholder')} value={cfg.geminiKey}
             onChange={e => { set({ geminiKey: e.target.value }); localStorage.setItem('audit.geminiKey', e.target.value); }} />
           <select className="input" style={{ fontSize: 12 }} value={cfg.model}
             onChange={e => set({ model: e.target.value })}>
@@ -90,10 +92,10 @@ function ProviderForm({ label, cfg, onChange }: {
       {cfg.provider === 'ollama' && (
         <>
           <input className="input" style={{ marginBottom: 6, fontSize: 12 }} type="text"
-            placeholder="Ollama URL (blank = server default)" value={cfg.ollamaUrl}
+            placeholder={t('auditCompare.ollamaUrlPlaceholder')} value={cfg.ollamaUrl}
             onChange={e => set({ ollamaUrl: e.target.value })} />
           <input className="input" style={{ fontSize: 12 }} type="text"
-            placeholder="Model (e.g. llama3)" value={cfg.ollamaModel}
+            placeholder={t('auditCompare.modelPlaceholder')} value={cfg.ollamaModel}
             onChange={e => set({ ollamaModel: e.target.value })} />
         </>
       )}
@@ -118,7 +120,8 @@ type CompareResult = {
 };
 
 function ResultPanel({ result, label }: { result: CompareResult; label: string }) {
-  const label2 = result.model ? `${result.provider || 'snapshot'} / ${result.model}` : (result.provider || 'snapshot');
+  const { t } = useLang();
+  const label2 = result.model ? `${result.provider || t('auditCompare.snapshot')} / ${result.model}` : (result.provider || t('auditCompare.snapshot'));
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
@@ -141,6 +144,7 @@ function ResultPanel({ result, label }: { result: CompareResult; label: string }
 }
 
 export default function AuditComparePage() {
+  const { t } = useLang();
   const { id } = useParams<{ id: string }>();
   const [cfgA, setCfgA] = useState<ProviderConfig>(defaultConfig);
   const [cfgB, setCfgB] = useState<ProviderConfig>(() => ({ ...defaultConfig(), provider: 'openai', model: 'gpt-4o' }));
@@ -165,27 +169,26 @@ export default function AuditComparePage() {
 
   return (
     <div className="container">
-      <Link to={`/audits/${id}`} className="back-link">← Back to audit</Link>
-      <h2>Compare models — audit {id?.slice(0, 8)}…</h2>
+      <Link to={`/audits/${id}`} className="back-link">{t('auditCompare.backToAudit')}</Link>
+      <h2>{t('auditCompare.heading', { id: id?.slice(0, 8) ?? '' })}</h2>
       <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: -8 }}>
-        Run two providers in parallel against the same saved context and compare reports side by side.
-        Results are NOT saved — this is a preview only.
+        {t('auditCompare.description')}
       </p>
 
       {error && <p className="error-msg">{error}</p>}
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-        <ProviderForm label="Model A" cfg={cfgA} onChange={setCfgA} />
-        <ProviderForm label="Model B" cfg={cfgB} onChange={setCfgB} />
+        <ProviderForm label={t('auditCompare.modelA')} cfg={cfgA} onChange={setCfgA} />
+        <ProviderForm label={t('auditCompare.modelB')} cfg={cfgB} onChange={setCfgB} />
       </div>
 
       <button className="btn btn-primary" onClick={run} disabled={running}>
-        {running ? 'Running both providers… (this takes 1–3 min each)' : 'Run comparison'}
+        {running ? t('auditCompare.runningBoth') : t('auditCompare.runComparison')}
       </button>
 
       {running && (
         <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 8 }}>
-          Both providers are running in parallel. Results will appear when both complete.
+          {t('auditCompare.bothRunning')}
         </p>
       )}
 

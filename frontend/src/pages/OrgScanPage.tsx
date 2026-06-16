@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { useLang } from '../i18n';
 
 interface OrgRepo {
   full_name: string;
@@ -12,6 +13,7 @@ interface OrgRepo {
 }
 
 export default function OrgScanPage() {
+  const { t } = useLang();
   const [org, setOrg] = useState('');
   const [minStars, setMinStars] = useState(100);
   const [excludeForks, setExcludeForks] = useState(true);
@@ -76,20 +78,24 @@ export default function OrgScanPage() {
       }
     }
     setQueuing(false);
-    setQueueResult(`Queued ${ok} static snapshot audit${ok !== 1 ? 's' : ''}${fail ? ` (${fail} failed)` : ''}. Check the Audit page for progress.`);
+    setQueueResult(
+      fail
+        ? t('orgScan.queuedWithFailures', { ok, fail })
+        : t('orgScan.queued', { ok })
+    );
   }
 
   return (
     <div className="container">
-      <h2>Organisation Scan</h2>
+      <h2>{t('orgScan.heading')}</h2>
       <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: -8 }}>
-        Fetch all public repos for a GitHub org, select which ones to audit, and queue them in one click.
+        {t('orgScan.description')}
       </p>
 
       <div className="card">
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>GitHub org</label>
+            <label style={{ fontSize: 12, color: 'var(--muted)' }}>{t('orgScan.githubOrgLabel')}</label>
             <input
               className="input"
               style={{ width: 200 }}
@@ -100,7 +106,7 @@ export default function OrgScanPage() {
             />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 12, color: 'var(--muted)' }}>Min stars</label>
+            <label style={{ fontSize: 12, color: 'var(--muted)' }}>{t('orgScan.minStarsLabel')}</label>
             <input
               className="input"
               style={{ width: 90 }}
@@ -112,14 +118,14 @@ export default function OrgScanPage() {
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
             <input type="checkbox" checked={excludeForks} onChange={e => setExcludeForks(e.target.checked)} />
-            Exclude forks
+            {t('orgScan.excludeForks')}
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
             <input type="checkbox" checked={excludeArchived} onChange={e => setExcludeArchived(e.target.checked)} />
-            Exclude archived
+            {t('orgScan.excludeArchived')}
           </label>
           <button className="btn btn-primary" onClick={fetchRepos} disabled={loading || !org.trim()}>
-            {loading ? 'Fetching…' : 'Fetch repos'}
+            {loading ? t('orgScan.fetching') : t('orgScan.fetchRepos')}
           </button>
         </div>
         {error && <p className="error-msg" style={{ marginTop: 8 }}>{error}</p>}
@@ -129,7 +135,7 @@ export default function OrgScanPage() {
         <div className="card" style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-              {repos.length} repos found · <strong>{selected.size}</strong> selected
+              {t('orgScan.reposFoundSelected', { count: repos.length, selected: selected.size })}
             </span>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
@@ -137,7 +143,7 @@ export default function OrgScanPage() {
                 style={{ padding: '4px 10px', fontSize: 12, background: 'transparent', border: '1px solid var(--border)' }}
                 onClick={toggleAll}
               >
-                {selected.size === repos.length ? 'Deselect all' : 'Select all'}
+                {selected.size === repos.length ? t('orgScan.deselectAll') : t('orgScan.selectAll')}
               </button>
               <button
                 className="btn btn-primary"
@@ -145,14 +151,14 @@ export default function OrgScanPage() {
                 onClick={queueAudits}
                 disabled={queuing || selected.size === 0}
               >
-                {queuing ? 'Queuing…' : `Queue ${selected.size} audit${selected.size !== 1 ? 's' : ''}`}
+                {queuing ? t('orgScan.queuing') : t('orgScan.queueAudits', { count: selected.size })}
               </button>
             </div>
           </div>
 
           {queueResult && (
             <div style={{ padding: '8px 12px', background: 'rgba(76,175,80,0.1)', border: '1px solid rgba(76,175,80,0.3)', borderRadius: 4, fontSize: 13, marginBottom: 10 }}>
-              {queueResult} <Link to="/audits" style={{ color: 'var(--accent)' }}>View audits →</Link>
+              {queueResult} <Link to="/audits" style={{ color: 'var(--accent)' }}>{t('orgScan.viewAudits')}</Link>
             </div>
           )}
 
@@ -204,7 +210,7 @@ export default function OrgScanPage() {
 
       {!loading && repos.length === 0 && org && (
         <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 8 }}>
-          No repos found matching the current filters.
+          {t('orgScan.noReposFound')}
         </p>
       )}
     </div>

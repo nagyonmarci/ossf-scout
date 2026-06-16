@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api, PortfolioRepo } from '../api';
+import { useLang } from '../i18n';
 
 function Sparkline({ points }: { points: Array<{ scanned_at: string; score: number }> }) {
-  if (points.length < 2) return <span style={{ color: 'var(--muted)', fontSize: 12 }}>not enough data</span>;
+  const { t } = useLang();
+  if (points.length < 2) return <span style={{ color: 'var(--muted)', fontSize: 12 }}>{t('portfolio.notEnoughData')}</span>;
   const w = 120, h = 32, pad = 2;
   const scores = points.map(p => p.score);
   const min = Math.min(...scores), max = Math.max(...scores);
@@ -48,6 +50,7 @@ const scoreBar = (score: number) => {
 };
 
 export default function PortfolioPage() {
+  const { t } = useLang();
   const [repos, setRepos] = useState<PortfolioRepo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,9 +91,9 @@ export default function PortfolioPage() {
 
   return (
     <div className="container">
-      <h2>Portfolio</h2>
+      <h2>{t('portfolio.heading')}</h2>
       <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: -8 }}>
-        Aggregated view of all repos in your scan history. Sorted by OSSF score (lowest first).
+        {t('portfolio.description')}
       </p>
 
       {error && <p className="error-msg">{error}</p>}
@@ -99,7 +102,7 @@ export default function PortfolioPage() {
         <input
           className="input"
           style={{ maxWidth: 280 }}
-          placeholder="Filter repos…"
+          placeholder={t('portfolio.filterPlaceholder')}
           value={filterInput}
           onChange={e => setFilterInput(e.target.value)}
         />
@@ -111,17 +114,17 @@ export default function PortfolioPage() {
               style={{ padding: '4px 10px', fontSize: 13, background: sortBy === s ? undefined : 'transparent', border: '1px solid var(--border)' }}
               onClick={() => setSortBy(s)}
             >
-              {s === 'score' ? 'Score ↑' : s === 'stars' ? 'Stars ↓' : 'Audits ↓'}
+              {s === 'score' ? t('portfolio.sortScore') : s === 'stars' ? t('portfolio.sortStars') : t('portfolio.sortAudits')}
             </button>
           ))}
         </div>
       </div>
 
-      {loading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {loading && <p style={{ color: 'var(--muted)' }}>{t('common.loading')}</p>}
 
       {!loading && filtered.length === 0 && (
         <p style={{ color: 'var(--muted)' }}>
-          No repos found. Run a scan first to populate the portfolio.
+          {t('portfolio.noReposFound')}
         </p>
       )}
 
@@ -130,14 +133,14 @@ export default function PortfolioPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: 'var(--surface-2, rgba(255,255,255,0.03))', borderBottom: '1px solid var(--border)' }}>
-                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Repo</th>
-                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, minWidth: 140 }}>OSSF Score</th>
-                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>Stars</th>
-                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Weak checks</th>
-                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>Audits</th>
-                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Last audit</th>
-                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Trend</th>
-                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>Actions</th>
+                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>{t('portfolio.colRepo')}</th>
+                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, minWidth: 140 }}>{t('portfolio.colOssfScore')}</th>
+                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>{t('portfolio.colStars')}</th>
+                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>{t('portfolio.colWeakChecks')}</th>
+                <th style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>{t('portfolio.colAudits')}</th>
+                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>{t('portfolio.colLastAudit')}</th>
+                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>{t('portfolio.colTrend')}</th>
+                <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600 }}>{t('portfolio.colActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -193,11 +196,11 @@ export default function PortfolioPage() {
                       style={{ padding: '2px 8px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', color: 'var(--muted)' }}
                       onClick={() => loadTrend(r.repo)}
                     >
-                      {trendRepo === r.repo ? 'Hide' : 'Show trend'}
+                      {trendRepo === r.repo ? t('portfolio.hide') : t('portfolio.showTrend')}
                     </button>
                     {trendRepo === r.repo && (
                       <div style={{ marginTop: 6 }}>
-                        {trendLoading ? <span style={{ fontSize: 12, color: 'var(--muted)' }}>Loading…</span> : <Sparkline points={trendData} />}
+                        {trendLoading ? <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('common.loading')}</span> : <Sparkline points={trendData} />}
                       </div>
                     )}
                   </td>
@@ -207,7 +210,7 @@ export default function PortfolioPage() {
                       className="btn"
                       style={{ padding: '3px 10px', fontSize: 12, background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)' }}
                     >
-                      Audit
+                      {t('portfolio.audit')}
                     </Link>
                   </td>
                 </tr>
@@ -219,9 +222,9 @@ export default function PortfolioPage() {
 
       {allChecks.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
-          <h3 style={{ margin: '0 0 10px', fontSize: 14 }}>Weak check heatmap</h3>
+          <h3 style={{ margin: '0 0 10px', fontSize: 14 }}>{t('portfolio.weakCheckHeatmap')}</h3>
           <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 10px' }}>
-            How many repos fail each OSSF check (across {repos.length} repos):
+            {t('portfolio.heatmapDesc', { count: repos.length })}
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {allChecks.map(check => {
@@ -238,7 +241,7 @@ export default function PortfolioPage() {
                     color: opacity > 0.5 ? '#fff' : 'var(--fg)',
                     cursor: 'default',
                   }}
-                  title={`${count} of ${repos.length} repos fail this check`}
+                  title={t('portfolio.checkFailTitle', { count, total: repos.length })}
                 >
                   {check} ({count})
                 </div>

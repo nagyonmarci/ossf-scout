@@ -1,35 +1,36 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api, Schedule, UpdateScheduleParams } from '../api';
+import { useLang } from '../i18n';
 
 function formatDate(s: string | null) {
   if (!s) return '—';
   return new Date(s).toLocaleString();
 }
 
-function intervalLabel(h: number) {
+function intervalLabel(h: number, t: (key: any, params?: Record<string, string | number>) => string) {
   if (h < 24) return `${h}h`;
   const d = Math.round(h / 24);
-  return d === 1 ? 'daily' : d === 7 ? 'weekly' : d === 30 ? 'monthly' : `${d}d`;
+  return d === 1 ? t('schedulePage.daily') : d === 7 ? t('schedulePage.weekly') : d === 30 ? t('schedulePage.monthly') : `${d}d`;
 }
 
-function windowLabel(start: number, end: number) {
-  if (start < 0 || end <= start) return 'any time';
+function windowLabel(start: number, end: number, t: (key: any, params?: Record<string, string | number>) => string) {
+  if (start < 0 || end <= start) return t('schedulePage.anyTime');
   return `${String(start).padStart(2, '0')}:00–${String(end).padStart(2, '0')}:00 UTC`;
 }
-
-const INTERVAL_OPTIONS = [
-  { value: 24,  label: 'Daily (24h)' },
-  { value: 72,  label: 'Every 3 days' },
-  { value: 168, label: 'Weekly (7d)' },
-  { value: 336, label: 'Every 2 weeks' },
-  { value: 720, label: 'Monthly (30d)' },
-];
 
 interface EditState extends UpdateScheduleParams {
   id: string;
 }
 
 export default function SchedulePage() {
+  const { t } = useLang();
+  const INTERVAL_OPTIONS = [
+    { value: 24,  label: t('schedulePage.intervalDaily') },
+    { value: 72,  label: t('schedulePage.interval3Days') },
+    { value: 168, label: t('schedulePage.intervalWeekly') },
+    { value: 336, label: t('schedulePage.interval2Weeks') },
+    { value: 720, label: t('schedulePage.intervalMonthly') },
+  ];
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export default function SchedulePage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this schedule?')) return;
+    if (!confirm(t('schedulePage.deleteConfirm'))) return;
     await api.deleteSchedule(id);
     setSchedules((prev) => prev.filter((s) => s.id !== id));
   }
@@ -105,7 +106,7 @@ export default function SchedulePage() {
   }
 
   async function handlePauseAll() {
-    if (!confirm('Pause all active schedules?')) return;
+    if (!confirm(t('schedulePage.pauseAllConfirm'))) return;
     await api.pauseAllSchedules();
     load();
   }
@@ -139,30 +140,30 @@ export default function SchedulePage() {
   const active = schedules.filter((s) => s.enabled);
   const disabled = schedules.filter((s) => !s.enabled && s.auto_detected);
 
-  if (loading) return <div className="container"><p style={{ color: 'var(--muted)' }}>Loading…</p></div>;
+  if (loading) return <div className="container"><p style={{ color: 'var(--muted)' }}>{t('common.loading')}</p></div>;
 
   return (
     <div className="container">
       {/* New schedule form */}
       <div className="card">
-        <h2>New Schedule</h2>
+        <h2>{t('schedulePage.newSchedule')}</h2>
         <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <label>
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Repository (owner/name)</span>
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('schedulePage.repositoryLabel')}</span>
             <input type="text" className="input" placeholder="e.g. golang/go" value={newRepo}
               onChange={(e) => setNewRepo(e.target.value)} required style={{ marginTop: 4 }} />
           </label>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <label style={{ flex: 1, minWidth: 150 }}>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>Interval</span>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('schedulePage.intervalLabel')}</span>
               <select className="input" value={newInterval} onChange={(e) => setNewInterval(Number(e.target.value))} style={{ marginTop: 4 }}>
                 {INTERVAL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </label>
             <label style={{ flex: 1, minWidth: 150 }}>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>Provider (optional)</span>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('schedulePage.providerLabel')}</span>
               <select className="input" value={newProvider} onChange={(e) => setNewProvider(e.target.value)} style={{ marginTop: 4 }}>
-                <option value="">Static snapshot (free)</option>
+                <option value="">{t('schedulePage.staticSnapshotFree')}</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="openai">OpenAI</option>
                 <option value="gemini">Gemini</option>
@@ -170,26 +171,26 @@ export default function SchedulePage() {
               </select>
             </label>
             <label style={{ flex: 1, minWidth: 150 }}>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>Model (optional)</span>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('schedulePage.modelLabel')}</span>
               <input type="text" className="input" placeholder="default" value={newModel}
                 onChange={(e) => setNewModel(e.target.value)} style={{ marginTop: 4 }} />
             </label>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <label style={{ flex: 1, minWidth: 150 }}>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>Time window start (UTC hour, -1 = any)</span>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('schedulePage.windowStartLabel')}</span>
               <input type="number" className="input" min={-1} max={23} value={newWindowStart}
                 onChange={(e) => setNewWindowStart(Number(e.target.value))} style={{ marginTop: 4 }} />
             </label>
             <label style={{ flex: 1, minWidth: 150 }}>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>Time window end (UTC hour)</span>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('schedulePage.windowEndLabel')}</span>
               <input type="number" className="input" min={-1} max={24} value={newWindowEnd}
                 onChange={(e) => setNewWindowEnd(Number(e.target.value))} style={{ marginTop: 4 }} />
             </label>
           </div>
           {error && <p className="error-msg">{error}</p>}
           <button type="submit" className="btn btn-primary" disabled={submitting || !newRepo.trim()}>
-            {submitting ? 'Creating…' : 'Create Schedule'}
+            {submitting ? t('common.creating') : t('schedulePage.createSchedule')}
           </button>
         </form>
       </div>
@@ -197,27 +198,27 @@ export default function SchedulePage() {
       {/* Active schedules */}
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>Active Schedules</h2>
+          <h2>{t('schedulePage.activeSchedules')}</h2>
           {active.length > 0 && (
             <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 10px' }} onClick={handlePauseAll}>
-              Pause all
+              {t('schedulePage.pauseAll')}
             </button>
           )}
         </div>
         {active.length === 0 ? (
-          <p className="empty">No active schedules.</p>
+          <p className="empty">{t('schedulePage.noActiveSchedules')}</p>
         ) : (
           <div className="table-wrap">
             <table className="scans-table">
               <thead>
                 <tr>
-                  <th>Repository</th>
-                  <th>Interval</th>
-                  <th>Window</th>
-                  <th>Provider / Model</th>
-                  <th>Last run</th>
-                  <th>Next run</th>
-                  <th>Source</th>
+                  <th>{t('schedulePage.colRepository')}</th>
+                  <th>{t('schedulePage.colInterval')}</th>
+                  <th>{t('schedulePage.colWindow')}</th>
+                  <th>{t('schedulePage.colProviderModel')}</th>
+                  <th>{t('schedulePage.colLastRun')}</th>
+                  <th>{t('schedulePage.colNextRun')}</th>
+                  <th>{t('schedulePage.colSource')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -245,7 +246,7 @@ export default function SchedulePage() {
                         <div style={{ display: 'flex', gap: 4 }}>
                           <select className="input" style={{ fontSize: 12, padding: '2px 4px' }}
                             value={editing.provider} onChange={(e) => setEditing({ ...editing, provider: e.target.value })}>
-                            <option value="">Snapshot</option>
+                            <option value="">{t('schedulePage.snapshotOption')}</option>
                             <option value="anthropic">Anthropic</option>
                             <option value="openai">OpenAI</option>
                             <option value="gemini">Gemini</option>
@@ -257,31 +258,31 @@ export default function SchedulePage() {
                       </td>
                       <td>{formatDate(s.last_run_at)}</td>
                       <td>{formatDate(s.next_run_at)}</td>
-                      <td style={{ fontSize: 11, color: 'var(--muted)' }}>{s.auto_detected ? 'auto' : 'manual'}</td>
+                      <td style={{ fontSize: 11, color: 'var(--muted)' }}>{s.auto_detected ? t('schedulePage.auto') : t('schedulePage.manual')}</td>
                       <td style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-primary" style={{ fontSize: 12, padding: '3px 8px' }} onClick={handleSaveEdit}>Save</button>
-                        <button className="btn" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => setEditing(null)}>Cancel</button>
+                        <button className="btn btn-primary" style={{ fontSize: 12, padding: '3px 8px' }} onClick={handleSaveEdit}>{t('common.save')}</button>
+                        <button className="btn" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => setEditing(null)}>{t('common.cancel')}</button>
                       </td>
                     </tr>
                   ) : (
                     <tr key={s.id}>
                       <td><code>{s.repo}</code></td>
-                      <td style={{ color: 'var(--muted)', fontSize: 12 }}>{intervalLabel(s.interval_h)}</td>
-                      <td style={{ color: 'var(--muted)', fontSize: 12 }}>{windowLabel(s.time_window_start, s.time_window_end)}</td>
-                      <td style={{ color: 'var(--muted)', fontSize: 12 }}>{s.provider || 'snapshot'}{s.model ? ` · ${s.model}` : ''}</td>
+                      <td style={{ color: 'var(--muted)', fontSize: 12 }}>{intervalLabel(s.interval_h, t)}</td>
+                      <td style={{ color: 'var(--muted)', fontSize: 12 }}>{windowLabel(s.time_window_start, s.time_window_end, t)}</td>
+                      <td style={{ color: 'var(--muted)', fontSize: 12 }}>{s.provider || t('schedulePage.snapshot')}{s.model ? ` · ${s.model}` : ''}</td>
                       <td style={{ fontSize: 12 }}>{formatDate(s.last_run_at)}</td>
                       <td style={{ fontSize: 12 }}>{formatDate(s.next_run_at)}</td>
                       <td style={{ fontSize: 11, color: 'var(--muted)' }}>
-                        {s.auto_detected ? <span title={s.detect_reason}>auto</span> : 'manual'}
+                        {s.auto_detected ? <span title={s.detect_reason}>{t('schedulePage.auto')}</span> : t('schedulePage.manual')}
                       </td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         <button className="btn" style={{ fontSize: 12, padding: '3px 8px' }}
                           onClick={() => setEditing({ id: s.id, interval_h: s.interval_h, provider: s.provider, model: s.model, enabled: s.enabled, time_window_start: s.time_window_start, time_window_end: s.time_window_end })}>
-                          Edit
+                          {t('common.edit')}
                         </button>
-                        <button className="btn" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => handleTrigger(s.id)}>Run now</button>
-                        <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => handleToggle(s)}>Disable</button>
-                        <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => handleDelete(s.id)}>Delete</button>
+                        <button className="btn" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => handleTrigger(s.id)}>{t('schedulePage.runNow')}</button>
+                        <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => handleToggle(s)}>{t('schedulePage.disable')}</button>
+                        <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => handleDelete(s.id)}>{t('common.delete')}</button>
                       </td>
                     </tr>
                   )
@@ -295,9 +296,9 @@ export default function SchedulePage() {
       {/* Auto-detected suggestions */}
       {disabled.length > 0 && (
         <div className="card">
-          <h2>Suggested Schedules</h2>
+          <h2>{t('schedulePage.suggestedSchedules')}</h2>
           <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
-            These repos were auto-detected as good monitoring candidates. Enable to start scheduling.
+            {t('schedulePage.suggestedSchedulesDesc')}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {disabled.map((s) => (
@@ -307,8 +308,8 @@ export default function SchedulePage() {
                   {s.detect_reason && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 10 }}>{s.detect_reason}</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn btn-primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => handleEnableSuggested(s)}>Enable</button>
-                  <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => handleDelete(s.id)}>Dismiss</button>
+                  <button className="btn btn-primary" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => handleEnableSuggested(s)}>{t('schedulePage.enable')}</button>
+                  <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 10px' }} onClick={() => handleDelete(s.id)}>{t('schedulePage.dismiss')}</button>
                 </div>
               </div>
             ))}

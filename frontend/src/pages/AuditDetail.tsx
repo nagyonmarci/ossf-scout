@@ -4,10 +4,12 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api, Audit } from '../api';
 import StatusBadge from '../components/StatusBadge';
+import { useLang } from '../i18n';
 
 interface SCNode { action: string; tag: string; sha: string; resolved: boolean; files: string[] }
 
 function SupplyChainGraph({ auditId }: { auditId: string }) {
+  const { t } = useLang();
   const [nodes, setNodes] = useState<SCNode[] | null>(null);
   const [repo, setRepo] = useState('');
   const [loading, setLoading] = useState(true);
@@ -20,8 +22,8 @@ function SupplyChainGraph({ auditId }: { auditId: string }) {
       .finally(() => setLoading(false));
   }, [auditId]);
 
-  if (loading) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>Loading supply chain…</p>;
-  if (!nodes || nodes.length === 0) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>No GitHub Actions dependencies found in context.</p>;
+  if (loading) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>{t('auditDetail.loadingSupplyChain')}</p>;
+  if (!nodes || nodes.length === 0) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>{t('auditDetail.noSupplyChain')}</p>;
 
   const NODE_W = 220, NODE_H = 44, GAP_X = 40, GAP_Y = 20;
   const ROOT_W = 160, ROOT_H = 36;
@@ -64,7 +66,7 @@ function SupplyChainGraph({ auditId }: { auditId: string }) {
         })}
       </svg>
       <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-        Green = SHA resolved · Orange = tag still mutable · {nodes.length} action dependencies
+        {t('auditDetail.supplyChainLegend', { count: nodes.length })}
       </p>
     </div>
   );
@@ -94,6 +96,7 @@ const LS = {
 };
 
 export default function AuditDetail() {
+  const { t } = useLang();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [audit, setAudit] = useState<Audit | null>(null);
@@ -182,7 +185,7 @@ export default function AuditDetail() {
   return (
     <div className="container">
       <Link to="/audits" className="back-link">
-        ← Back to audits
+        {t('auditDetail.backToAudits')}
       </Link>
 
       {error && <p className="error-msg">{error}</p>}
@@ -192,24 +195,24 @@ export default function AuditDetail() {
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
               <h2 style={{ margin: 0 }}>
-                Audit: <code>{audit.repo}</code>
+                {t('auditDetail.auditHeading')} <code>{audit.repo}</code>
               </h2>
               <StatusBadge status={audit.status} />
             </div>
 
             <div className="detail-meta">
               <span className="meta-item">
-                <span className="meta-label">Started:</span>
+                <span className="meta-label">{t('auditDetail.started')}</span>
                 {new Date(audit.created_at).toLocaleString()}
               </span>
               {audit.completed_at && (
                 <span className="meta-item">
-                  <span className="meta-label">Completed:</span>
+                  <span className="meta-label">{t('auditDetail.completed')}</span>
                   {new Date(audit.completed_at).toLocaleString()}
                 </span>
               )}
               <span className="meta-item">
-                <span className="meta-label">Mode:</span>
+                <span className="meta-label">{t('auditDetail.mode')}</span>
                 {audit.provider === 'ollama'
                   ? `Ollama · ${audit.model || '?'}`
                   : audit.provider === 'anthropic'
@@ -218,11 +221,11 @@ export default function AuditDetail() {
                   ? audit.model || 'OpenAI'
                   : audit.provider === 'gemini'
                   ? audit.model || 'Gemini'
-                  : 'Static snapshot'}
+                  : t('auditDetail.staticSnapshot')}
               </span>
               {(audit.input_tokens ?? 0) > 0 && (
                 <span className="meta-item">
-                  <span className="meta-label">Tokens in/out:</span>
+                  <span className="meta-label">{t('auditDetail.tokensInOut')}</span>
                   {audit.input_tokens!.toLocaleString()} / {(audit.output_tokens ?? 0).toLocaleString()}
                 </span>
               )}
@@ -231,43 +234,43 @@ export default function AuditDetail() {
             {(audit.status === 'pending' || audit.status === 'running') && (
               <p style={{ color: 'var(--muted)', fontSize: 13 }}>
                 {audit.status === 'pending'
-                  ? 'Waiting to start…'
-                  : 'Cloning repo and running analysis — this takes 1–3 minutes…'}
+                  ? t('auditDetail.waitingToStart')
+                  : t('auditDetail.cloningAndAnalyzing')}
               </p>
             )}
-            {audit.status === 'error' && <p className="error-msg">Error: {audit.error}</p>}
+            {audit.status === 'error' && <p className="error-msg">{t('auditDetail.error', { msg: audit.error ?? '' })}</p>}
             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
                 <>
                   <button className="btn btn-primary" onClick={downloadReport}>
-                    Download .md
+                    {t('auditDetail.downloadMd')}
                   </button>
                   <a className="btn no-print" href={`/api/audits/${audit.id}/export.pdf`} download>
-                    Download PDF
+                    {t('auditDetail.downloadPdf')}
                   </a>
                 </>
               )}
               {audit.has_context && (
                 <>
                   <a className="btn" href={`/api/audits/${audit.id}/context.md`} download>
-                    Download AI context
+                    {t('auditDetail.downloadAiContext')}
                   </a>
                   <Link
                     to={`/audits/${audit.id}/compare`}
                     className="btn"
                     style={{ background: 'transparent', border: '1px solid var(--border)' }}
                   >
-                    Compare models
+                    {t('auditDetail.compareModels')}
                   </Link>
                 </>
               )}
               {(audit.status === 'done' || (audit.status === 'error' && audit.report)) && (
                 <>
                   <a className="btn" href={`/api/audits/${audit.id}/export.sarif`} download>
-                    Export SARIF
+                    {t('auditDetail.exportSarif')}
                   </a>
                   <a className="btn" href={`/api/audits/${audit.id}/export.json`} download>
-                    Export JSON
+                    {t('auditDetail.exportJson')}
                   </a>
                 </>
               )}
@@ -278,7 +281,7 @@ export default function AuditDetail() {
                     className="btn"
                     style={{ background: 'transparent', border: '1px solid var(--border)' }}
                   >
-                    Track findings
+                    {t('auditDetail.trackFindings')}
                   </Link>
                   <button
                     className="btn"
@@ -289,15 +292,15 @@ export default function AuditDetail() {
                       setExtractMsg(null);
                       try {
                         const r = await api.extractFindings(audit!.id);
-                        setExtractMsg(`${r.created} finding${r.created !== 1 ? 's' : ''} added to tracker`);
+                        setExtractMsg(t('auditDetail.findingsAdded', { count: r.created }));
                       } catch (e) {
-                        setExtractMsg('Extract failed: ' + String(e));
+                        setExtractMsg(t('auditDetail.extractFailed', { error: String(e) }));
                       } finally {
                         setExtracting(false);
                       }
                     }}
                   >
-                    {extracting ? 'Extracting…' : 'Extract to tracker'}
+                    {extracting ? t('auditDetail.extracting') : t('auditDetail.extractToTracker')}
                   </button>
                   {extractMsg && <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{extractMsg}</span>}
                 </>
@@ -309,7 +312,7 @@ export default function AuditDetail() {
                     style={{ background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)' }}
                     onClick={() => setShowGenForm(v => !v)}
                   >
-                    Run with AI
+                    {t('auditDetail.runWithAi')}
                   </button>
                 ) : (
                   <button
@@ -317,7 +320,7 @@ export default function AuditDetail() {
                     style={{ background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)' }}
                     onClick={() => navigate(`/audits?repo=${encodeURIComponent(audit!.repo)}`)}
                   >
-                    Run with AI
+                    {t('auditDetail.runWithAi')}
                   </button>
                 )
               )}
@@ -326,7 +329,7 @@ export default function AuditDetail() {
             {showGenForm && audit.has_context && (
               <div style={{ marginTop: 12, padding: 12, border: '1px solid var(--border)', borderRadius: 6 }}>
                 <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--muted)' }}>
-                  Re-generates the report using saved context — no re-cloning needed.
+                  {t('auditDetail.regenerateHint')}
                 </p>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
                   {(['ollama', 'anthropic', 'openai', 'gemini', ''] as const).map(p => (
@@ -336,13 +339,13 @@ export default function AuditDetail() {
                       style={{ padding: '4px 12px', fontSize: 13, background: genProvider === p ? undefined : 'transparent', border: '1px solid var(--border)', color: genProvider === p ? undefined : 'var(--muted)' }}
                       onClick={() => { setGenProvider(p); LS.set('audit.provider', p); }}
                     >
-                      {p === '' ? 'Snapshot' : p === 'anthropic' ? 'Anthropic' : p === 'openai' ? 'OpenAI' : p === 'gemini' ? 'Gemini' : 'Ollama'}
+                      {p === '' ? t('auditDetail.snapshot') : p === 'anthropic' ? 'Anthropic' : p === 'openai' ? 'OpenAI' : p === 'gemini' ? 'Gemini' : 'Ollama'}
                     </button>
                   ))}
                 </div>
                 {genProvider === 'anthropic' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
-                    <input type="password" className="input" placeholder="Anthropic API key" value={genApiKey}
+                    <input type="password" className="input" placeholder={t('auditDetail.anthropicApiKeyPlaceholder')} value={genApiKey}
                       onChange={e => { setGenApiKey(e.target.value); LS.set('audit.anthropicKey', e.target.value); }} />
                     <select className="input" value={genModel}
                       onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}>
@@ -354,17 +357,17 @@ export default function AuditDetail() {
                         checked={genSplitGeneration}
                         onChange={e => { setGenSplitGeneration(e.target.checked); LS.set('audit.splitGeneration', String(e.target.checked)); }}
                       />
-                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>Split generation into section summaries before the final report</span>
+                      <span style={{ fontSize: 13, color: 'var(--muted)' }}>{t('auditPage.splitGenerationHint')}</span>
                     </label>
                     {genSplitGeneration && (
-                      <input type="text" className="input" placeholder="Analysis model (optional — empty uses final model)"
+                      <input type="text" className="input" placeholder={t('auditDetail.analysisModelOptionalPlaceholder')}
                         value={genAnalysisModel} onChange={e => { setGenAnalysisModel(e.target.value); LS.set('audit.analysisModel', e.target.value); }} />
                     )}
                   </div>
                 )}
                 {genProvider === 'openai' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
-                    <input type="password" className="input" placeholder="OpenAI API key" value={genOpenAIKey}
+                    <input type="password" className="input" placeholder={t('auditDetail.openaiApiKeyPlaceholder')} value={genOpenAIKey}
                       onChange={e => { setGenOpenAIKey(e.target.value); LS.set('audit.openaiKey', e.target.value); }} />
                     <select className="input" value={genModel}
                       onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}>
@@ -374,7 +377,7 @@ export default function AuditDetail() {
                 )}
                 {genProvider === 'gemini' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
-                    <input type="password" className="input" placeholder="Gemini API key" value={genGeminiKey}
+                    <input type="password" className="input" placeholder={t('auditDetail.geminiApiKeyPlaceholder')} value={genGeminiKey}
                       onChange={e => { setGenGeminiKey(e.target.value); LS.set('audit.geminiKey', e.target.value); }} />
                     <select className="input" value={genModel}
                       onChange={e => { setGenModel(e.target.value); LS.set('audit.model', e.target.value); }}>
@@ -387,14 +390,14 @@ export default function AuditDetail() {
                     <input
                       type="text"
                       className="input"
-                      placeholder="Ollama URL (leave blank for server default)"
+                      placeholder={t('auditDetail.ollamaUrlPlaceholder')}
                       value={genOllamaURL}
                       onChange={e => { setGenOllamaURL(e.target.value); LS.set('audit.ollamaURL', e.target.value); }}
                     />
                     <input
                       type="text"
                       className="input"
-                      placeholder="Final report model (e.g. llama3, qwen2.5)"
+                      placeholder={t('auditDetail.finalReportModelPlaceholder')}
                       value={genOllamaModel}
                       onChange={e => { setGenOllamaModel(e.target.value); LS.set('audit.ollamaModel', e.target.value); }}
                     />
@@ -408,14 +411,14 @@ export default function AuditDetail() {
                         }}
                       />
                       <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                        Split generation into section summaries before the final report
+                        {t('auditPage.splitGenerationHint')}
                       </span>
                     </label>
                     {genSplitGeneration && (
                       <input
                         type="text"
                         className="input"
-                        placeholder="Analysis model (optional — empty uses final model)"
+                        placeholder={t('auditDetail.analysisModelOptionalPlaceholder')}
                         value={genAnalysisModel}
                         onChange={e => { setGenAnalysisModel(e.target.value); LS.set('audit.analysisModel', e.target.value); }}
                       />
@@ -424,14 +427,14 @@ export default function AuditDetail() {
                 )}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="btn btn-primary" onClick={submitGenerate} disabled={genSubmitting}>
-                    {genSubmitting ? 'Starting…' : 'Generate report'}
+                    {genSubmitting ? t('common.starting') : t('auditDetail.generateReport')}
                   </button>
                   <button
                     className="btn"
                     style={{ background: 'transparent', border: '1px solid var(--border)' }}
                     onClick={() => setShowGenForm(false)}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 </div>
                 {genError && <p className="error-msg" style={{ marginTop: 6 }}>{genError}</p>}
@@ -447,9 +450,9 @@ export default function AuditDetail() {
 
           {audit.has_context && (audit.status === 'done' || audit.status === 'error') && (
             <div className="card">
-              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Supply Chain Graph</h3>
+              <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>{t('auditDetail.supplyChainGraph')}</h3>
               <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 8px' }}>
-                GitHub Actions dependencies detected in this repo's workflows.
+                {t('auditDetail.supplyChainDesc')}
               </p>
               <SupplyChainGraph auditId={audit.id} />
             </div>

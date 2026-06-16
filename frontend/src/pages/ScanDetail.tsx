@@ -5,8 +5,10 @@ import StatusBadge from '../components/StatusBadge'
 import ResultsTable from '../components/ResultsTable'
 import Toast from '../components/Toast'
 import { useToast } from '../hooks/useToast'
+import { useLang } from '../i18n'
 
 export default function ScanDetail() {
+  const { t } = useLang()
   const { id } = useParams<{ id: string }>()
   const scanId = Number(id)
 
@@ -44,7 +46,7 @@ export default function ScanDetail() {
 
   return (
     <div className="container">
-      <Link to="/" className="back-link">← Back to scans</Link>
+      <Link to="/" className="back-link">{t('scanDetail.backToScans')}</Link>
 
       {error && <p className="error-msg">{error}</p>}
 
@@ -52,77 +54,77 @@ export default function ScanDetail() {
         <>
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-              <h2 style={{ margin: 0 }}>Scan #{scan.id}</h2>
+              <h2 style={{ margin: 0 }}>{t('scanDetail.scanHeading', { id: scan.id })}</h2>
               <StatusBadge status={scan.status} />
             </div>
             <div className="detail-meta">
               <span className="meta-item">
-                <span className="meta-label">Language:</span>
-                {scan.language || '(any)'}
+                <span className="meta-label">{t('scanDetail.language')}</span>
+                {scan.language || t('common.any')}
               </span>
               <span className="meta-item">
-                <span className="meta-label">Min Stars:</span>
+                <span className="meta-label">{t('scanDetail.minStars')}</span>
                 {scan.min_stars.toLocaleString()}
               </span>
               <span className="meta-item">
-                <span className="meta-label">Max Score:</span>
+                <span className="meta-label">{t('scanDetail.maxScore')}</span>
                 {scan.max_score}
               </span>
               <span className="meta-item">
-                <span className="meta-label">Limit:</span>
+                <span className="meta-label">{t('scanDetail.limit')}</span>
                 {scan.limit}
               </span>
               <span className="meta-item">
-                <span className="meta-label">Workers:</span>
+                <span className="meta-label">{t('scanDetail.workers')}</span>
                 {scan.workers}
               </span>
               {scan.topic && (
                 <span className="meta-item">
-                  <span className="meta-label">Topic:</span>
+                  <span className="meta-label">{t('scanDetail.topic')}</span>
                   {scan.topic}
                 </span>
               )}
               {scan.keyword && (
                 <span className="meta-item">
-                  <span className="meta-label">Keyword:</span>
+                  <span className="meta-label">{t('scanDetail.keyword')}</span>
                   {scan.keyword}
                 </span>
               )}
               {scan.check_filter && (
                 <span className="meta-item">
-                  <span className="meta-label">Checks:</span>
+                  <span className="meta-label">{t('scanDetail.checks')}</span>
                   {scan.check_filter}
                 </span>
               )}
               <span className="meta-item">
-                <span className="meta-label">Started:</span>
+                <span className="meta-label">{t('scanDetail.started')}</span>
                 {new Date(scan.created_at).toLocaleString()}
               </span>
               {scan.finished_at && (
                 <span className="meta-item">
-                  <span className="meta-label">Finished:</span>
+                  <span className="meta-label">{t('scanDetail.finished')}</span>
                   {new Date(scan.finished_at).toLocaleString()}
                 </span>
               )}
             </div>
             {scan.status === 'running' && (
               <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-                Scan in progress — fetching repos and querying Scorecard API…
+                {t('scanDetail.inProgress')}
               </p>
             )}
             {scan.status === 'error' && (
-              <p className="error-msg">Error: {scan.error_msg}</p>
+              <p className="error-msg">{t('scanDetail.error', { msg: scan.error_msg ?? '' })}</p>
             )}
             {scan.status === 'done' && (
               <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-                Found {scan.result_count} repos with weak scores out of {scan.total_repos} fetched.
+                {t('scanDetail.foundSummary', { found: scan.result_count ?? 0, total: scan.total_repos ?? 0 })}
               </p>
             )}
           </div>
 
           {scan.status === 'done' && results.length > 0 && (
             <div className="card">
-              <h2>Results ({results.length})</h2>
+              <h2>{t('scanDetail.resultsHeading', { count: results.length })}</h2>
               <ResultsTable results={results} />
             </div>
           )}

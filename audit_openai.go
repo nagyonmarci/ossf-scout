@@ -86,13 +86,5 @@ func callOpenAI(systemPrompt, userPrompt, apiKey, model string, maxTokens int) (
 }
 
 func generateOpenAIReport(ctx *auditContext, apiKey, model string) (report string, inputTokens, outputTokens int, err error) {
-	if model == "" {
-		model = defaultOpenAIModel
-	}
-	report, inputTokens, outputTokens, err = callOpenAI(auditSystemPrompt, buildUserPrompt(ctx), apiKey, model, defaultMaxTokens)
-	if err != nil && isContextTooLarge(err) {
-		compact := compactForOllama(ctx)
-		report, inputTokens, outputTokens, err = callOpenAI(auditSystemPrompt, buildUserPrompt(compact), apiKey, model, defaultMaxTokens/2)
-	}
-	return
+	return generateProviderReport(callOpenAI, ctx, apiKey, model, defaultOpenAIModel, defaultMaxTokens, defaultMaxTokens/2)
 }

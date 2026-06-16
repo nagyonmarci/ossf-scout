@@ -83,7 +83,8 @@ The niche: **GitHub Search + Scorecard filters to surface popular-but-weak repos
 - **Portfolio dashboard** — aggregates watched repos with latest score, stars, weak checks, audit counts, and score sparklines
 - **Score trend API/UI** — tracks Scorecard score and star history per repo across repeated scans
 - **Remediation board** — extracts findings from audit reports into trackable cards with severity, status, notes, and due dates
-- **Schedules** — run recurring audits at configurable intervals; auto-suggested for repos that repeatedly appear weak
+- **Schedules** — run recurring audits at configurable intervals; auto-suggested for repos that repeatedly appear weak; **Pause all** stops every active schedule in one click
+- **Language switcher** — UI available in English, Hungarian, and German; persists per browser
 - **Auto-detected audit schedules** — suggests schedules for repos that repeatedly appear weak or are already being audited
 - **Issues/PR intelligence** — caches security-relevant open/closed issues and PR summaries for a repo; `?refresh=true` forces a live re-fetch
 - **Notifications** — in-app toast and browser Notification API on scan completion; optional outbound webhook (`NOTIFY_WEBHOOK_URL`)
@@ -267,6 +268,8 @@ The OpenSSF checks evaluated by default:
 ## Contributing
 
 PRs welcome. Run `make dev` to build locally. The web server embeds the frontend at build time — edit `frontend/src/` and rebuild with `make dev`.
+
+Frontend tests: `cd frontend && pnpm test` (Vitest + React Testing Library), run automatically in CI.
 
 ---
 

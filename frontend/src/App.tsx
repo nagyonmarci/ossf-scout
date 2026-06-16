@@ -1,16 +1,17 @@
 import { BrowserRouter, Routes, Route, NavLink, Outlet } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense, lazy } from 'react'
 import { useLang, type Lang } from './i18n'
-import ScanList from './pages/ScanList'
-import ScanDetail from './pages/ScanDetail'
-import TrendingPage from './pages/TrendingPage'
-import AuditPage from './pages/AuditPage'
-import AuditDetail from './pages/AuditDetail'
-import SchedulePage from './pages/SchedulePage'
-import PortfolioPage from './pages/PortfolioPage'
-import RemediationPage from './pages/RemediationPage'
-import OrgScanPage from './pages/OrgScanPage'
-import AuditComparePage from './pages/AuditComparePage'
+
+const ScanList = lazy(() => import('./pages/ScanList'))
+const ScanDetail = lazy(() => import('./pages/ScanDetail'))
+const TrendingPage = lazy(() => import('./pages/TrendingPage'))
+const AuditPage = lazy(() => import('./pages/AuditPage'))
+const AuditDetail = lazy(() => import('./pages/AuditDetail'))
+const SchedulePage = lazy(() => import('./pages/SchedulePage'))
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage'))
+const RemediationPage = lazy(() => import('./pages/RemediationPage'))
+const OrgScanPage = lazy(() => import('./pages/OrgScanPage'))
+const AuditComparePage = lazy(() => import('./pages/AuditComparePage'))
 
 function AppHeader() {
   const { t, lang, setLang } = useLang()
@@ -40,6 +41,7 @@ function AppHeader() {
           >
             <option value="en">EN</option>
             <option value="hu">HU</option>
+            <option value="de">DE</option>
           </select>
         </div>
       </div>
@@ -48,10 +50,13 @@ function AppHeader() {
 }
 
 function Layout() {
+  const { t } = useLang()
   return (
     <>
       <AppHeader />
-      <Outlet />
+      <Suspense fallback={<div className="container"><p style={{ color: 'var(--muted)' }}>{t('common.loading')}</p></div>}>
+        <Outlet />
+      </Suspense>
     </>
   )
 }

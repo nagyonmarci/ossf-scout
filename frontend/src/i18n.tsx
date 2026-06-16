@@ -1,18 +1,22 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import en from './locales/en';
 import hu from './locales/hu';
+import de from './locales/de';
 
-export type Lang = 'en' | 'hu';
+export type Lang = 'en' | 'hu' | 'de';
 export type Dict = typeof en;
 
-const dictionaries: Record<Lang, Dict> = { en, hu };
+const dictionaries: Record<Lang, Dict> = { en, hu, de };
 
 const STORAGE_KEY = 'ossf-scout-lang';
 
 function detectInitialLang(): Lang {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'en' || stored === 'hu') return stored;
-  return navigator.language.toLowerCase().startsWith('hu') ? 'hu' : 'en';
+  if (stored === 'en' || stored === 'hu' || stored === 'de') return stored;
+  const browserLang = navigator.language.toLowerCase();
+  if (browserLang.startsWith('hu')) return 'hu';
+  if (browserLang.startsWith('de')) return 'de';
+  return 'en';
 }
 
 type TranslateFn = (key: keyof Dict, params?: Record<string, string | number>) => string;

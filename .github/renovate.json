@@ -1,8 +1,49 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended",
+    "mergeConfidence:all-badges"
+  ],
   "configMigration": true,
   "schedule": ["every weekend"],
+  "pinDigests": true,
+
+  "packageRules": [
+    {
+      "description": "Auto-merge high-confidence patch updates after 3-day minimum release age",
+      "matchUpdateTypes": ["patch"],
+      "matchConfidence": ["high", "very high"],
+      "minimumReleaseAge": "3 days",
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
+      "description": "Group docker/* GitHub Actions into a single PR",
+      "matchManagers": ["github-actions"],
+      "matchPackagePatterns": ["^docker/"],
+      "groupName": "docker GitHub Actions"
+    },
+    {
+      "description": "Group actions/* GitHub Actions into a single PR",
+      "matchManagers": ["github-actions"],
+      "matchPackagePatterns": ["^actions/"],
+      "groupName": "GitHub official actions"
+    },
+    {
+      "description": "Group Dockerfile security tool versions (trivy, helm, zizmor, kube-linter, trufflehog) into a single PR",
+      "matchManagers": ["regex"],
+      "groupName": "Dockerfile security tool versions"
+    },
+    {
+      "description": "Group Docker base image digest updates into a single PR, require manual review",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["digest"],
+      "groupName": "Docker base image digests",
+      "automerge": false
+    }
+  ],
+
   "customManagers": [
     {
       "customType": "regex",

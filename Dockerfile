@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: frontend build
-FROM node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920 AS frontend
+FROM node:24-alpine@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14 AS frontend
 WORKDIR /app/frontend
 RUN npm install -g pnpm@11
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
@@ -11,7 +11,7 @@ COPY frontend/ ./
 RUN pnpm run build
 
 # Stage 2: Go build + Go-based security tools
-FROM golang:1.25-alpine@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931 AS builder
+FROM golang:1.26-alpine@sha256:f23e8b227fb4493eabe03bede4d5a32d04092da71962f1fb79b5f7d1e6c2a17f AS builder
 RUN apk add --no-cache git
 WORKDIR /app
 COPY go.mod go.sum ./

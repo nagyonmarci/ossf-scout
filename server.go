@@ -51,6 +51,7 @@ func startServer(port int, dbPath string, serverToken string) {
 	mux.HandleFunc("PUT /api/schedules/{id}", handleUpdateSchedule(db))
 	mux.HandleFunc("DELETE /api/schedules/{id}", handleDeleteSchedule(db))
 	mux.HandleFunc("POST /api/schedules/{id}/run", handleTriggerSchedule(db))
+	mux.HandleFunc("POST /api/schedules/pause-all", handlePauseAllSchedules(db))
 
 	mux.HandleFunc("GET /api/remediation", handleListRemediation(db))
 	mux.HandleFunc("POST /api/remediation", handleCreateRemediation(db))

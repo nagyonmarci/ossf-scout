@@ -207,6 +207,7 @@ export const api = {
   updateSchedule: (id: string, params: UpdateScheduleParams) => request<void>('PUT', `/api/schedules/${id}`, params),
   deleteSchedule: (id: string) => request<void>('DELETE', `/api/schedules/${id}`),
   triggerSchedule: (id: string) => request<void>('POST', `/api/schedules/${id}/run`, {}),
+  pauseAllSchedules: () => request<void>('POST', '/api/schedules/pause-all', {}),
   getCostStats: (days?: number) => request<CostStats>('GET', `/api/stats/costs${days ? `?days=${days}` : ''}`),
   listOrgRepos: (org: string, opts?: { min_stars?: number; exclude_forks?: boolean; exclude_archived?: boolean }) => {
     const q = new URLSearchParams()

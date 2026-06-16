@@ -587,6 +587,11 @@ func dbDeleteSchedule(db *sql.DB, id string) error {
 	return err
 }
 
+func dbPauseAllSchedules(db *sql.DB) error {
+	_, err := db.Exec(`UPDATE audit_schedules SET enabled=0 WHERE enabled=1`)
+	return err
+}
+
 func dbTriggerScheduleNow(db *sql.DB, id string) error {
 	_, err := db.Exec(`UPDATE audit_schedules SET next_run_at=? WHERE id=?`,
 		time.Now().UTC().Add(-time.Second).Format(time.RFC3339), id)

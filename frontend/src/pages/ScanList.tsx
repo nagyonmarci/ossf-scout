@@ -5,12 +5,14 @@ import ScanForm from '../components/ScanForm'
 import StatusBadge from '../components/StatusBadge'
 import Toast from '../components/Toast'
 import { useToast } from '../hooks/useToast'
+import { useLang } from '../i18n'
 
 function formatDate(s: string) {
   return new Date(s).toLocaleString()
 }
 
 export default function ScanList() {
+  const { t } = useLang()
   const navigate = useNavigate()
   const [scans, setScans] = useState<Scan[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -53,28 +55,28 @@ export default function ScanList() {
   return (
     <div className="container">
       <div className="card">
-        <h2>New Scan</h2>
+        <h2>{t('scanList.newScan')}</h2>
         <ScanForm onScanStarted={requestPermission} />
       </div>
 
       <div className="card">
-        <h2>Scan History</h2>
+        <h2>{t('scanList.scanHistory')}</h2>
         {error && <p className="error-msg">{error}</p>}
         {scans.length === 0 ? (
-          <p className="empty">No scans yet. Run one above.</p>
+          <p className="empty">{t('scanList.noScans')}</p>
         ) : (
           <div className="table-wrap">
             <table className="scans-table">
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Date</th>
-                  <th>Language</th>
-                  <th>Min Stars</th>
-                  <th>Max Score</th>
-                  <th>Limit</th>
-                  <th>Status</th>
-                  <th>Results</th>
+                  <th>{t('scanList.colDate')}</th>
+                  <th>{t('scanList.colLanguage')}</th>
+                  <th>{t('scanList.colMinStars')}</th>
+                  <th>{t('scanList.colMaxScore')}</th>
+                  <th>{t('scanList.colLimit')}</th>
+                  <th>{t('scanList.colStatus')}</th>
+                  <th>{t('scanList.colResults')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -87,7 +89,7 @@ export default function ScanList() {
                   >
                     <td>{s.id}</td>
                     <td>{formatDate(s.created_at)}</td>
-                    <td>{s.language || '(any)'}</td>
+                    <td>{s.language || t('common.any')}</td>
                     <td>{s.min_stars.toLocaleString()}</td>
                     <td>{s.max_score}</td>
                     <td>{s.limit}</td>
@@ -98,7 +100,7 @@ export default function ScanList() {
                         className="btn btn-danger"
                         onClick={e => deleteScan(e, s.id)}
                       >
-                        Delete
+                        {t('common.delete')}
                       </button>
                     </td>
                   </tr>

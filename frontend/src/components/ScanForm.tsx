@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, CreateScanParams } from '../api'
+import { useLang } from '../i18n'
 
 function firstDayOfMonth(): string {
   const d = new Date()
@@ -12,13 +13,6 @@ function daysAgo(n: number): string {
   d.setDate(d.getDate() - n)
   return d.toISOString().slice(0, 10)
 }
-
-const DATE_PRESETS = [
-  { label: 'Any time', value: '' },
-  { label: 'This month', value: firstDayOfMonth() },
-  { label: 'Last 30 days', value: daysAgo(30) },
-  { label: 'Last 90 days', value: daysAgo(90) },
-]
 
 const defaults: CreateScanParams = {
   language: '',
@@ -45,36 +39,45 @@ const BASE_DEVSECOPS: Partial<CreateScanParams> = {
   topic: '',
 }
 
-const PRESETS: { label: string; hint: string; params: Partial<CreateScanParams> }[] = [
-  {
-    label: 'DevSecOps opportunities',
-    hint: 'Actively maintained repos missing key CI/CD security checks',
-    params: { ...BASE_DEVSECOPS },
-  },
-  {
-    label: 'AI / LLM ecosystem',
-    hint: 'AI and LLM projects with weak pipelines — high visibility contributions',
-    params: { ...BASE_DEVSECOPS, topic: 'llm', keyword: '' },
-  },
-  {
-    label: 'MCP / Agent tools',
-    hint: 'MCP and agent infrastructure projects — fast-growing ecosystem',
-    params: { ...BASE_DEVSECOPS, topic: 'mcp', keyword: '' },
-  },
-  {
-    label: 'Cloud Native',
-    hint: 'Kubernetes and cloud native projects with security gaps',
-    params: { ...BASE_DEVSECOPS, topic: 'kubernetes', keyword: '' },
-  },
-  {
-    label: 'Security tooling',
-    hint: 'Security tools that ironically have weak pipelines themselves',
-    params: { ...BASE_DEVSECOPS, topic: 'security', min_stars: 200 },
-  },
-]
-
 export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void } = {}) {
+  const { t } = useLang()
   const navigate = useNavigate()
+
+  const DATE_PRESETS = [
+    { label: t('scanForm.anyTime'), value: '' },
+    { label: t('scanForm.thisMonth'), value: firstDayOfMonth() },
+    { label: t('scanForm.last30Days'), value: daysAgo(30) },
+    { label: t('scanForm.last90Days'), value: daysAgo(90) },
+  ]
+
+  const PRESETS: { label: string; hint: string; params: Partial<CreateScanParams> }[] = [
+    {
+      label: t('scanForm.presetDevSecOps'),
+      hint: t('scanForm.presetDevSecOpsHint'),
+      params: { ...BASE_DEVSECOPS },
+    },
+    {
+      label: t('scanForm.presetAiLlm'),
+      hint: t('scanForm.presetAiLlmHint'),
+      params: { ...BASE_DEVSECOPS, topic: 'llm', keyword: '' },
+    },
+    {
+      label: t('scanForm.presetMcpAgent'),
+      hint: t('scanForm.presetMcpAgentHint'),
+      params: { ...BASE_DEVSECOPS, topic: 'mcp', keyword: '' },
+    },
+    {
+      label: t('scanForm.presetCloudNative'),
+      hint: t('scanForm.presetCloudNativeHint'),
+      params: { ...BASE_DEVSECOPS, topic: 'kubernetes', keyword: '' },
+    },
+    {
+      label: t('scanForm.presetSecurityTooling'),
+      hint: t('scanForm.presetSecurityToolingHint'),
+      params: { ...BASE_DEVSECOPS, topic: 'security', min_stars: 200 },
+    },
+  ]
+
   const [params, setParams] = useState<CreateScanParams>(() => ({
     ...defaults,
     github_token: localStorage.getItem('ossf_scout_token') ?? '',
@@ -123,7 +126,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
   return (
     <form onSubmit={submit}>
       <div className="preset-section">
-        <div className="preset-label">Quick presets</div>
+        <div className="preset-label">{t('scanForm.quickPresets')}</div>
         <div className="preset-list">
           {PRESETS.map(p => (
             <button
@@ -145,7 +148,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
       </div>
 
       <div className="form-field" style={{ marginBottom: 16 }}>
-        <label>Single repo (owner/repo) — skips search if filled</label>
+        <label>{t('scanForm.singleRepoLabel')}</label>
         <input
           type="text"
           placeholder="e.g. torvalds/linux"
@@ -156,7 +159,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
 
       <div className="form-grid">
         <div className="form-field">
-          <label>Language</label>
+          <label>{t('scanForm.languageLabel')}</label>
           <input
             type="text"
             placeholder="go, python, java…"
@@ -166,7 +169,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
         </div>
 
         <div className="form-field">
-          <label>Topic</label>
+          <label>{t('scanForm.topicLabel')}</label>
           <input
             type="text"
             placeholder="ai, machine-learning…"
@@ -176,7 +179,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
         </div>
 
         <div className="form-field">
-          <label>Keyword</label>
+          <label>{t('scanForm.keywordLabel')}</label>
           <input
             type="text"
             placeholder="llm, kubernetes…"
@@ -186,18 +189,18 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
         </div>
 
         <div className="form-field">
-          <label>Min Stars</label>
+          <label>{t('scanForm.minStarsLabel')}</label>
           <input
             type="number"
             min={0}
             value={params.min_stars}
             onChange={e => set('min_stars', Number(e.target.value))}
           />
-          <small>Minimum GitHub star count — higher = more popular repos</small>
+          <small>{t('scanForm.minStarsHint')}</small>
         </div>
 
         <div className="form-field">
-          <label>Max Score (0–10)</label>
+          <label>{t('scanForm.maxScoreLabel')}</label>
           <input
             type="number"
             min={0}
@@ -206,11 +209,11 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.max_score}
             onChange={e => set('max_score', Number(e.target.value))}
           />
-          <small>Maximum OpenSSF total score to include — lower is stricter, 7.0 catches partial gaps</small>
+          <small>{t('scanForm.maxScoreHint')}</small>
         </div>
 
         <div className="form-field">
-          <label>Repo Limit</label>
+          <label>{t('scanForm.repoLimitLabel')}</label>
           <input
             type="number"
             min={1}
@@ -218,11 +221,11 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.limit}
             onChange={e => set('limit', Number(e.target.value))}
           />
-          <small>Max repos fetched from GitHub Search (100 per page)</small>
+          <small>{t('scanForm.repoLimitHint')}</small>
         </div>
 
         <div className="form-field">
-          <label>Workers</label>
+          <label>{t('scanForm.workersLabel')}</label>
           <input
             type="number"
             min={1}
@@ -230,11 +233,11 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.workers}
             onChange={e => set('workers', Number(e.target.value))}
           />
-          <small>Concurrent Scorecard API queries — 2–5 recommended to avoid rate limits</small>
+          <small>{t('scanForm.workersHint')}</small>
         </div>
 
         <div className="form-field">
-          <label>Min Maintained score</label>
+          <label>{t('scanForm.minMaintainedLabel')}</label>
           <input
             type="number"
             min={0}
@@ -242,22 +245,22 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
             value={params.min_maintained}
             onChange={e => set('min_maintained', Number(e.target.value))}
           />
-          <small>0 = no filter; excludes abandoned repos (Scorecard Maintained check, 3–7 is a practical range)</small>
+          <small>{t('scanForm.minMaintainedHint')}</small>
         </div>
 
         <div className="form-field">
-          <label>Check Filter</label>
+          <label>{t('scanForm.checkFilterLabel')}</label>
           <input
             type="text"
             placeholder="SAST,Code-Review,…"
             value={params.check_filter}
             onChange={e => set('check_filter', e.target.value)}
           />
-          <small>Comma-separated check names to highlight — leave empty to use all security checks</small>
+          <small>{t('scanForm.checkFilterHint')}</small>
         </div>
 
         <div className="form-field full-width">
-          <label>GitHub Token (optional — uses server GITHUB_TOKEN if empty)</label>
+          <label>{t('scanForm.githubTokenLabel')}</label>
           <input
             type="password"
             placeholder="ghp_…"
@@ -268,7 +271,7 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
         </div>
 
         <div className="form-field full-width">
-          <label>Pushed after</label>
+          <label>{t('scanForm.pushedAfterLabel')}</label>
           <div className="preset-btns">
             {DATE_PRESETS.map(p => (
               <button
@@ -297,17 +300,17 @@ export default function ScanForm({ onScanStarted }: { onScanStarted?: () => void
               onChange={e => set('use_cli_fallback', e.target.checked)}
               style={{ width: 'auto' }}
             />
-            Use scorecard CLI for unscanned repos (slower — requires <code>scorecard</code> in PATH)
+            {t('scanForm.useCliFallback')} <code>scorecard</code> {t('scanForm.useCliFallbackSuffix')}
           </label>
         </div>
       </div>
 
       <div className="form-actions">
         <button className="btn" type="submit" disabled={loading}>
-          {loading ? 'Starting…' : 'Run Scan'}
+          {loading ? t('common.starting') : t('scanForm.runScan')}
         </button>
         <button className="btn btn-danger" type="button" onClick={resetDefaults} disabled={loading}>
-          Reset
+          {t('common.reset')}
         </button>
         {error && <span className="error-msg">{error}</span>}
       </div>

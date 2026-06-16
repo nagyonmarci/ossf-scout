@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Outlet } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { useLang, type Lang } from './i18n'
 import ScanList from './pages/ScanList'
 import ScanDetail from './pages/ScanDetail'
 import TrendingPage from './pages/TrendingPage'
@@ -12,23 +13,34 @@ import OrgScanPage from './pages/OrgScanPage'
 import AuditComparePage from './pages/AuditComparePage'
 
 function AppHeader() {
+  const { t, lang, setLang } = useLang()
   return (
     <div className="app-header">
       <div className="container">
         <div className="app-header-inner">
           <div>
-            <h1>ossf-scout</h1>
-            <p>Find GitHub repos with weak OpenSSF Scorecard scores</p>
+            <h1>{t('appTitle')}</h1>
+            <p>{t('appTagline')}</p>
           </div>
           <nav className="tab-nav">
-            <NavLink to="/" end>Scans</NavLink>
-            <NavLink to="/trending">Trending</NavLink>
-            <NavLink to="/audits">Audit</NavLink>
-            <NavLink to="/schedules">Schedules</NavLink>
-            <NavLink to="/portfolio">Portfolio</NavLink>
-            <NavLink to="/remediation">Remediation</NavLink>
-            <NavLink to="/orgscan">Org scan</NavLink>
+            <NavLink to="/" end>{t('navScans')}</NavLink>
+            <NavLink to="/trending">{t('navTrending')}</NavLink>
+            <NavLink to="/audits">{t('navAudit')}</NavLink>
+            <NavLink to="/schedules">{t('navSchedules')}</NavLink>
+            <NavLink to="/portfolio">{t('navPortfolio')}</NavLink>
+            <NavLink to="/remediation">{t('navRemediation')}</NavLink>
+            <NavLink to="/orgscan">{t('navOrgScan')}</NavLink>
           </nav>
+          <select
+            className="input"
+            aria-label={t('langSwitcherLabel')}
+            style={{ width: 'auto' }}
+            value={lang}
+            onChange={(e) => setLang(e.target.value as Lang)}
+          >
+            <option value="en">EN</option>
+            <option value="hu">HU</option>
+          </select>
         </div>
       </div>
     </div>

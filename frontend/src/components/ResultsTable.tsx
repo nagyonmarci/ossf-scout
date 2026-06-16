@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { ScanResult } from '../api'
+import { useLang } from '../i18n'
 
 type SortKey = 'repo' | 'stars' | 'issues' | 'score'
 
@@ -28,6 +29,7 @@ function checkDocsUrl(name: string): string {
 }
 
 function CheckTag({ tag }: { tag: string }) {
+  const { t } = useLang()
   const { name, checkScore } = parseCheckTag(tag)
   const scoreNum = parseInt(checkScore, 10)
   const scoreColor = scoreNum === -1 ? 'var(--muted)' : scoreNum < 3 ? 'var(--red)' : 'var(--orange)'
@@ -37,7 +39,7 @@ function CheckTag({ tag }: { tag: string }) {
       target="_blank"
       rel="noopener noreferrer"
       className="tag tag-link"
-      title={`View ${name} check documentation`}
+      title={t('resultsTable.viewCheckDocs', { name })}
     >
       {name}
       {checkScore !== '' && (
@@ -49,16 +51,16 @@ function CheckTag({ tag }: { tag: string }) {
   )
 }
 
-const COLS: { label: string; sortKey: SortKey | null }[] = [
-  { label: 'Repository', sortKey: 'repo' },
-  { label: 'Stars',      sortKey: 'stars' },
-  { label: 'Issues',     sortKey: 'issues' },
-  { label: 'Score',      sortKey: 'score' },
-  { label: 'Weak Checks', sortKey: null },
-  { label: 'Description', sortKey: null },
-]
-
 export default function ResultsTable({ results }: { results: ScanResult[] }) {
+  const { t } = useLang()
+  const COLS: { label: string; sortKey: SortKey | null }[] = [
+    { label: t('resultsTable.colRepository'), sortKey: 'repo' },
+    { label: t('resultsTable.colStars'),      sortKey: 'stars' },
+    { label: t('resultsTable.colIssues'),     sortKey: 'issues' },
+    { label: t('resultsTable.colScore'),      sortKey: 'score' },
+    { label: t('resultsTable.colWeakChecks'), sortKey: null },
+    { label: t('resultsTable.colDescription'), sortKey: null },
+  ]
   const [sortKey, setSortKey] = useState<SortKey>('score')
   const [asc, setAsc] = useState(true)
   const [filter, setFilter] = useState('')
@@ -157,7 +159,7 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
   }
 
   if (results.length === 0) {
-    return <p className="empty">No results found for this scan.</p>
+    return <p className="empty">{t('resultsTable.noResultsForScan')}</p>
   }
 
   return (
@@ -165,7 +167,7 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
       <div className="filter-bar">
         <input
           className="filter-input"
-          placeholder="Filter by repo, description, check…"
+          placeholder={t('resultsTable.filterPlaceholder')}
           value={filter}
           onChange={e => setFilter(e.target.value)}
         />
@@ -176,11 +178,11 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
             onChange={e => setHideNA(e.target.checked)}
             style={{ width: 'auto' }}
           />
-          Hide N/A
+          {t('resultsTable.hideNA')}
         </label>
       </div>
 
-      {filtered.length === 0 && <p className="empty">No results match the filter.</p>}
+      {filtered.length === 0 && <p className="empty">{t('resultsTable.noResultsMatchFilter')}</p>}
 
       {filtered.length > 0 && (
         <>
@@ -217,11 +219,11 @@ export default function ResultsTable({ results }: { results: ScanResult[] }) {
                         <span className="stars-today"> +{r.stars_today!.toLocaleString()}</span>
                       )}
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }} title="Open issues + pull requests">{r.open_issues.toLocaleString()}</td>
+                    <td style={{ whiteSpace: 'nowrap' }} title={t('resultsTable.openIssuesTitle')}>{r.open_issues.toLocaleString()}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       {r.scorecard_url
                         ? <a href={r.scorecard_url} target="_blank" rel="noopener noreferrer" className={scoreClass(r.score)}>{scoreLabel(r.score)}</a>
-                        : <span className={scoreClass(r.score)} title="CLI scan — not indexed online">{scoreLabel(r.score)}</span>
+                        : <span className={scoreClass(r.score)} title={t('resultsTable.cliScanTitle')}>{scoreLabel(r.score)}</span>
                       }
                     </td>
                     <td>

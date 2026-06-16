@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api, RemediationItem } from '../api';
+import { useLang } from '../i18n';
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
 const SEVERITY_COLORS: Record<string, string> = {
@@ -11,13 +12,13 @@ const SEVERITY_COLORS: Record<string, string> = {
   info: '#9e9e9e',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  resolved: 'Resolved',
-};
-
 const STATUS_COLS: Array<'open' | 'in_progress' | 'resolved'> = ['open', 'in_progress', 'resolved'];
+
+function statusLabel(status: string, t: (key: any, params?: Record<string, string | number>) => string): string {
+  if (status === 'open') return t('remediation.statusOpen');
+  if (status === 'in_progress') return t('remediation.statusInProgress');
+  return t('remediation.statusResolved');
+}
 
 function SeverityBadge({ sev }: { sev: string }) {
   return (
@@ -33,6 +34,7 @@ function SeverityBadge({ sev }: { sev: string }) {
 }
 
 function AddItemForm({ auditId, onAdded }: { auditId: string; onAdded: (item: RemediationItem) => void }) {
+  const { t } = useLang();
   const [title, setTitle] = useState('');
   const [severity, setSeverity] = useState('medium');
   const [submitting, setSubmitting] = useState(false);
@@ -54,7 +56,7 @@ function AddItemForm({ auditId, onAdded }: { auditId: string; onAdded: (item: Re
       <input
         className="input"
         style={{ flex: 1, minWidth: 200 }}
-        placeholder="New finding title…"
+        placeholder={t('remediation.newFindingPlaceholder')}
         value={title}
         onChange={e => setTitle(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') submit(); }}
@@ -63,7 +65,7 @@ function AddItemForm({ auditId, onAdded }: { auditId: string; onAdded: (item: Re
         {SEVERITY_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
       </select>
       <button className="btn btn-primary" onClick={submit} disabled={submitting || !title.trim()}>
-        {submitting ? 'Adding…' : '+ Add'}
+        {submitting ? t('remediation.adding') : t('remediation.addButton')}
       </button>
     </div>
   );
@@ -80,6 +82,7 @@ function ItemCard({
   onDelete: (id: string) => void;
   onUpdate: (id: string, patch: Partial<RemediationItem>) => void;
 }) {
+  const { t } = useLang();
   const [editing, setEditing] = useState(false);
   const [notes, setNotes] = useState(item.notes);
   const [title, setTitle] = useState(item.title);
@@ -109,15 +112,15 @@ function ItemCard({
           <textarea
             className="input"
             style={{ fontSize: 12, minHeight: 60, resize: 'vertical' }}
-            placeholder="Notes…"
+            placeholder={t('remediation.notesPlaceholder')}
             value={notes}
             onChange={e => setNotes(e.target.value)}
           />
           <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn btn-primary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={save}>Save</button>
+            <button className="btn btn-primary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={save}>{t('common.save')}</button>
             <button className="btn" style={{ padding: '3px 10px', fontSize: 12, background: 'transparent', border: '1px solid var(--border)' }}
               onClick={() => { setEditing(false); setTitle(item.title); setSeverity(item.severity); setNotes(item.notes); }}>
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -151,14 +154,14 @@ function ItemCard({
                 style={{ padding: '2px 8px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 4, cursor: 'pointer' }}
                 onClick={() => onMove(item.id, s)}
               >
-                → {STATUS_LABELS[s]}
+                → {statusLabel(s, t)}
               </button>
             ))}
             <button
               style={{ padding: '2px 8px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)', borderRadius: 4, cursor: 'pointer', marginLeft: 'auto' }}
               onClick={() => setEditing(true)}
             >
-              Edit
+              {t('common.edit')}
             </button>
             <button
               style={{ padding: '2px 8px', fontSize: 11, background: 'transparent', border: '1px solid rgba(244,67,54,0.4)', color: '#ef5350', borderRadius: 4, cursor: 'pointer' }}
@@ -174,6 +177,7 @@ function ItemCard({
 }
 
 export default function RemediationPage() {
+  const { t } = useLang();
   const [searchParams] = useSearchParams();
   const [items, setItems] = useState<RemediationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -227,9 +231,9 @@ export default function RemediationPage() {
 
   return (
     <div className="container">
-      <h2>Remediation Tracker</h2>
+      <h2>{t('remediation.heading')}</h2>
       <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: -8 }}>
-        Track audit findings from open → in progress → resolved.
+        {t('remediation.description')}
       </p>
 
       {error && <p className="error-msg">{error}</p>}
@@ -237,30 +241,30 @@ export default function RemediationPage() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {repos.length > 0 && (
           <select className="input" style={{ maxWidth: 260 }} value={filterRepo} onChange={e => setFilterRepo(e.target.value)}>
-            <option value="">All repos</option>
+            <option value="">{t('remediation.allRepos')}</option>
             {repos.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         )}
         <div style={{ display: 'flex', gap: 12, fontSize: 13, color: 'var(--muted)' }}>
-          <span><strong style={{ color: '#ef5350' }}>{openCount}</strong> open</span>
-          <span><strong style={{ color: '#ff9800' }}>{inProgressCount}</strong> in progress</span>
-          <span><strong style={{ color: '#4caf50' }}>{resolvedCount}</strong> resolved</span>
+          <span><strong style={{ color: '#ef5350' }}>{openCount}</strong> {t('remediation.statusOpen').toLowerCase()}</span>
+          <span><strong style={{ color: '#ff9800' }}>{inProgressCount}</strong> {t('remediation.statusInProgress').toLowerCase()}</span>
+          <span><strong style={{ color: '#4caf50' }}>{resolvedCount}</strong> {t('remediation.statusResolved').toLowerCase()}</span>
         </div>
       </div>
 
-      {loading && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
+      {loading && <p style={{ color: 'var(--muted)' }}>{t('common.loading')}</p>}
 
       {!loading && (
         <>
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--muted)' }}>
-              Add a finding (audit ID required):
+              {t('remediation.addFindingLabel')}
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <input
                 className="input"
                 style={{ maxWidth: 340 }}
-                placeholder="Audit ID (paste from Audit page)"
+                placeholder={t('remediation.auditIdPlaceholder')}
                 value={selectedAuditId}
                 onChange={e => setSelectedAuditId(e.target.value)}
               />
@@ -284,7 +288,7 @@ export default function RemediationPage() {
                   fontWeight: 600, fontSize: 13,
                   display: 'flex', justifyContent: 'space-between',
                 }}>
-                  <span>{STATUS_LABELS[col]}</span>
+                  <span>{statusLabel(col, t)}</span>
                   <span style={{ color: 'var(--muted)', fontWeight: 400 }}>{byStatus(col).length}</span>
                 </div>
                 <div style={{
@@ -304,7 +308,7 @@ export default function RemediationPage() {
                     />
                   ))}
                   {byStatus(col).length === 0 && (
-                    <div style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'center', marginTop: 16 }}>Empty</div>
+                    <div style={{ color: 'var(--muted)', fontSize: 12, textAlign: 'center', marginTop: 16 }}>{t('remediation.empty')}</div>
                   )}
                 </div>
               </div>

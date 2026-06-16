@@ -109,6 +109,16 @@ func handleDeleteSchedule(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+func handlePauseAllSchedules(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := dbPauseAllSchedules(db); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func handleTriggerSchedule(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")

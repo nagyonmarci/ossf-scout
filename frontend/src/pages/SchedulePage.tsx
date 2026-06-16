@@ -104,6 +104,12 @@ export default function SchedulePage() {
     load();
   }
 
+  async function handlePauseAll() {
+    if (!confirm('Pause all active schedules?')) return;
+    await api.pauseAllSchedules();
+    load();
+  }
+
   async function handleSaveEdit() {
     if (!editing) return;
     await api.updateSchedule(editing.id, {
@@ -190,7 +196,14 @@ export default function SchedulePage() {
 
       {/* Active schedules */}
       <div className="card">
-        <h2>Active Schedules</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>Active Schedules</h2>
+          {active.length > 0 && (
+            <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 10px' }} onClick={handlePauseAll}>
+              Pause all
+            </button>
+          )}
+        </div>
         {active.length === 0 ? (
           <p className="empty">No active schedules.</p>
         ) : (

@@ -517,6 +517,21 @@ func mustUnmarshalContext(contextJSON string) *auditContext {
 	return &ctx
 }
 
+// generateProviderReport runs call with the full context, retrying once with a
+// compacted context (and retryMaxTokens) if the provider reports the prompt
+// was too large.
+func generateProviderReport(call func(systemPrompt, userPrompt, apiKey, model string, maxTokens int) (string, int, int, error), ctx *auditContext, apiKey, model, defaultModelName string, primaryMaxTokens, retryMaxTokens int) (report string, inputTokens, outputTokens int, err error) {
+	if model == "" {
+		model = defaultModelName
+	}
+	report, inputTokens, outputTokens, err = call(auditSystemPrompt, buildUserPrompt(ctx), apiKey, model, primaryMaxTokens)
+	if err != nil && isContextTooLarge(err) {
+		compact := compactForOllama(ctx)
+		report, inputTokens, outputTokens, err = call(auditSystemPrompt, buildUserPrompt(compact), apiKey, model, retryMaxTokens)
+	}
+	return
+}
+
 // isContextTooLarge returns true when an AI provider error indicates the prompt
 // exceeded the model's context window or token-per-minute rate limit.
 func isContextTooLarge(err error) bool {

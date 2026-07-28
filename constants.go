@@ -78,8 +78,8 @@ var modelPrices = map[string][2]float64{
 	"claude-sonnet-4-6":         {3.0, 15.0},
 	"claude-haiku-4-5-20251001": {1.0, 5.0},
 	// Anthropic — legacy (still available)
-	"claude-opus-4-7":           {5.0, 25.0},
-	"claude-opus-4-6":           {5.0, 25.0},
+	"claude-opus-4-7":            {5.0, 25.0},
+	"claude-opus-4-6":            {5.0, 25.0},
 	"claude-sonnet-4-5-20250929": {3.0, 15.0},
 	"claude-opus-4-5-20251101":   {5.0, 25.0},
 	// OpenAI — GPT-5.x
@@ -105,8 +105,8 @@ var modelPrices = map[string][2]float64{
 	"gemini-2.5-flash-lite": {0.10, 0.40},
 	"gemini-2.0-flash":      {0.10, 0.40},
 	// Gemini — legacy
-	"gemini-1.5-pro":        {1.25, 5.0},
-	"gemini-1.5-flash":      {0.075, 0.30},
+	"gemini-1.5-pro":   {1.25, 5.0},
+	"gemini-1.5-flash": {0.075, 0.30},
 }
 
 // Scheduler
@@ -114,3 +114,25 @@ const defaultScheduleIntervalH = 168 // 1 week in hours
 
 // Audit generation
 const defaultMaxTokens = 8192 // max output tokens for all AI providers
+
+// PR Guard
+const (
+	defaultBlastRadiusLimit = 200 // max changed lines (additions+deletions) before hard-wall block
+
+	strikeLabelPrefix = "scout-strike:"
+	maxStrikes        = 3
+	epicApprovedLabel = "scout-epic-approved"
+
+	guardCommentMarker = "<!-- ossf-scout-pr-guard:do-not-edit -->"
+
+	truncGuardPatchPerFile = 4_000   // per-file patch cap in triage prompt
+	guardMaxPromptChars    = 200_000 // overall triage prompt cap
+	truncGuardCheckDetail  = 4_000   // per-check detail cap in feedback comment
+
+	// Guard exit codes — consumed by the CI workflow step to decide how to react.
+	guardExitApproved       = 0  // hard wall + triage both passed
+	guardExitStrikeApplied  = 1  // hard-wall failure, strike 1 or 2, PR still open
+	guardExitClosed         = 2  // strike 3 reached — PR force-closed, terminal
+	guardExitTriageRejected = 3  // hard wall passed, triage rejected, strike applied
+	guardExitInfraError     = 10 // guard itself failed (GitHub/Ollama unreachable, bad args)
+)

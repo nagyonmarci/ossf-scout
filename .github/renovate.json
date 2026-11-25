@@ -7,6 +7,7 @@
   "configMigration": true,
   "schedule": ["every weekend"],
   "pinDigests": true,
+  "rangeStrategy": "bump",
 
   "packageRules": [
     {

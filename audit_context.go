@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/nagyonmarci/ossf-scout/internal/scout"
 )
 
 // ── Context structs ───────────────────────────────────────────────────────────
@@ -141,9 +143,7 @@ type auditContext struct {
 func runIn(dir, fallback string, env []string, name string, args ...string) string {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
-	}
+	cmd.Env = scout.MinimalEnv(env...) // tools parse untrusted repos: no secrets in their env
 	out, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
@@ -562,7 +562,7 @@ fi`)
 		TerraformFiles: shIn(tmpDir, "(none found)",
 			"find . -name '*.tf' -not -path '*/node_modules/*' | head -20 || echo '(none found)'"),
 		OSVScanner: shIn(tmpDir, "osv-scanner not installed — skipped",
-			"osv-scanner --json . 2>&1 | head -400 || echo 'osv-scanner not installed — skipped'"),
+			"osv-scanner --format json . 2>&1 | head -400 || echo 'osv-scanner not installed — skipped'"),
 		Trivy: func() string {
 			if !runIaC {
 				return "skipped (no IaC files detected)"

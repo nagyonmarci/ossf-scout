@@ -1,6 +1,7 @@
 package scout
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -57,11 +58,11 @@ func scorecardCLI(ctx context.Context, owner, repo, token string) (*scorecardRes
 		"--repo=github.com/"+owner+"/"+repo,
 		"--format=json",
 	)
-	// Only override GITHUB_TOKEN if we have one — don't clobber an existing env token with an empty string
-	if token != "" {
-		cmd.Env = append(os.Environ(), "GITHUB_TOKEN="+token, "GITHUB_AUTH_TOKEN="+token)
-	} else {
-		cmd.Env = os.Environ()
+	// scorecard needs a GitHub token and nothing else from our environment.
+	// Fall back to the env tokens it would otherwise have inherited.
+	cmd.Env = MinimalEnv()
+	if token = cmp.Or(token, os.Getenv("GITHUB_AUTH_TOKEN"), os.Getenv("GITHUB_TOKEN")); token != "" {
+		cmd.Env = append(cmd.Env, "GITHUB_TOKEN="+token, "GITHUB_AUTH_TOKEN="+token)
 	}
 
 	var stdout, stderr strings.Builder

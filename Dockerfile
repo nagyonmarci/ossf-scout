@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # Stage 3: download arch-aware binary tools
 # Wolfi uses glibc (not musl), so all pre-built glibc binaries are compatible.
-FROM --platform=$BUILDPLATFORM cgr.dev/chainguard/wolfi-base@sha256:b78bb982194828b6c9c214230bf34d51944e2102ea8468f01ac21e5f99328efd AS bintools
+FROM --platform=$BUILDPLATFORM cgr.dev/chainguard/wolfi-base@sha256:28c39be5a5e1e9b85081c10740e8495f6518a865b23bc6a486637c4b21e74b43 AS bintools
 ARG TARGETARCH
 ARG TRIVY_VERSION=0.71.0
 ARG HELM_VERSION=4.2.0
@@ -85,7 +85,7 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
     rm /tmp/trufflehog.tar.gz
 
 # Stage 4: runtime — Wolfi base for near-zero OS CVE surface
-FROM cgr.dev/chainguard/wolfi-base@sha256:b78bb982194828b6c9c214230bf34d51944e2102ea8468f01ac21e5f99328efd
+FROM cgr.dev/chainguard/wolfi-base@sha256:28c39be5a5e1e9b85081c10740e8495f6518a865b23bc6a486637c4b21e74b43
 
 LABEL org.opencontainers.image.title="ossf-scout" \
       org.opencontainers.image.description="Discover GitHub repositories where security practices are weakest" \

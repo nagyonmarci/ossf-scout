@@ -1,6 +1,6 @@
 # ossf-scout
 
-[![Go](https://img.shields.io/badge/go-1.25-00acd7?logo=go&logoColor=white)](go.mod)
+[![Go](https://img.shields.io/badge/go-1.26-00acd7?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-Unlicense-blue)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/nagyonmarci/ossf-scout/badge)](https://securityscorecards.dev/viewer/?uri=github.com/nagyonmarci/ossf-scout)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13066/badge)](https://www.bestpractices.dev/projects/13066)
@@ -246,7 +246,7 @@ To create a classic PAT: GitHub → Settings → Developer settings → Personal
 
 ## Building from Source
 
-Prerequisites: **Go 1.25+**, **Node 22+**
+Prerequisites: **Go 1.26+**, **Node 22+**
 
 ```bash
 make build

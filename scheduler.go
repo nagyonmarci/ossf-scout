@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,13 @@ import (
 // startScheduler launches the background audit scheduler.
 // It runs due schedules every minute and re-runs auto-detection daily.
 func startScheduler(db *sql.DB) {
+	// runAudit's deferred cleanup never runs if the process is killed mid-audit,
+	// so sweep clones left by a previous run.
+	// ponytail: assumes one server per TMPDIR; scope the dir per instance if that changes.
+	stale, _ := filepath.Glob(filepath.Join(os.TempDir(), "ossf-audit-*"))
+	for _, d := range stale {
+		_ = os.RemoveAll(d)
+	}
 	go runScheduler(db)
 }
 

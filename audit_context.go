@@ -331,7 +331,7 @@ func collectContext(ctx context.Context, repo, ghToken string, opts collectOptio
 	hasK8s        := shIn(tmpDir, "", "find . -name '*.yaml' -not -path '*/node_modules/*' | xargs grep -l 'kind:' 2>/dev/null | head -1") != ""
 	runIaC        := hasDockerfile || hasTerraform || hasHelmChart || hasK8s
 
-	zizmorCmd := "zizmor --no-online --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'"
+	zizmorCmd := "zizmor --offline --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'"
 	var zizmorEnv []string
 	if ghToken != "" {
 		zizmorCmd = `zizmor --github-token "$GH_TOKEN" --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'`

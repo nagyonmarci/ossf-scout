@@ -562,7 +562,7 @@ fi`)
 		TerraformFiles: shIn(tmpDir, "(none found)",
 			"find . -name '*.tf' -not -path '*/node_modules/*' | head -20 || echo '(none found)'"),
 		OSVScanner: shIn(tmpDir, "osv-scanner not installed — skipped",
-			"osv-scanner --json . 2>&1 | head -400 || echo 'osv-scanner not installed — skipped'"),
+			"osv-scanner --format json . 2>&1 | head -400 || echo 'osv-scanner not installed — skipped'"),
 		Trivy: func() string {
 			if !runIaC {
 				return "skipped (no IaC files detected)"

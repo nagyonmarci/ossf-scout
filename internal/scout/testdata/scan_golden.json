@@ -1,0 +1,20 @@
+[
+  {
+    "Repo": {
+      "full_name": "acme/widget",
+      "description": "widgets",
+      "stargazers_count": 600,
+      "open_issues_count": 0,
+      "html_url": "https://github.com/acme/widget",
+      "language": "Go",
+      "topics": [
+        "go"
+      ]
+    },
+    "Score": 3.2,
+    "WeakChecks": [
+      "SAST(0)"
+    ],
+    "ScorecardURL": "https://scorecard.dev/viewer/?uri=github.com/acme/widget"
+  }
+]

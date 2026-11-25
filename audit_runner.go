@@ -466,7 +466,7 @@ func generateTemplateReport(ctx *auditContext) string {
 // auditSem caps concurrent audits; queued ones stay "pending" until a slot frees.
 var auditSem = make(chan struct{}, maxConcurrentAudits)
 
-func runAudit(db *sql.DB, id, ghToken string, p auditParams) {
+func runAudit(ctx context.Context, db *sql.DB, id, ghToken string, p auditParams) {
 	auditSem <- struct{}{}
 	defer func() { <-auditSem }()
 	_ = dbUpdateAuditRunning(db, id)
@@ -491,7 +491,7 @@ func runAudit(db *sql.DB, id, ghToken string, p auditParams) {
 		}
 	}
 
-	auditCtx, tmpDir, err := collectContext(repo, ghToken, collectOptions{SkipSecrets: p.SkipSecrets})
+	auditCtx, tmpDir, err := collectContext(ctx, repo, ghToken, collectOptions{SkipSecrets: p.SkipSecrets})
 	if err != nil {
 		_ = dbUpdateAuditError(db, id, fmt.Sprintf("collect failed: %v", err))
 		return

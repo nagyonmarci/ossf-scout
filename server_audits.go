@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -93,7 +94,7 @@ func handleCreateAudit(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		go runAudit(db, id, req.GithubToken, p)
+		go runAudit(context.Background(), db, id, req.GithubToken, p)
 
 		a, err := dbGetAudit(db, id)
 		if err != nil {

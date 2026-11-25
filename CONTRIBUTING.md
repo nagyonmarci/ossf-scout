@@ -14,7 +14,7 @@ Use [GitHub Issues](https://github.com/nagyonmarci/ossf-scout/issues) for bugs a
 
 ## Development setup
 
-Prerequisites: **Go 1.25+**, **Node 22+**
+Prerequisites: **Go 1.26+**, **Node 22+**
 
 ```bash
 # Build everything (frontend + Go binary)

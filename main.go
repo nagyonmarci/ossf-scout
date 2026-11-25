@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/nagyonmarci/ossf-scout/internal/scout"
 )
 
 func main() {
@@ -29,6 +32,23 @@ func main() {
 	flag.BoolVar(&serve, "serve", false, "Start web server mode")
 	flag.IntVar(&port, "port", defaultPort, "Port for web server mode")
 	flag.StringVar(&dbPath, "db", "ossf-scout.db", "SQLite database path")
+
+	var guard bool
+	var prNumber int
+	var guardRepo string
+	var guardToken string
+	var guardOllamaURL string
+	var guardOllamaModel string
+	var blastRadiusLimit int
+	var guardDryRun bool
+	flag.BoolVar(&guard, "guard", false, "Run AI Agent PR Guard mode (CI gatekeeper)")
+	flag.IntVar(&prNumber, "pr", 0, "Pull request number to evaluate (required with -guard)")
+	flag.StringVar(&guardRepo, "guard-repo", "", "owner/repo for PR Guard mode (required with -guard)")
+	flag.StringVar(&guardToken, "guard-token", os.Getenv("GIT_TOKEN"), "GitHub token for PR Guard mode (or GIT_TOKEN env; falls back to -token/GITHUB_TOKEN)")
+	flag.StringVar(&guardOllamaURL, "guard-ollama-url", defaultOllamaURL, "Ollama URL for the PR Guard triage step")
+	flag.StringVar(&guardOllamaModel, "guard-ollama-model", "", "Ollama model for the PR Guard triage step (required with -guard)")
+	flag.IntVar(&blastRadiusLimit, "guard-blast-radius", defaultBlastRadiusLimit, "Max changed lines before hard-wall block (unless scout-epic-approved)")
+	flag.BoolVar(&guardDryRun, "guard-dry-run", false, "Evaluate and log only — no label/comment/close writes to GitHub")
 	flag.Parse()
 
 	if serve {
@@ -36,11 +56,28 @@ func main() {
 		return
 	}
 
+	if guard {
+		token := guardToken
+		if token == "" {
+			token = cfg.token
+		}
+		os.Exit(runGuard(guardConfig{
+			Repo:             guardRepo,
+			PRNumber:         prNumber,
+			Token:            token,
+			OllamaURL:        guardOllamaURL,
+			OllamaModel:      guardOllamaModel,
+			BlastRadiusLimit: blastRadiusLimit,
+			DryRun:           guardDryRun,
+		}))
+	}
+
 	if cfg.token == "" {
 		fmt.Fprintln(os.Stderr, "Warning: no GITHUB_TOKEN set — GitHub rate limit is 60 req/hour unauthenticated")
 	}
 
-	repos, err := fetchRepos(cfg)
+	sc := scout.New(cfg.toScoutConfig())
+	repos, err := sc.FetchRepos(context.Background())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
@@ -48,7 +85,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "Fetched %d repos — querying Scorecard API (workers=%d)...\n",
 		len(repos), cfg.workers)
 
-	results := runWorkers(repos, cfg)
+	results := sc.Evaluate(context.Background(), repos)
 
 	if cfg.jsonOut {
 		printJSON(results)

@@ -138,9 +138,12 @@ type auditContext struct {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-func runIn(dir, fallback string, name string, args ...string) string {
+func runIn(dir, fallback string, env []string, name string, args ...string) string {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
@@ -154,8 +157,10 @@ func runIn(dir, fallback string, name string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func shIn(dir, fallback, script string) string {
-	return runIn(dir, fallback, "/bin/sh", "-c", script)
+// shIn runs script via /bin/sh. Pass secrets/untrusted values through env and
+// reference them quoted ("$VAR") in script — never interpolate into script.
+func shIn(dir, fallback, script string, env ...string) string {
+	return runIn(dir, fallback, env, "/bin/sh", "-c", script)
 }
 
 // ── Collect ───────────────────────────────────────────────────────────────────
@@ -178,48 +183,69 @@ func dedupeStrings(in []string) []string {
 }
 
 // resolveTagSHA resolves owner/repo@tag to the commit SHA the tag points at,
-// dereferencing annotated tags. Returns "unresolved" on any failure.
-func resolveTagSHA(action, tag string) string {
+// dereferencing annotated tags via the GitHub REST API. Returns "unresolved"
+// on any failure, or rateLimited=true if the request hit GitHub's rate limit.
+func resolveTagSHA(ctx context.Context, action, tag, token string) (sha string, rateLimited bool) {
 	parts := strings.Split(action, "/")
 	if len(parts) < 2 {
-		return "unresolved"
+		return "unresolved", false
 	}
 	repo := parts[0] + "/" + parts[1]
-	cctx, cancel := context.WithTimeout(context.Background(), resolveTagTimeout)
+
+	cctx, cancel := context.WithTimeout(ctx, resolveTagTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, "git", "ls-remote",
-		"https://github.com/"+repo+".git",
-		"refs/tags/"+tag, "refs/tags/"+tag+"^{}")
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.Output()
+
+	body, status, err := ghDoCtx(cctx, "GET", githubAPIBase+"/repos/"+repo+"/git/ref/tags/"+tag, token, nil)
+	if isRateLimitStatus(status) {
+		return "unresolved", true
+	}
 	if err != nil {
-		return "unresolved"
+		return "unresolved", false
 	}
-	var plain, deref string
-	for _, l := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		f := strings.Fields(l)
-		if len(f) != 2 {
-			continue
-		}
-		if strings.HasSuffix(f[1], "^{}") {
-			deref = f[0]
-		} else {
-			plain = f[0]
-		}
+	var ref struct {
+		Object struct {
+			Type string `json:"type"`
+			SHA  string `json:"sha"`
+		} `json:"object"`
 	}
-	if deref != "" {
-		return deref
+	if json.Unmarshal(body, &ref) != nil || ref.Object.SHA == "" {
+		return "unresolved", false
 	}
-	if plain != "" {
-		return plain
+	if ref.Object.Type == "commit" {
+		return ref.Object.SHA, false
 	}
-	return "unresolved"
+	if ref.Object.Type != "tag" {
+		return "unresolved", false
+	}
+
+	// Annotated tag — dereference the tag object to the commit it targets.
+	body, status, err = ghDoCtx(cctx, "GET", githubAPIBase+"/repos/"+repo+"/git/tags/"+ref.Object.SHA, token, nil)
+	if isRateLimitStatus(status) {
+		return "unresolved", true
+	}
+	if err != nil {
+		return "unresolved", false
+	}
+	var tagObj struct {
+		Object struct {
+			SHA string `json:"sha"`
+		} `json:"object"`
+	}
+	if json.Unmarshal(body, &tagObj) != nil || tagObj.Object.SHA == "" {
+		return "unresolved", false
+	}
+	return tagObj.Object.SHA, false
+}
+
+// isRateLimitStatus reports whether status is a GitHub rate-limit response.
+func isRateLimitStatus(status int) bool {
+	return status == http.StatusForbidden || status == http.StatusTooManyRequests
 }
 
 // resolvePinnedActions turns the raw UnpinnedActions grep output into an
 // authoritative `action@tag -> SHA | locations` table. The resolved SHAs feed
 // both the report writer (real fix snippets) and the verifier (allow-set).
-func resolvePinnedActions(unpinned string) string {
+func resolvePinnedActions(ctx context.Context, unpinned, token string) string {
 	t := strings.TrimSpace(unpinned)
 	if t == "" || t == "none" {
 		return "none"
@@ -247,11 +273,20 @@ func resolvePinnedActions(unpinned string) string {
 	}
 	var b strings.Builder
 	b.WriteString("# action@tag -> resolved commit SHA (authoritative; use in fixes) | used at\n")
+	rateLimited := false
 	for i, key := range order {
 		sha := "unresolved (resolve manually before citing)"
-		if i < maxPinnedActionResolve {
+		switch {
+		case rateLimited:
+			sha = "unresolved (rate limited)"
+		case i < maxPinnedActionResolve:
 			at := strings.SplitN(key, "@", 2)
-			sha = resolveTagSHA(at[0], at[1])
+			var rl bool
+			sha, rl = resolveTagSHA(ctx, at[0], at[1], token)
+			if rl {
+				rateLimited = true
+				sha = "unresolved (rate limited)"
+			}
 		}
 		fmt.Fprintf(&b, "%s -> %s | %s\n", key, sha, strings.Join(dedupeStrings(seen[key].locs), ", "))
 	}
@@ -263,7 +298,7 @@ type collectOptions struct {
 	SkipSecrets bool // skip gitleaks and trufflehog (slow; set true when speed matters)
 }
 
-func collectContext(repo, ghToken string, opts collectOptions) (*auditContext, string, error) {
+func collectContext(ctx context.Context, repo, ghToken string, opts collectOptions) (*auditContext, string, error) {
 	owner, repoName, ok := splitValidRepo(repo)
 	if !ok {
 		return nil, "", fmt.Errorf("invalid repository name")
@@ -297,11 +332,13 @@ func collectContext(repo, ghToken string, opts collectOptions) (*auditContext, s
 	runIaC        := hasDockerfile || hasTerraform || hasHelmChart || hasK8s
 
 	zizmorCmd := "zizmor --no-online --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'"
+	var zizmorEnv []string
 	if ghToken != "" {
-		zizmorCmd = fmt.Sprintf("zizmor --github-token %s --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'", ghToken)
+		zizmorCmd = `zizmor --github-token "$GH_TOKEN" --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'`
+		zizmorEnv = []string{"GH_TOKEN=" + ghToken}
 	}
 
-	ctx := &auditContext{
+	ac := &auditContext{
 		Meta: auditMeta{
 			Date: time.Now().UTC().Format(time.RFC3339),
 			Repo: repo,
@@ -310,7 +347,7 @@ func collectContext(repo, ghToken string, opts collectOptions) (*auditContext, s
 		CICD: auditCICD{
 			UnpinnedActions: shIn(tmpDir, "none",
 				"grep -rn 'uses:.*@v[0-9]' .github/workflows/ 2>/dev/null || echo 'none'"),
-			Zizmor: shIn(tmpDir, "zizmor not installed — skipped", zizmorCmd),
+			Zizmor: shIn(tmpDir, "zizmor not installed — skipped", zizmorCmd, zizmorEnv...),
 			Actionlint: shIn(tmpDir, "actionlint not installed — skipped",
 				"actionlint -format '{{range $e := .}}{{$e.Filepath}}:{{$e.Line}}: [{{$e.Kind}}] {{$e.Message}}\n{{end}}' .github/workflows/*.yml 2>&1 | head -100 || echo 'actionlint not installed — skipped'"),
 			WorkflowList: shIn(tmpDir, "(none)",
@@ -457,9 +494,9 @@ else echo 'no package manager available'; fi`),
 		},
 	}
 
-	ctx.CICD.PinnedSuggestions = resolvePinnedActions(ctx.CICD.UnpinnedActions)
+	ac.CICD.PinnedSuggestions = resolvePinnedActions(ctx, ac.CICD.UnpinnedActions, ghToken)
 
-	ctx.Secrets = auditSecrets{
+	ac.Secrets = auditSecrets{
 		Gitleaks: func() string {
 			if opts.SkipSecrets {
 				return "skipped (SkipSecrets=true)"
@@ -521,7 +558,7 @@ fi`)
 			`grep -rEn "AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+" . | grep -v node_modules | grep -v '\.git' | cut -c-300 | head -20 || echo 'none'`),
 	}
 
-	ctx.IaC = auditIaC{
+	ac.IaC = auditIaC{
 		TerraformFiles: shIn(tmpDir, "(none found)",
 			"find . -name '*.tf' -not -path '*/node_modules/*' | head -20 || echo '(none found)'"),
 		OSVScanner: shIn(tmpDir, "osv-scanner not installed — skipped",
@@ -544,7 +581,7 @@ fi`)
 		}(),
 	}
 
-	ctx.Policy = auditPolicy{
+	ac.Policy = auditPolicy{
 		OPAFiles: shIn(tmpDir, "(none found)",
 			"find . -name '*.rego' -not -path '*/node_modules/*' | head -10 || echo '(none found)'"),
 		KyvernoFiles: shIn(tmpDir, "(none found)",
@@ -553,7 +590,7 @@ fi`)
 			"grep -rl 'rule:' --include='*.yaml' . | xargs grep -l 'condition:\\|output:' 2>/dev/null | head -10 || echo '(none found)'"),
 	}
 
-	ctx.SLSA = auditSLSA{
+	ac.SLSA = auditSLSA{
 		ProvenanceFiles: shIn(tmpDir, "(none found)",
 			"find . -name '*.intoto.jsonl' -o -name 'provenance.json' | head -5 || echo '(none found)'"),
 		SBOMFiles: shIn(tmpDir, "(none found)",
@@ -566,9 +603,9 @@ fi`)
 			"git log --show-signature -1 2>/dev/null | head -30 || echo '(unavailable)'"),
 	}
 
-	ctx.GitHub = fetchGitHubContext(repo, ghToken)
+	ac.GitHub = fetchGitHubContext(repo, ghToken)
 
-	return ctx, tmpDir, nil
+	return ac, tmpDir, nil
 }
 
 func fetchGitHubContext(repo, ghToken string) auditGitHub {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -70,6 +71,6 @@ func runDueSchedules(db *sql.DB, now time.Time) {
 			continue
 		}
 
-		go runAudit(db, auditID, "", p)
+		go runAudit(context.Background(), db, auditID, os.Getenv("GITHUB_TOKEN"), p)
 	}
 }

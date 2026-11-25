@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
@@ -87,7 +88,7 @@ func handleGitHubWebhook(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		// Free static snapshot — no AI key needed
-		go runAudit(db, id, "", auditParams{Provider: ""})
+		go runAudit(context.Background(), db, id, os.Getenv("GITHUB_TOKEN"), auditParams{Provider: ""})
 
 		writeJSON(w, http.StatusAccepted, map[string]string{"audit_id": id, "repo": repo})
 	}

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"math"
+	"os"
 	"strings"
 	"testing"
 )
@@ -82,14 +84,23 @@ func TestVerifyReport(t *testing.T) {
 func TestResolvePinnedActionsLive(t *testing.T) {
 	in := ".github/workflows/ci.yml:10:      uses: actions/checkout@v4\n" +
 		".github/workflows/ci.yml:11:      uses: actions/checkout@v4\n" +
-		".github/workflows/rel.yml:5:      uses: actions/setup-node@v4"
-	out := resolvePinnedActions(in)
+		".github/workflows/rel.yml:5:      uses: actions/setup-node@v4\n" +
+		".github/workflows/rel.yml:6:      uses: kubernetes/kubernetes@v1.30.0"
+	out := resolvePinnedActions(context.Background(), in, os.Getenv("GITHUB_TOKEN"))
 	if !strings.Contains(out, "actions/checkout@v4 ->") || !strings.Contains(out, "actions/setup-node@v4 ->") {
 		t.Fatalf("missing entries:\n%s", out)
 	}
 	// dedupe: checkout appears twice in input, once in output
 	if strings.Count(out, "actions/checkout@v4 ->") != 1 {
 		t.Errorf("checkout not deduped:\n%s", out)
+	}
+	// annotated tag: must dereference through the intermediate tag object to
+	// the commit it targets, not stop at the tag object's own SHA
+	if !strings.Contains(out, "kubernetes/kubernetes@v1.30.0 -> 7c48c2bd72b9bf5c44d21d7338cc7bea77d0ad2a") {
+		t.Errorf("annotated tag not dereferenced to its commit SHA:\n%s", out)
+	}
+	if strings.Contains(out, "11602f083ca275dcfd4341641ae7fe338b7f6f69") {
+		t.Errorf("resolved to the tag object SHA instead of the commit it targets:\n%s", out)
 	}
 	resolved := reSHA40.FindAllString(out, -1)
 	t.Logf("resolved %d SHA(s) live:\n%s", len(resolved), out)

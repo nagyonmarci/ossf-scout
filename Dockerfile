@@ -3,7 +3,9 @@
 # Stage 1: frontend build
 FROM node:24-alpine@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14 AS frontend
 WORKDIR /app/frontend
-RUN npm install -g pnpm@11
+# pnpm version + sha512 pinned via packageManager in package.json; corepack verifies it
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
@@ -92,10 +94,8 @@ LABEL org.opencontainers.image.title="ossf-scout" \
       org.opencontainers.image.source="https://github.com/nagyonmarci/ossf-scout" \
       org.opencontainers.image.licenses="Unlicense"
 
-RUN apk add --no-cache git nodejs npm ca-certificates python3 py3-pip dumb-init curl \
-    && pip3 install --no-cache-dir semgrep==1.165.0 \
-    && apk del py3-pip
-RUN npm install -g pnpm@11
+# semgrep and pnpm from Wolfi packages (signed APKs) instead of unpinned pip/npm installs
+RUN apk add --no-cache git nodejs npm ca-certificates python3 dumb-init curl semgrep pnpm-11
 
 RUN addgroup -S -g 10001 scout && adduser -S -u 10001 -G scout -H -D scout \
     && mkdir -p /home/scout && chown scout:scout /home/scout

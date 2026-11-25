@@ -10,10 +10,9 @@
 
   "packageRules": [
     {
-      "description": "Auto-merge high-confidence patch updates after 3-day minimum release age",
+      "description": "Auto-merge patch updates after a 7-day cooldown (matchConfidence needs Mend credentials and paused Renovate, see #59)",
       "matchUpdateTypes": ["patch"],
-      "matchConfidence": ["high", "very high"],
-      "minimumReleaseAge": "3 days",
+      "minimumReleaseAge": "7 days",
       "automerge": true,
       "automergeType": "pr",
       "automergeStrategy": "squash"

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nagyonmarci/ossf-scout/internal/scout"
 )
 
 // auditParams bundles all provider-specific parameters for an audit run.
@@ -31,7 +33,7 @@ type auditParams struct {
 // The token is injected as an HTTP Authorization header via git config env vars,
 // keeping it out of exec.Command args and avoiding CWE-78 taint paths.
 func gitAuthEnv(ghToken string) []string {
-	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	env := scout.MinimalEnv("GIT_TERMINAL_PROMPT=0") // cloning untrusted repos: no other secrets
 	if ghToken == "" {
 		return env
 	}

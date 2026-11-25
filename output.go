@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/nagyonmarci/ossf-scout/internal/scout"
 )
 
-func printTable(results []result) {
+func printTable(results []scout.Result) {
 	fmt.Printf("\n%-50s %6s %8s  %-40s  %s\n",
 		"REPOSITORY", "STARS", "SCORE", "WEAK CHECKS", "SCORECARD URL")
 	fmt.Println(strings.Repeat("─", tableWidth))
@@ -38,7 +40,7 @@ type jsonResult struct {
 	RepoURL      string   `json:"repo_url"`
 }
 
-func printJSON(results []result) {
+func printJSON(results []scout.Result) {
 	var out []jsonResult
 	for _, r := range results {
 		out = append(out, jsonResult{

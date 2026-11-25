@@ -20,18 +20,22 @@
     {
       "description": "Group docker/* GitHub Actions into a single PR",
       "matchManagers": ["github-actions"],
-      "matchPackagePatterns": ["^docker/"],
-      "groupName": "docker GitHub Actions"
+      "groupName": "docker GitHub Actions",
+      "matchPackageNames": [
+        "/^docker//"
+      ]
     },
     {
       "description": "Group actions/* GitHub Actions into a single PR",
       "matchManagers": ["github-actions"],
-      "matchPackagePatterns": ["^actions/"],
-      "groupName": "GitHub official actions"
+      "groupName": "GitHub official actions",
+      "matchPackageNames": [
+        "/^actions//"
+      ]
     },
     {
       "description": "Group Dockerfile security tool versions (trivy, helm, zizmor, kube-linter, trufflehog) into a single PR",
-      "matchManagers": ["regex"],
+      "matchManagers": ["custom.regex"],
       "groupName": "Dockerfile security tool versions"
     },
     {

@@ -138,9 +138,12 @@ type auditContext struct {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-func runIn(dir, fallback string, name string, args ...string) string {
+func runIn(dir, fallback string, env []string, name string, args ...string) string {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
@@ -154,8 +157,10 @@ func runIn(dir, fallback string, name string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func shIn(dir, fallback, script string) string {
-	return runIn(dir, fallback, "/bin/sh", "-c", script)
+// shIn runs script via /bin/sh. Pass secrets/untrusted values through env and
+// reference them quoted ("$VAR") in script — never interpolate into script.
+func shIn(dir, fallback, script string, env ...string) string {
+	return runIn(dir, fallback, env, "/bin/sh", "-c", script)
 }
 
 // ── Collect ───────────────────────────────────────────────────────────────────
@@ -327,8 +332,10 @@ func collectContext(ctx context.Context, repo, ghToken string, opts collectOptio
 	runIaC        := hasDockerfile || hasTerraform || hasHelmChart || hasK8s
 
 	zizmorCmd := "zizmor --no-online --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'"
+	var zizmorEnv []string
 	if ghToken != "" {
-		zizmorCmd = fmt.Sprintf("zizmor --github-token %s --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'", ghToken)
+		zizmorCmd = `zizmor --github-token "$GH_TOKEN" --format sarif .github/workflows/ 2>&1 || echo 'zizmor not installed — skipped'`
+		zizmorEnv = []string{"GH_TOKEN=" + ghToken}
 	}
 
 	ac := &auditContext{
@@ -340,7 +347,7 @@ func collectContext(ctx context.Context, repo, ghToken string, opts collectOptio
 		CICD: auditCICD{
 			UnpinnedActions: shIn(tmpDir, "none",
 				"grep -rn 'uses:.*@v[0-9]' .github/workflows/ 2>/dev/null || echo 'none'"),
-			Zizmor: shIn(tmpDir, "zizmor not installed — skipped", zizmorCmd),
+			Zizmor: shIn(tmpDir, "zizmor not installed — skipped", zizmorCmd, zizmorEnv...),
 			Actionlint: shIn(tmpDir, "actionlint not installed — skipped",
 				"actionlint -format '{{range $e := .}}{{$e.Filepath}}:{{$e.Line}}: [{{$e.Kind}}] {{$e.Message}}\n{{end}}' .github/workflows/*.yml 2>&1 | head -100 || echo 'actionlint not installed — skipped'"),
 			WorkflowList: shIn(tmpDir, "(none)",

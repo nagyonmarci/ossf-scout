@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -60,9 +59,9 @@ func TestScanGolden(t *testing.T) {
 	}
 	got = append(got, '\n')
 
-	goldenPath := filepath.Join("testdata", "scan_golden.json")
+	const goldenPath = "testdata/scan_golden.json"
 	if *update {
-		if err := os.WriteFile(goldenPath, got, 0o644); err != nil {
+		if err := os.WriteFile(goldenPath, got, 0o600); err != nil {
 			t.Fatalf("write golden: %v", err)
 		}
 	}

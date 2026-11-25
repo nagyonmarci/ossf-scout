@@ -14,9 +14,7 @@ const (
 
 // Timeouts — defined as vars because time.Duration is not an untyped constant
 var (
-	scorecardCLITimeout = 10 * time.Minute
-	resolveTagTimeout   = 15 * time.Second
-	searchPageDelay     = 500 * time.Millisecond
+	resolveTagTimeout = 15 * time.Second
 )
 
 // Audit collection / context limits

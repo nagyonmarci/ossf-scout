@@ -38,7 +38,9 @@ jobs:
 
       - name: Install pnpm
         if: matrix.language == 'go'
-        run: npm install -g pnpm@11
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: frontend/package.json
 
       - name: Frontend build
         if: matrix.language == 'go'

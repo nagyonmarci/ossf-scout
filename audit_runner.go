@@ -463,7 +463,12 @@ func generateTemplateReport(ctx *auditContext) string {
 
 // ── Audit orchestration ───────────────────────────────────────────────────────
 
+// auditSem caps concurrent audits; queued ones stay "pending" until a slot frees.
+var auditSem = make(chan struct{}, maxConcurrentAudits)
+
 func runAudit(db *sql.DB, id, ghToken string, p auditParams) {
+	auditSem <- struct{}{}
+	defer func() { <-auditSem }()
 	_ = dbUpdateAuditRunning(db, id)
 
 	// Re-read repo from the database so the value is DB-sourced, not passed

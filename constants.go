@@ -22,6 +22,7 @@ var (
 // Audit collection / context limits
 const (
 	maxPinnedActionResolve = 60 // max actions to resolve SHAs for in resolvePinnedActions
+	maxConcurrentAudits    = 2  // each audit = git clone + semgrep/trivy; unbounded fan-out filled the disk
 
 	ollamaMaxSummaryPromptChars = 250_000 // per-section evidence cap for split analysis
 	ollamaMaxPromptChars        = 600_000 // full prompt cap for single-stage Ollama

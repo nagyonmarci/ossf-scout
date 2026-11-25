@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nagyonmarci/ossf-scout/internal/scout"
 	_ "modernc.org/sqlite"
 )
 
@@ -223,7 +224,7 @@ func dbUpdateScanError(db *sql.DB, id int64, msg string) error {
 	return err
 }
 
-func dbInsertResults(db *sql.DB, scanID int64, results []result) error {
+func dbInsertResults(db *sql.DB, scanID int64, results []scout.Result) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err

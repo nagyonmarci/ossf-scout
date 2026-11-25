@@ -463,7 +463,7 @@ func generateTemplateReport(ctx *auditContext) string {
 
 // ── Audit orchestration ───────────────────────────────────────────────────────
 
-func runAudit(db *sql.DB, id, ghToken string, p auditParams) {
+func runAudit(ctx context.Context, db *sql.DB, id, ghToken string, p auditParams) {
 	_ = dbUpdateAuditRunning(db, id)
 
 	// Re-read repo from the database so the value is DB-sourced, not passed
@@ -486,7 +486,7 @@ func runAudit(db *sql.DB, id, ghToken string, p auditParams) {
 		}
 	}
 
-	auditCtx, tmpDir, err := collectContext(repo, ghToken, collectOptions{SkipSecrets: p.SkipSecrets})
+	auditCtx, tmpDir, err := collectContext(ctx, repo, ghToken, collectOptions{SkipSecrets: p.SkipSecrets})
 	if err != nil {
 		_ = dbUpdateAuditError(db, id, fmt.Sprintf("collect failed: %v", err))
 		return

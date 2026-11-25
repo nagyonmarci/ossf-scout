@@ -1,4 +1,4 @@
-package main
+package scout
 
 import (
 	"context"
@@ -21,9 +21,12 @@ type scorecardCheck struct {
 	Score int    `json:"score"` // -1 = N/A, 0–10
 }
 
-func scorecardGet(owner, repo string) (*scorecardResponse, error) {
-	apiURL := fmt.Sprintf("https://api.securityscorecards.dev/projects/github.com/%s/%s", owner, repo)
-	req, err := http.NewRequest("GET", apiURL, nil)
+// scorecardAPIBase is overridden in tests to point at an httptest.Server.
+var scorecardAPIBase = "https://api.securityscorecards.dev"
+
+func scorecardGet(ctx context.Context, owner, repo string) (*scorecardResponse, error) {
+	apiURL := fmt.Sprintf(scorecardAPIBase+"/projects/github.com/%s/%s", owner, repo)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -46,11 +49,11 @@ func scorecardGet(owner, repo string) (*scorecardResponse, error) {
 	return &sc, nil
 }
 
-func scorecardCLI(owner, repo, token string) (*scorecardResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), scorecardCLITimeout)
+func scorecardCLI(ctx context.Context, owner, repo, token string) (*scorecardResponse, error) {
+	cctx, cancel := context.WithTimeout(ctx, scorecardCLITimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "scorecard",
+	cmd := exec.CommandContext(cctx, "scorecard",
 		"--repo=github.com/"+owner+"/"+repo,
 		"--format=json",
 	)

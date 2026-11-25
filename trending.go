@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/nagyonmarci/ossf-scout/internal/scout"
 )
 
 type trendingEntry struct {
@@ -158,7 +160,7 @@ func handleTrending(serverToken string) http.HandlerFunc {
 
 		// Fetch GitHub metadata concurrently
 		var mu sync.Mutex
-		var repos []ghRepo
+		var repos []scout.Repo
 		var wg sync.WaitGroup
 		for _, e := range entries {
 			wg.Add(1)
@@ -167,13 +169,13 @@ func handleTrending(serverToken string) http.HandlerFunc {
 				body, err := ghGet("https://api.github.com/repos/"+name, token)
 				if err != nil {
 					mu.Lock()
-					repos = append(repos, ghRepo{FullName: name, HTMLURL: "https://github.com/" + name})
+					repos = append(repos, scout.Repo{FullName: name, HTMLURL: "https://github.com/" + name})
 					mu.Unlock()
 					return
 				}
-				var repo ghRepo
+				var repo scout.Repo
 				if json.Unmarshal(body, &repo) != nil {
-					repo = ghRepo{FullName: name, HTMLURL: "https://github.com/" + name}
+					repo = scout.Repo{FullName: name, HTMLURL: "https://github.com/" + name}
 				}
 				mu.Lock()
 				repos = append(repos, repo)
@@ -189,7 +191,7 @@ func handleTrending(serverToken string) http.HandlerFunc {
 			minMaintained: minMaintained,
 			checkFilter:   checkFilter,
 		}
-		results := runWorkers(repos, cfg)
+		results := scout.New(cfg.toScoutConfig()).Evaluate(r.Context(), repos)
 
 		out := make([]trendingResult, 0, len(results))
 		for _, res := range results {

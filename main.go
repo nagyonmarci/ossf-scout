@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/nagyonmarci/ossf-scout/internal/scout"
 )
 
 func main() {
@@ -73,7 +76,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Warning: no GITHUB_TOKEN set — GitHub rate limit is 60 req/hour unauthenticated")
 	}
 
-	repos, err := fetchRepos(cfg)
+	sc := scout.New(cfg.toScoutConfig())
+	repos, err := sc.FetchRepos(context.Background())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
@@ -81,7 +85,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "Fetched %d repos — querying Scorecard API (workers=%d)...\n",
 		len(repos), cfg.workers)
 
-	results := runWorkers(repos, cfg)
+	results := sc.Evaluate(context.Background(), repos)
 
 	if cfg.jsonOut {
 		printJSON(results)

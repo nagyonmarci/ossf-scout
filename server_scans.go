@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nagyonmarci/ossf-scout/internal/scout"
 )
 
 // ── Scan handlers ─────────────────────────────────────────────────────────────
@@ -68,14 +71,15 @@ func handleCreateScan(db *sql.DB, serverToken string) http.HandlerFunc {
 		}
 
 		go func() {
-			repos, err := fetchRepos(cfg)
+			sc := scout.New(cfg.toScoutConfig())
+			repos, err := sc.FetchRepos(context.Background())
 			if err != nil {
 				if derr := dbUpdateScanError(db, id, err.Error()); derr != nil {
 					fmt.Fprintf(os.Stderr, "dbUpdateScanError: %v\n", derr)
 				}
 				return
 			}
-			results := runWorkers(repos, cfg)
+			results := sc.Evaluate(context.Background(), repos)
 			if err := dbInsertResults(db, id, results); err != nil {
 				if derr := dbUpdateScanError(db, id, err.Error()); derr != nil {
 					fmt.Fprintf(os.Stderr, "dbUpdateScanError: %v\n", derr)

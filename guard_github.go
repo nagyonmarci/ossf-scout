@@ -1,24 +1,28 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+var httpClient = &http.Client{Timeout: 15 * time.Second}
 
 // ── Low-level request executor ───────────────────────────────────────────────
 
-// ghDo generalizes ghGet's header pattern (github.go:27) to methods beyond GET.
+// ghDoCtx issues an authenticated GitHub API request.
 // body may be nil for verbs that don't send one (GET/DELETE).
-func ghDo(method, rawURL, token string, body []byte) ([]byte, int, error) {
+func ghDoCtx(ctx context.Context, method, rawURL, token string, body []byte) ([]byte, int, error) {
 	var reader io.Reader
 	if body != nil {
 		reader = strings.NewReader(string(body))
 	}
-	req, err := http.NewRequest(method, rawURL, reader)
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, reader)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -43,6 +47,17 @@ func ghDo(method, rawURL, token string, body []byte) ([]byte, int, error) {
 		return respBody, resp.StatusCode, fmt.Errorf("github %d: %s", resp.StatusCode, string(respBody))
 	}
 	return respBody, resp.StatusCode, nil
+}
+
+// ghDo is a context.Background() shorthand for ghDoCtx, for callers with no live request context.
+func ghDo(method, rawURL, token string, body []byte) ([]byte, int, error) {
+	return ghDoCtx(context.Background(), method, rawURL, token, body)
+}
+
+// ghGet is a GET-only shorthand for ghDo, dropping the status code.
+func ghGet(rawURL, token string) ([]byte, error) {
+	body, _, err := ghDo("GET", rawURL, token, nil)
+	return body, err
 }
 
 func ghPost(rawURL, token string, body []byte) ([]byte, error) {

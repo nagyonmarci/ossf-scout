@@ -1,8 +1,8 @@
-package main
+package scout
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -10,40 +10,45 @@ import (
 	"time"
 )
 
-var httpClient = &http.Client{Timeout: 15 * time.Second}
-
-type result struct {
-	Repo         ghRepo
+// Result is a single repo's Scorecard evaluation outcome.
+type Result struct {
+	Repo         Repo
 	Score        float64
 	WeakChecks   []string
 	ScorecardURL string
 }
 
-func runWorkers(repos []ghRepo, cfg config) []result {
-	wantChecks := parseChecks(cfg.checkFilter)
+// Evaluate runs each repo through the Scorecard API (with optional CLI fallback) and
+// returns the ones matching Config's score/check filters.
+func (s *Scout) Evaluate(ctx context.Context, repos []Repo) []Result {
+	cfg := s.cfg
+	wantChecks := parseChecks(cfg.CheckFilter)
 
-	jobs := make(chan ghRepo, len(repos))
-	results := make(chan result, len(repos))
+	jobs := make(chan Repo, len(repos))
+	results := make(chan Result, len(repos))
 
 	var wg sync.WaitGroup
-	for i := 0; i < cfg.workers; i++ {
+	for i := 0; i < cfg.Workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for repo := range jobs {
+				if ctx.Err() != nil {
+					continue
+				}
 				parts := strings.SplitN(repo.FullName, "/", 2)
 				if len(parts) != 2 {
 					continue
 				}
-				sc, err := scorecardGet(parts[0], parts[1])
+				sc, err := scorecardGet(ctx, parts[0], parts[1])
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "  [warn] %s: %v\n", repo.FullName, err)
 					continue
 				}
 				fromCLI := false
 				if sc == nil {
-					if cfg.cliFallback {
-						sc, err = scorecardCLI(parts[0], parts[1], cfg.token)
+					if cfg.CliFallback {
+						sc, err = scorecardCLI(ctx, parts[0], parts[1], cfg.Token)
 						if err != nil {
 							fmt.Fprintf(os.Stderr, "  [warn] CLI %s: %v\n", repo.FullName, err)
 						} else if sc != nil {
@@ -51,7 +56,7 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 						}
 					}
 					if sc == nil {
-						results <- result{
+						results <- Result{
 							Repo:         repo,
 							Score:        -1,
 							WeakChecks:   []string{"NOT_SCANNED"},
@@ -60,12 +65,12 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 						continue
 					}
 				}
-				if cfg.minMaintained > 0 {
-					if m := findCheckScore(sc.Checks, "Maintained"); m >= 0 && m < cfg.minMaintained {
+				if cfg.MinMaintained > 0 {
+					if m := findCheckScore(sc.Checks, "Maintained"); m >= 0 && m < cfg.MinMaintained {
 						continue
 					}
 				}
-				if cfg.singleRepo == "" && sc.Score > cfg.maxScore && len(wantChecks) == 0 {
+				if cfg.SingleRepo == "" && sc.Score > cfg.MaxScore && len(wantChecks) == 0 {
 					continue
 				}
 				scorecardURL := fmt.Sprintf("https://scorecard.dev/viewer/?uri=github.com/%s", repo.FullName)
@@ -73,15 +78,18 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 					scorecardURL = "" // repo not indexed in online database
 				}
 				weak := weakChecks(sc.Checks, wantChecks)
-				if cfg.singleRepo != "" || sc.Score <= cfg.maxScore || len(weak) > 0 {
-					results <- result{
+				if cfg.SingleRepo != "" || sc.Score <= cfg.MaxScore || len(weak) > 0 {
+					results <- Result{
 						Repo:         repo,
 						Score:        sc.Score,
 						WeakChecks:   weak,
 						ScorecardURL: scorecardURL,
 					}
 				}
-				time.Sleep(200 * time.Millisecond)
+				select {
+				case <-ctx.Done():
+				case <-time.After(200 * time.Millisecond):
+				}
 			}
 		}()
 	}
@@ -96,7 +104,7 @@ func runWorkers(repos []ghRepo, cfg config) []result {
 		close(results)
 	}()
 
-	var out []result
+	var out []Result
 	for r := range results {
 		out = append(out, r)
 	}

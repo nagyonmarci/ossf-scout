@@ -7,7 +7,7 @@ toolchain go1.26.11
 require (
 	github.com/go-pdf/fpdf v0.9.0
 	github.com/google/uuid v1.6.0
-	github.com/yuin/goldmark v1.8.2
+	github.com/yuin/goldmark v1.8.7
 	golang.org/x/net v0.62.0
 	modernc.org/sqlite v1.52.0
 )

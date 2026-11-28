@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: frontend build
-FROM node:24-alpine@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14 AS frontend
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS frontend
 WORKDIR /app/frontend
 # pnpm version + sha512 pinned via packageManager in package.json; corepack verifies it
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
@@ -33,7 +33,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # Stage 3: download arch-aware binary tools
 # Wolfi uses glibc (not musl), so all pre-built glibc binaries are compatible.
-FROM --platform=$BUILDPLATFORM cgr.dev/chainguard/wolfi-base@sha256:28c39be5a5e1e9b85081c10740e8495f6518a865b23bc6a486637c4b21e74b43 AS bintools
+FROM --platform=$BUILDPLATFORM cgr.dev/chainguard/wolfi-base@sha256:5172a213d2bba8b1c9ca11957db65562b52b0f9844583a0347318ea5fd8e3aa5 AS bintools
 ARG TARGETARCH
 ARG TRIVY_VERSION=0.76.2
 ARG HELM_VERSION=4.3.2
@@ -87,7 +87,7 @@ RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
     rm /tmp/trufflehog.tar.gz
 
 # Stage 4: runtime — Wolfi base for near-zero OS CVE surface
-FROM cgr.dev/chainguard/wolfi-base@sha256:28c39be5a5e1e9b85081c10740e8495f6518a865b23bc6a486637c4b21e74b43
+FROM cgr.dev/chainguard/wolfi-base@sha256:5172a213d2bba8b1c9ca11957db65562b52b0f9844583a0347318ea5fd8e3aa5
 
 LABEL org.opencontainers.image.title="ossf-scout" \
       org.opencontainers.image.description="Discover GitHub repositories where security practices are weakest" \
